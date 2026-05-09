@@ -1,0 +1,21 @@
+{
+  "short_name": "VMS",
+  "name": "Visitor Management System",
+  "icons": [
+    {
+      "src": "https://picsum.photos/seed/vms/192/192",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://picsum.photos/seed/vms/512/512",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "theme_color": "#2563eb",
+  "description": "Smart Visitor Management System with Google Sheets Sync"
+}

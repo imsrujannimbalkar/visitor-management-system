@@ -1,0 +1,8 @@
+{
+  "name": "Visitor Management System",
+  "description": "A centralized record management system for secure visitor logging, documentation audit, and organizational oversight.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": []
+}

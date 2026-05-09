@@ -1,0 +1,278 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System user profiles",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "STAFF"] },
+        "organizationId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lastLogin": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Organization": {
+      "title": "Organization",
+      "description": "Organization settings and branding",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "brandColor": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "googleReviewUrl": { "type": "string" },
+        "setupComplete": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "migratedToHierarchy": { "type": "boolean" },
+        "navigationVisibility": { "type": "object" },
+        "visitPurposes": { "type": "array", "items": { "type": "string" } },
+        "visitorCategories": { "type": "array", "items": { "type": "string" } },
+        "donationOccasions": { "type": "array", "items": { "type": "string" } },
+        "eventOccasions": { "type": "array", "items": { "type": "string" } },
+        "deactivated": { "type": "boolean" },
+        "deactivatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "createdBy"]
+    },
+    "Profile": {
+      "title": "Profile",
+      "description": "Persistent visitor profiles (unique by phone)",
+      "type": "object",
+      "properties": {
+        "phone": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "dob": { "type": "string" },
+        "address": { "type": "string" },
+        "signature": { "type": "string" },
+        "lastVisitId": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "organizationId": { "type": "string" },
+        "manualClassification": { "type": "string", "enum": ["VIP", "VVIP", "REGULAR"] }
+      },
+      "required": ["phone", "name", "organizationId"]
+    },
+    "Visit": {
+      "title": "Visit",
+      "description": "Individual visitor entry records (transactional)",
+      "type": "object",
+      "properties": {
+        "visitId": { "type": "string" },
+        "visitorPhone": { "type": "string" },
+        "visitorName": { "type": "string" },
+        "purpose": { "type": "string" },
+        "customPurpose": { "type": "string" },
+        "category": { "type": "string" },
+        "notes": { "type": "string" },
+        "date": { "type": "string" },
+        "checkInTime": { "type": "string" },
+        "checkOutTime": { "type": "string" },
+        "status": { "type": "string", "enum": ["INSIDE", "CHECKED OUT", "DELETED"] },
+        "occasion": { "type": "string" },
+        "organizationId": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "recordedBy": { "type": "string" },
+        "isEmergency": { "type": "boolean" },
+        "review": { 
+          "type": "object", 
+          "properties": {
+            "rating": { "type": "number" },
+            "comment": { "type": "string" },
+            "timestamp": { "type": "string", "format": "date-time" }
+          }
+        }
+      },
+      "required": ["visitId", "visitorPhone", "status", "organizationId"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Visitor reviews",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "visitorId": { "type": "string" },
+        "organizationId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["rating", "visitorId", "organizationId"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "System activity tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "organizationId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "action": { "type": "string" },
+        "details": { "type": "string" }
+      },
+      "required": ["userId", "timestamp", "action", "organizationId"]
+    },
+    "Invitation": {
+      "title": "Invitation",
+      "description": "User invitations to organizations",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "organizationId": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "STAFF"] },
+        "invitedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "organizationId", "role"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "System and event alerts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "organizationId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["REVIEW", "WAITING", "BIRTHDAY", "SYSTEM", "KIOSK_ASSISTANCE"] },
+        "read": { "type": "boolean" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "relatedId": { "type": "string" }
+      },
+      "required": ["id", "organizationId", "title", "message", "type", "read", "timestamp"]
+    },
+    "AppFeedback": {
+      "title": "AppFeedback",
+      "description": "User feedback regarding the application",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "organizationId": { "type": "string" },
+        "rating": { "type": "number" },
+        "uiRating": { "type": "number" },
+        "speedRating": { "type": "number" },
+        "featureRating": { "type": "number" },
+        "frustration": { "type": "string" },
+        "missingFeature": { "type": "string" },
+        "nps": { "type": "number" },
+        "generalComments": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "rating", "timestamp"]
+    },
+    "BugReport": {
+      "title": "BugReport",
+      "description": "User reported system issues",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "organizationId": { "type": "string" },
+        "title": { "type": "string" },
+        "email": { "type": "string" },
+        "severity": { "type": "string", "enum": ["ui", "minor", "major", "critical"] },
+        "steps": { "type": "string" },
+        "expected": { "type": "string" },
+        "actual": { "type": "string" },
+        "attachmentUrl": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["OPEN", "IN_PROGRESS", "FIXED", "CLOSED"] }
+      },
+      "required": ["id", "title", "email", "severity", "timestamp"]
+    },
+    "PreRegistration": {
+      "title": "PreRegistration",
+      "description": "Visitor pre-registration requests",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "organizationId": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "purpose": { "type": "string" },
+        "visitDate": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "processedAt": { "type": "string", "format": "date-time" },
+        "processedBy": { "type": "string" }
+      },
+      "required": ["id", "organizationId", "name", "phone", "purpose", "visitDate", "status", "submittedAt"]
+    },
+    "GoogleConfig": {
+      "title": "GoogleConfig",
+      "description": "Google OAuth and service configuration",
+      "type": "object",
+      "properties": {
+        "tokens": { "type": "object" },
+        "spreadsheetId": { "type": "string" },
+        "calendarId": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "/organizations/{orgId}/config/google": {
+      "schema": "GoogleConfig",
+      "description": "Google services configuration"
+    },
+    "/organizations/{orgId}/preRegistrations/{preRegId}": {
+      "schema": "PreRegistration",
+      "description": "Visitor pre-registration requests"
+    },
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User registry (maps UID to organizationId)"
+    },
+    "/organizations/{orgId}": {
+      "schema": "Organization",
+      "description": "Organization details"
+    },
+    "/organizations/{orgId}/users/{userId}": {
+      "schema": "User",
+      "description": "Organization member profiles"
+    },
+    "/organizations/{orgId}/profiles/{phone}": {
+      "schema": "Profile",
+      "description": "Persistent visitor profiles (unique by phone)"
+    },
+    "/organizations/{orgId}/visits/{visitId}": {
+      "schema": "Visit",
+      "description": "Transactional visit records"
+    },
+    "/organizations/{orgId}/reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Visitor reviews"
+    },
+    "/organizations/{orgId}/activityLogs/{logId}": {
+      "schema": "ActivityLog",
+      "description": "System activity logs"
+    },
+    "/organizations/{orgId}/invitations/{email}": {
+      "schema": "Invitation",
+      "description": "User invitations"
+    },
+    "/organizations/{orgId}/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "System notifications"
+    },
+    "/appFeedback/{feedbackId}": {
+      "schema": "AppFeedback",
+      "description": "Application-wide user feedback"
+    },
+    "/bugReports/{reportId}": {
+      "schema": "BugReport",
+      "description": "Application-wide bug reports"
+    },
+    "/org_names/{name}": {
+      "schema": { "type": "object", "properties": { "orgId": { "type": "string" } } },
+      "description": "Organization name uniqueness tracking"
+    }
+  }
+}
