@@ -104,7 +104,7 @@ import { geminiService } from './services/geminiService';
 import { Visitor, User, VisitorStatus, UserRole, Organization, Notification, Profile, Visit, Donation, DonationAuditEntry, PreRegistration } from './types';
 import { savePendingProfile, savePendingVisit, getPendingProfiles, getPendingVisits, clearPendingProfile, clearPendingVisit } from './lib/offline';
 import { createBackup, getBackups } from './services/backupService';
-import { auth, db, storage, isConfigured, handleFirestoreError, OperationType } from './firebase';
+import { auth, db, isConfigured, handleFirestoreError, OperationType } from './firebase';
 import { sanitizeForFirestore } from './lib/utils';
 import { 
   onAuthStateChanged, 
@@ -921,7 +921,7 @@ export default function App() {
         (fullBackup as any).preRegistrations = preRegSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         (fullBackup as any).activityLogs = logsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-        await createBackup(effectiveOrgId, fullBackup);
+        await createBackup(effectiveOrgId, fullBackup, user?.uid || 'UNKNOWN', user?.name || 'System');
         addToast('Full secure backup synchronized!', 'success');
     } catch (e) {
         console.error(e);

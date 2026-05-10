@@ -277,3 +277,20 @@ export interface Inquiry {
   updatedAt: string;
   deleted?: boolean;
 }
+
+export interface SystemBackup {
+  id: string;
+  organizationId: string;
+  timestamp: string;
+  createdBy: string;
+  createdByName: string;
+  data: any; // Contains the full snapshot object
+  metadata: {
+    profilesCount: number;
+    visitsCount: number;
+    donationsCount: number;
+    preRegCount: number;
+    inquiriesCount: number;
+    size: number;
+  };
+}

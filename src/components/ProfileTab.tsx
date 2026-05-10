@@ -88,6 +88,8 @@ export default function ProfileTab({
 }: ProfileTabProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [backups, setBackups] = useState<any[]>([]);
+  const [isFetchingBackups, setIsFetchingBackups] = useState(false);
   const [formData, setFormData] = useState({
     name: user?.name || '',
     email: user?.email || '',
@@ -122,7 +124,45 @@ export default function ProfileTab({
     }
   }, [user]);
 
+  // Initial fetch of backups
+  useEffect(() => {
+    loadBackups();
+  }, [organization?.id]);
+
+  const loadBackups = async () => {
+    if (user?.role !== 'ADMIN') return;
+    setIsFetchingBackups(true);
+    try {
+      const data = await onFetchBackups();
+      setBackups(data);
+    } catch (err) {
+      console.error('Failed to fetch backups:', err);
+    } finally {
+      setIsFetchingBackups(false);
+    }
+  };
+
   if (!user) return null;
+
+  const downloadBackup = (backup: any) => {
+    // Fallback to in-memory JSON as storage is disabled for this project
+    const dataStr = JSON.stringify(backup.data || backup, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    const exportFileDefaultName = `backup-${organization?.id}-${backup.timestamp || Date.now()}.json`;
+
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+    
+    Swal.fire({
+      title: 'Download Started',
+      text: `Opening snapshot from ${new Date(backup.timestamp).toLocaleString()}`,
+      icon: 'success',
+      timer: 2000,
+      showConfirmButton: false
+    });
+  };
 
   const togglePreference = async (id: string) => {
     const updatedPrefs = preferences.map(p => p.id === id ? { ...p, active: !p.active } : p);
@@ -502,55 +542,67 @@ export default function ProfileTab({
                  <div className="h-10 w-10 bg-green-50 rounded-xl flex items-center justify-center text-green-600">
                     <Download size={20} />
                  </div>
-                 <h3 className="text-2xl font-black text-[#051739] italic tracking-tight">Data Management</h3>
+                 <h3 className="text-2xl font-black text-[#051739] italic tracking-tight">System Backups</h3>
               </div>
-              <div className="flex gap-4">
-                <button
-                  onClick={onCreateBackup}
-                  className="flex-1 py-5 bg-[#0F9D58] text-white rounded-3xl font-black hover:bg-[#0B8043] transition-all active:scale-95 flex items-center justify-center gap-3 shadow-sm border border-[#0F9D58]"
-                >
-                  <RefreshCw size={20} />
-                  Create Backup
-                </button>
-                <button
-                  onClick={async () => {
-                    const backups = await onFetchBackups();
-                    if (backups.length === 0) {
-                      Swal.fire('No Backups', 'No previous backups found.', 'info');
-                      return;
-                    }
-                    // Sort backups by timestamp in filename (visitor-data-ORGID-YYYY-MM-DDTHH-MM-SS.json)
-                    const sorted = [...backups].sort((a, b) => b.name.localeCompare(a.name));
-                    const latest = sorted[0];
-                    
-                    // Create a temporary link to download properly
-                    const link = document.createElement('a');
-                    link.href = latest.url;
-                    link.download = latest.name;
-                    link.target = '_blank';
-                    link.rel = 'noopener noreferrer';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    
-                    Swal.fire({
-                      title: 'Download Started',
-                      text: `Downloading ${latest.name}`,
-                      icon: 'success',
-                      timer: 2000,
-                      showConfirmButton: false
-                    });
-                  }}
-                  className="flex-1 py-5 bg-white text-slate-700 rounded-3xl font-black hover:bg-slate-50 transition-all active:scale-95 flex items-center justify-center gap-3 shadow-sm border border-slate-200"
-                >
-                  <Download size={20} />
-                  Latest Backup
-                </button>
+              
+              <div className="space-y-6">
+                <div className="flex gap-4">
+                  <button
+                    onClick={async () => {
+                      await onCreateBackup();
+                      loadBackups();
+                    }}
+                    className="flex-1 py-5 bg-[#0F9D58] text-white rounded-3xl font-black hover:bg-[#0B8043] transition-all active:scale-95 flex items-center justify-center gap-3 shadow-sm border border-[#0F9D58]"
+                  >
+                    <RefreshCw size={20} />
+                    Create Backup
+                  </button>
+                  <button
+                    onClick={loadBackups}
+                    disabled={isFetchingBackups}
+                    className="px-6 py-5 bg-slate-100 text-slate-600 rounded-3xl font-bold hover:bg-slate-200 transition-all flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {isFetchingBackups ? <Loader2 size={20} className="animate-spin" /> : <RefreshCw size={20} />}
+                  </button>
+                </div>
+
+                <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                  {backups.length === 0 ? (
+                    <div className="p-8 text-center bg-slate-50 rounded-[2rem] border border-dashed border-slate-200">
+                      <p className="text-sm font-medium text-slate-400">No timestamped backups detected on this node.</p>
+                    </div>
+                  ) : (
+                    backups.map((backup) => (
+                      <div key={backup.id} className="p-5 bg-slate-50/50 hover:bg-slate-100/50 rounded-2xl border border-slate-100 flex items-center justify-between transition-all group">
+                        <div className="flex items-center gap-4">
+                          <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-slate-400 group-hover:text-blue-600 shadow-sm transition-colors">
+                            <Clock size={18} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-slate-900 tracking-tight">
+                              {new Date(backup.timestamp).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                              {backup.metadata?.visitsCount || 0} Records • {((backup.metadata?.size || 0) / 1024).toFixed(1)} KB
+                            </p>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => downloadBackup(backup)}
+                          className="p-3 bg-white hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-xl shadow-sm border border-slate-100 transition-all"
+                          title="Download Snapshot"
+                        >
+                          <Download size={16} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
 
               {/* Restore Section - Advanced */}
               {onRestoreBackup && (
-                <div className="mt-6 pt-6 border-t border-slate-100">
+                <div className="mt-8 pt-8 border-t border-slate-100">
                   <p className="text-[10px] font-black uppercase tracking-widest text-[#051739]/30 mb-4 px-2">Disaster Recovery (Advanced)</p>
                   <label className="flex items-center justify-between p-6 bg-slate-50 rounded-2xl cursor-pointer hover:bg-slate-100 transition-all border-2 border-dashed border-slate-200 group">
                     <div className="flex items-center gap-4">

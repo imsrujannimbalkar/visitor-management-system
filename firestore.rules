@@ -196,6 +196,12 @@ service cloud.firestore {
         allow create: if isValidPreRegistration(incoming());
         allow update: if belongsToOrg(orgId) || (incoming().status == 'CHECKED_IN' && existing().status == 'APPROVED');
       }
+
+      match /system_backups/{backupId} {
+        allow read: if belongsToOrg(orgId);
+        allow create: if isAdminOfOrg(orgId);
+        allow delete: if isAdminOfOrg(orgId);
+      }
     }
 
     // Global Public Collections

@@ -8,7 +8,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
-import { getStorage } from 'firebase-admin/storage';
+// import { getStorage } from 'firebase-admin/storage';
 // import { calendarService } from './calendar.js';
 // import { sheetsService } from './sheets.js';
 // import { getGoogleAuthClient, getFreshAccessToken, generateAuthUrl, exchangeAuthCode, validateTokens } from './lib/googleAuth.js';
@@ -142,37 +142,8 @@ async function runDailyTasks() {
       };
     }
 
-    // 4. Save Backup to Storage
-    try {
-      const timestamp = today.toISOString().replace(/[:.]/g, '-');
-      const bucket = getStorage().bucket();
-
-      // Org-specific backups (discoverable in Profile)
-      for (const orgId in backupData) {
-        const orgFileName = `backups/visitor-data-${orgId}-${timestamp}.json`;
-        const orgFile = bucket.file(orgFileName);
-        await orgFile.save(JSON.stringify(backupData[orgId], null, 2), {
-          contentType: 'application/json',
-          metadata: { backupDate: today.toISOString() }
-        });
-      }
-
-      // Global backup
-      const globalFileName = `backups/firestore-backup-${timestamp}.json`;
-      const globalFile = bucket.file(globalFileName);
-      
-      await globalFile.save(JSON.stringify(backupData, null, 2), {
-        contentType: 'application/json',
-        metadata: {
-          backupDate: today.toISOString(),
-          projectId: projectId
-        }
-      });
-      
-      console.log(`[Backup Hub] Synchronized global backup and ${Object.keys(backupData).length} organizational snapshots.`);
-    } catch (storageErr) {
-      console.warn('[System] Storage backup failed (likely permission or not enabled):', storageErr);
-    }
+    // Storage logic removed as per project constraints
+    console.log(`[Backup Hub] Processed ${Object.keys(backupData).length} organizational snapshots. Scheduled JSON backups are handled by GitHub Actions.`);
   } catch (error) {
     console.error('[System] Daily tasks failed:', error);
   }

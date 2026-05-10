@@ -1,7 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { initializeFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
 import configData from '../firebase-applet-config.json';
 
 const config = configData as any;
@@ -53,8 +52,6 @@ console.log('Firebase Initialization:', {
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
 }, databaseId || '(default)');
-
-export const storage = getStorage(app);
 
 export const googleProvider = new GoogleAuthProvider();
 
