@@ -64,6 +64,7 @@ import {
   Activity,
   ArrowRight,
   Phone,
+  PhoneCall,
   MessageCircle
 } from 'lucide-react';
 import { 
@@ -98,6 +99,7 @@ import NotificationsCenter from './components/NotificationsCenter';
 import PreRegistrationForm from './components/PreRegistrationForm';
 import PreRegistrationTab from './components/PreRegistrationTab';
 import KioskPreRegLookup from './components/KioskPreRegLookup';
+import InquiryTracker from './components/InquiryTracker';
 import { geminiService } from './services/geminiService';
 import { Visitor, User, VisitorStatus, UserRole, Organization, Notification, Profile, Visit, Donation, DonationAuditEntry, PreRegistration } from './types';
 import { savePendingProfile, savePendingVisit, getPendingProfiles, getPendingVisits, clearPendingProfile, clearPendingVisit } from './lib/offline';
@@ -123,7 +125,9 @@ import {
   getDocs,
   serverTimestamp,
   getDocFromServer,
-  arrayUnion
+  arrayUnion,
+  writeBatch,
+  limit
 } from 'firebase/firestore';
 import Swal from 'sweetalert2';
 
@@ -401,7 +405,7 @@ export default function App() {
   const [editingVisitor, setEditingVisitor] = useState<Visitor | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [userSearchQuery, setUserSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'visitors' | 'records' | 'analysis' | 'profile' | 'settings' | 'birthdays' | 'reviews' | 'users' | 'logs' | 'donations' | 'organizations' | 'legal' | 'pre-registrations'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'visitors' | 'records' | 'analysis' | 'profile' | 'settings' | 'birthdays' | 'reviews' | 'users' | 'logs' | 'donations' | 'organizations' | 'legal' | 'pre-registrations' | 'inquiries'>('dashboard');
   const [settingsSubTab, setSettingsSubTab] = useState<'Identity' | 'Visibility' | 'Forms' | 'Security'>('Identity');
   const [preRegFilter, setPreRegFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CHECKED_IN'>('PENDING');
   const [legalSubView, setLegalSubView] = useState<'privacy' | 'terms' | 'support'>('support');
@@ -534,22 +538,6 @@ export default function App() {
     return (savedTheme as 'light' | 'dark') || 'light';
   });
 
-  const logActivity = useCallback(async (action: string, details: string) => {
-    const orgId = user?.organizationId;
-    if (!user || !orgId) return;
-    try {
-      await addDoc(collection(db, 'organizations', orgId, 'activityLogs'), {
-        userId: user.uid,
-        organizationId: orgId,
-        action,
-        details,
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      console.error('Failed to log activity:', error);
-    }
-  }, [user]);
-
   const createNotification = useCallback(async (n: Omit<Notification, 'id' | 'organizationId' | 'read' | 'timestamp'>, docId?: string) => {
     const orgId = user?.organizationId;
     if (!orgId) return;
@@ -575,6 +563,31 @@ export default function App() {
       console.error('Failed to create notification:', error);
     }
   }, [user?.organizationId]);
+
+  const logActivity = useCallback(async (action: string, details: string) => {
+    const orgId = user?.organizationId;
+    if (!user || !orgId) return;
+    try {
+      await addDoc(collection(db, 'organizations', orgId, 'activityLogs'), {
+        userId: user.uid,
+        organizationId: orgId,
+        action,
+        details,
+        timestamp: new Date().toISOString()
+      });
+
+      // Trigger notification if security alerts are enabled
+      if (user.preferences?.notifs) {
+        await createNotification({
+          title: `Security Log: ${action}`,
+          message: details,
+          type: 'SYSTEM',
+        });
+      }
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
+  }, [user, createNotification]);
 
   const addToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Math.random().toString(36).substring(2, 9);
@@ -826,15 +839,93 @@ export default function App() {
     }
   };
 
+      const onRestoreBackup = async (data: any) => {
+    if (!effectiveOrgId) return;
+    
+    // Performance improvement: sanity check for data structure
+    if (!data || (typeof data !== 'object')) {
+        addToast('Invalid backup file format', 'error');
+        return;
+    }
+
+    const { isConfirmed } = await Swal.fire({
+      title: 'Initiate Restoration?',
+      text: "This will overwrite current organization data with the backup contents. This action is recorded in the audit trail.",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#0F9D58',
+      confirmButtonText: 'Yes, Restore All'
+    });
+
+    if (!isConfirmed) return;
+
+    setAuthLoading(true);
+    try {
+      // Chunk restoration to handle Firestore batch limits (500)
+      const collections = [
+        { key: 'profiles', path: 'profiles', idField: 'phone' },
+        { key: 'visits', path: 'visits', idField: 'visitId' },
+        { key: 'donations', path: 'donations', idField: 'id' },
+        { key: 'inquiries', path: 'inquiries', idField: 'id' },
+        { key: 'preRegistrations', path: 'preRegistrations', idField: 'id' },
+        { key: 'orgUsers', path: 'users', idField: 'uid' },
+        { key: 'activityLogs', path: 'activityLogs', idField: 'id' }
+      ];
+
+      for (const col of collections) {
+        const items = data[col.key];
+        if (items && Array.isArray(items)) {
+          // Batch items in 400s to be safe
+          for (let i = 0; i < items.length; i += 400) {
+            const batch = writeBatch(db);
+            const chunk = items.slice(i, i + 400);
+            chunk.forEach((item: any) => {
+              const id = item[col.idField] || item.id || `RESTORED-${Date.now()}-${Math.random()}`;
+              batch.set(doc(db, 'organizations', effectiveOrgId, col.path, id), sanitizeForFirestore(item));
+            });
+            await batch.commit();
+          }
+        }
+      }
+
+      await logActivity('RESTORE_BACKUP', `Successfully restored ${Object.keys(data).length} data types from file.`);
+      addToast('Full organization data restored!', 'success');
+      // Refresh local state by just reloading or re-triggering snapshots if not automatic
+      window.location.reload(); 
+    } catch (e: any) {
+      console.error(e);
+      addToast('Restoration complex failure: ' + e.message, 'error');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   const onCreateBackup = async () => {
     if (!effectiveOrgId) return;
     try {
-        const fullBackup = { visitors, donations };
+        const fullBackup = { 
+          profiles, 
+          visits, 
+          donations, 
+          orgUsers,
+          preRegistrations: [],
+          inquiries: [],
+          activityLogs: []
+        };
+        // Fetch all data for organization for a true full backup
+        const inquiriesSnap = await getDocs(collection(db, 'organizations', effectiveOrgId, 'inquiries'));
+        const preRegSnap = await getDocs(collection(db, 'organizations', effectiveOrgId, 'preRegistrations'));
+        const logsSnap = await getDocs(query(collection(db, 'organizations', effectiveOrgId, 'activityLogs'), limit(1000)));
+        
+        (fullBackup as any).inquiries = inquiriesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        (fullBackup as any).preRegistrations = preRegSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        (fullBackup as any).activityLogs = logsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
         await createBackup(effectiveOrgId, fullBackup);
-        addToast('Backup created successfully!', 'success');
+        addToast('Full secure backup synchronized!', 'success');
     } catch (e) {
         console.error(e);
-        addToast('Backup failed', 'error');
+        addToast('Backup extraction failed', 'error');
     }
   };
 
@@ -1239,10 +1330,18 @@ export default function App() {
               // Subscribe to the ORG-NESTED user profile (The "Truth")
               const nestedUserRef = doc(db, 'organizations', orgId, 'users', firebaseUser.uid);
               onSnapshot(nestedUserRef, (nestedSnap) => {
+                const defaultPrefs = { notifs: true, public: false, density: true };
                 if (nestedSnap.exists()) {
-                  setUser(nestedSnap.data() as User);
+                  const data = nestedSnap.data() as User;
+                  setUser({ 
+                    ...data, 
+                    preferences: { ...defaultPrefs, ...data.preferences } 
+                  });
                 } else {
-                  setUser(registryData);
+                  setUser({ 
+                    ...registryData, 
+                    preferences: { ...defaultPrefs, ...registryData.preferences } 
+                  });
                 }
                 setAuthLoading(false);
                 setIsAuthReady(true);
@@ -2392,7 +2491,8 @@ export default function App() {
           checkInTime: data.checkInTime || new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
           organizationId: orgId,
           createdBy: user.uid,
-          recordedBy: user.name
+          recordedBy: user.uid,
+          recordedByName: user.name
         };
 
         if (!isOnline) {
@@ -2668,19 +2768,23 @@ export default function App() {
     setIsSavingReview(true);
     
     try {
-      // 1. Create a review in the hierarchical reviews collection
+      // 1. Create a review in the hierarchical reviews collection (Optional, may fail due to rules)
       const reviewId = `REV-${Date.now()}`;
-      await setDoc(doc(db, 'organizations', orgId, 'reviews', reviewId), sanitizeForFirestore({
-        id: reviewId,
-        rating,
-        comment,
-        visitorId: reviewVisitor.visitorId,
-        visitorPhone: reviewVisitor.phone,
-        organizationId: orgId,
-        timestamp: new Date().toISOString()
-      }));
+      try {
+        await setDoc(doc(db, 'organizations', orgId, 'reviews', reviewId), sanitizeForFirestore({
+          id: reviewId,
+          rating,
+          comment,
+          visitorId: reviewVisitor.visitorId,
+          visitorPhone: reviewVisitor.phone,
+          organizationId: orgId,
+          timestamp: new Date().toISOString()
+        }));
+      } catch (revErr) {
+        console.warn('Standalone review record not created (possibly blocked by rules):', revErr);
+      }
 
-      // 2. Update visit record
+      // 2. Update visit record (Master Source of Truth for Reviews)
       await updateDoc(doc(db, 'organizations', orgId, 'visits', reviewVisitor.visitorId), {
         review: {
           rating,
@@ -3238,8 +3342,9 @@ export default function App() {
         checkInTime,
         status: 'INSIDE',
         organizationId: user?.organizationId || organization?.id || '',
-        createdBy: 'KIOSK',
-        recordedBy: 'Self Check-in',
+        createdBy: user?.uid || 'KIOSK',
+        recordedBy: user?.uid || 'KIOSK',
+        recordedByName: 'Self Check-in',
         signature,
         preRegistrationId: req.id
       };
@@ -3688,6 +3793,12 @@ export default function App() {
                   label="Pre-Register"
                 />
               )}
+              <NavButton 
+                active={activeTab === 'inquiries'} 
+                onClick={() => setActiveTab('inquiries')}
+                icon={<PhoneCall />}
+                label="Inquiries"
+              />
               {isTabVisible('records') && (
                 <NavButton 
                   active={activeTab === 'records'} 
@@ -3814,6 +3925,7 @@ export default function App() {
     <div className="lg:hidden fixed bottom-0 left-0 right-0 border-t border-slate-100 py-0.5 flex items-center justify-start overflow-x-auto no-scrollbar scroll-smooth bg-white/95 backdrop-blur-md px-2 z-[100] shadow-[0_-8px_30px_rgba(0,0,0,0.08)] pb-safe-area-bottom gap-1">
         {isTabVisible('dashboard') && <MobileNavBtn active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard />} label="Home" />}
         {isTabVisible('visitors') && <MobileNavBtn active={activeTab === 'visitors'} onClick={() => setActiveTab('visitors')} icon={<UserPlus />} label="Entry" />}
+        <MobileNavBtn active={activeTab === 'inquiries'} onClick={() => setActiveTab('inquiries')} icon={<PhoneCall />} label="Calls" />
         <MobileNavBtn active={activeTab === 'pre-registrations'} onClick={() => setActiveTab('pre-registrations')} icon={<Calendar />} label="Pre-Reg" />
         {isTabVisible('records') && <MobileNavBtn active={activeTab === 'records'} onClick={() => setActiveTab('records')} icon={<ClipboardList />} label="Records" />}
         {isTabVisible('analysis') && (user.role === 'ADMIN') && <MobileNavBtn active={activeTab === 'analysis'} onClick={() => setActiveTab('analysis')} icon={<BarChart3 />} label="Analysis" />}
@@ -3826,7 +3938,7 @@ export default function App() {
         {isTabVisible('profile') && <MobileNavBtn active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} icon={<UserIcon />} label="Profile" />}
     </div>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className={`flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 transition-all duration-500 ${user?.preferences?.density ? 'py-2 scale-[0.99] origin-top font-tight' : 'py-8'}`}>
         <AnimatePresence mode="wait">
           {activeTab === 'dashboard' && (
             <motion.div
@@ -4186,6 +4298,17 @@ export default function App() {
             </motion.div>
           )}
 
+          {activeTab === 'inquiries' && organization && (
+            <motion.div
+              key="inquiries"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+            >
+              <InquiryTracker organization={organization} user={user} />
+            </motion.div>
+          )}
+
           {activeTab === 'pre-registrations' && (
             <motion.div
               key="pre-registrations"
@@ -4400,6 +4523,7 @@ export default function App() {
                 onCreateCalendar={createNewCalendar}
                 onSyncNow={triggerGoogleSync}
                 onCreateBackup={onCreateBackup}
+                onRestoreBackup={onRestoreBackup}
                 onFetchBackups={onFetchBackups}
                 onRefreshLists={() => {
                   fetchAvailableSheets();

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { History, Search, Filter, Calendar, User, Info, AlertTriangle, Shield, LogIn, LogOut, Trash2, PlusCircle, Edit } from 'lucide-react';
+import { History, Search, Filter, Calendar, User, Info, AlertTriangle, Shield, LogIn, LogOut, Trash2, PlusCircle, Edit, CheckCircle2 } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import { ActivityLog, User as AppUser } from '../types';
@@ -192,24 +192,4 @@ export default function ActivityLogsTab({ organizationId, users }: ActivityLogsT
       </div>
     </div>
   );
-}
-
-function CheckCircle2(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
-      <path d="m9 12 2 2 4-4" />
-    </svg>
-  )
 }

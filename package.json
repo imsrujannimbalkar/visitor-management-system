@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build",
+    "start": "node server.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
@@ -19,6 +20,7 @@
     "@vercel/node": "^5.7.13",
     "@vitejs/plugin-react": "^5.0.4",
     "cookie-parser": "^1.4.7",
+    "date-fns": "^4.1.0",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "firebase": "^12.12.0",

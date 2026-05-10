@@ -25,6 +25,7 @@ import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { Organization, PurposeType } from '../types';
 import SignatureCanvasFromLib from 'react-signature-canvas';
+import { encryptData } from '../lib/encryption';
 
 const SignatureCanvas = (SignatureCanvasFromLib as any).default || SignatureCanvasFromLib;
 

@@ -13,36 +13,23 @@ interface ReviewsTabProps {
 }
 
 export default function ReviewsTab({ organizationId, userRole, visitors }: ReviewsTabProps) {
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [ratingFilter, setRatingFilter] = useState<number | 'all'>('all');
 
-  useEffect(() => {
-    if (!organizationId) return;
-
-    const q = query(
-      collection(db, 'organizations', organizationId, 'reviews'),
-      orderBy('timestamp', 'desc')
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const reviewsData: Review[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data() as any;
-        if (!data.deleted) {
-          reviewsData.push({ id: doc.id, ...data } as Review);
-        }
-      });
-      setReviews(reviewsData);
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching reviews:", error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [organizationId]);
+  const reviews = React.useMemo(() => {
+    return visitors
+      .filter(v => v.review && !v.review.deleted)
+      .map(v => ({
+        id: v.visitorId,
+        rating: v.review!.rating,
+        comment: v.review!.comment,
+        visitorId: v.visitorId,
+        organizationId: v.organizationId,
+        timestamp: v.review!.timestamp,
+        deleted: v.review!.deleted
+      } as Review))
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [visitors]);
 
   const handleDeleteReview = async (reviewId: string) => {
     if (userRole !== 'ADMIN') return;
@@ -60,12 +47,13 @@ export default function ReviewsTab({ organizationId, userRole, visitors }: Revie
 
     if (result.isConfirmed) {
       try {
-        await updateDoc(doc(db, 'organizations', organizationId, 'reviews', reviewId), {
-          deleted: true,
-          deletedAt: new Date().toISOString()
+        await updateDoc(doc(db, 'organizations', organizationId, 'visits', reviewId), {
+          'review.deleted': true,
+          'review.deletedAt': new Date().toISOString()
         });
         Swal.fire('Deleted!', 'Review has been removed from view.', 'success');
       } catch (error) {
+        console.error('Error deleting review:', error);
         Swal.fire('Error', 'Failed to delete review.', 'error');
       }
     }
@@ -85,14 +73,6 @@ export default function ReviewsTab({ organizationId, userRole, visitors }: Revie
   const averageRating = reviews.length > 0 
     ? (reviews.reduce((acc, current) => acc + current.rating, 0) / reviews.length).toFixed(1)
     : '0.0';
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center p-20">
-        <div className="w-10 h-10 border-4 border-brand-blue border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">

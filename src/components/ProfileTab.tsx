@@ -59,6 +59,7 @@ interface ProfileTabProps {
   onSyncNow: () => void;
   onRefreshLists: () => void;
   onCreateBackup: () => void;
+  onRestoreBackup?: (data: any) => Promise<void>;
   onFetchBackups: () => Promise<any[]>;
 }
 
@@ -82,6 +83,7 @@ export default function ProfileTab({
   onSyncNow,
   onRefreshLists,
   onCreateBackup,
+  onRestoreBackup,
   onFetchBackups
 }: ProfileTabProps) {
   const [isEditing, setIsEditing] = useState(false);
@@ -110,6 +112,13 @@ export default function ProfileTab({
         address: user.address || '',
         photoURL: user.photoURL || '',
       });
+      
+      // Sync preferences when user data changes
+      setPreferences([
+        { id: 'notifs', icon: <Bell size={18} />, label: 'Security Notifications', desc: 'Real-time alerts for visitor check-ins', active: user?.preferences?.notifs ?? true },
+        { id: 'public', icon: <Globe size={18} />, label: 'Public Indexing', desc: 'Allow organization search by email', active: user?.preferences?.public ?? false },
+        { id: 'density', icon: <Zap size={18} />, label: 'Extreme Density UI', desc: 'Use high-contrast specialized dashboards', active: user?.preferences?.density ?? true }
+      ]);
     }
   }, [user]);
 
@@ -120,11 +129,22 @@ export default function ProfileTab({
     setPreferences(updatedPrefs);
     
     // Persist to Firebase
-    if (user?.uid) {
+    if (user?.uid && user?.organizationId) {
       try {
-        const userRef = doc(db, 'users', user.uid);
         const prefsObj = updatedPrefs.reduce((acc, curr) => ({ ...acc, [curr.id]: curr.active }), {});
-        await updateDoc(userRef, { preferences: prefsObj });
+        
+        // Update both locations to ensure consistency
+        const userRef = doc(db, 'users', user.uid);
+        const orgUserRef = doc(db, 'organizations', user.organizationId, 'users', user.uid);
+        
+        await Promise.all([
+          updateDoc(userRef, { preferences: prefsObj }),
+          updateDoc(orgUserRef, { preferences: prefsObj })
+        ]);
+        
+        if (onUpdateUser) {
+          onUpdateUser({ ...user, preferences: prefsObj });
+        }
       } catch (err) {
         console.error('Failed to update preference:', err);
       }
@@ -499,8 +519,27 @@ export default function ProfileTab({
                       Swal.fire('No Backups', 'No previous backups found.', 'info');
                       return;
                     }
-                    const latest = backups[0];
-                    window.open(latest.url, '_blank');
+                    // Sort backups by timestamp in filename (visitor-data-ORGID-YYYY-MM-DDTHH-MM-SS.json)
+                    const sorted = [...backups].sort((a, b) => b.name.localeCompare(a.name));
+                    const latest = sorted[0];
+                    
+                    // Create a temporary link to download properly
+                    const link = document.createElement('a');
+                    link.href = latest.url;
+                    link.download = latest.name;
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    
+                    Swal.fire({
+                      title: 'Download Started',
+                      text: `Downloading ${latest.name}`,
+                      icon: 'success',
+                      timer: 2000,
+                      showConfirmButton: false
+                    });
                   }}
                   className="flex-1 py-5 bg-white text-slate-700 rounded-3xl font-black hover:bg-slate-50 transition-all active:scale-95 flex items-center justify-center gap-3 shadow-sm border border-slate-200"
                 >
@@ -508,6 +547,47 @@ export default function ProfileTab({
                   Latest Backup
                 </button>
               </div>
+
+              {/* Restore Section - Advanced */}
+              {onRestoreBackup && (
+                <div className="mt-6 pt-6 border-t border-slate-100">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-[#051739]/30 mb-4 px-2">Disaster Recovery (Advanced)</p>
+                  <label className="flex items-center justify-between p-6 bg-slate-50 rounded-2xl cursor-pointer hover:bg-slate-100 transition-all border-2 border-dashed border-slate-200 group">
+                    <div className="flex items-center gap-4">
+                      <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-slate-500 shadow-sm">
+                        <Save size={18} />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-black text-slate-900 group-hover:text-indigo-600 transition-colors">Emergency Restore</span>
+                        <span className="text-[10px] font-medium text-slate-400">Upload JSON backup to overwrite local state</span>
+                      </div>
+                    </div>
+                    <input 
+                      type="file" 
+                      accept=".json" 
+                      className="hidden" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = async (event) => {
+                            try {
+                              const data = JSON.parse(event.target?.result as string);
+                              await onRestoreBackup(data);
+                            } catch (err) {
+                              Swal.fire('Parsing Failed', 'Invalid JSON backup file.', 'error');
+                            }
+                          };
+                          reader.readAsText(file);
+                        }
+                      }}
+                    />
+                    <div className="px-4 py-2 bg-white text-[10px] font-black uppercase tracking-widest text-slate-600 rounded-full border border-slate-200 shadow-sm">
+                      Select File
+                    </div>
+                  </label>
+                </div>
+              )}
             </div>
         </div>
       </div>

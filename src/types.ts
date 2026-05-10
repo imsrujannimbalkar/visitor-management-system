@@ -62,7 +62,8 @@ export interface Visit {
   donationStatus?: 'PENDING' | 'COMPLETED';
   organizationId: string;
   createdBy: string;
-  recordedBy?: string;
+  recordedBy: string; // Now UID for security rules
+  recordedByName: string; // Name for UI
   visitorEmail?: string;
   visitorDOB?: string;
   visitorAddress?: string;
@@ -74,6 +75,7 @@ export interface Visit {
     rating: number;
     comment: string;
     timestamp: string;
+    deleted?: boolean;
   };
 }
 
@@ -199,7 +201,7 @@ export interface Notification {
   organizationId: string;
   title: string;
   message: string;
-  type: 'REVIEW' | 'WAITING' | 'BIRTHDAY' | 'SYSTEM' | 'PRE_REG' | 'DONATION' | 'OCCASION' | 'KIOSK_ASSISTANCE';
+  type: 'REVIEW' | 'WAITING' | 'BIRTHDAY' | 'SYSTEM' | 'PRE_REG' | 'DONATION' | 'OCCASION' | 'KIOSK_ASSISTANCE' | 'FOLLOW_UP';
   read: boolean;
   timestamp: string;
   relatedId?: string; // visitorId or reviewId
@@ -255,5 +257,23 @@ export interface PreRegistration {
   submittedAt: string;
   processedAt?: string;
   processedBy?: string;
+  deleted?: boolean;
+}
+
+export interface Inquiry {
+  id: string;
+  organizationId: string;
+  callerName: string;
+  callerPhone: string;
+  callerEmail?: string;
+  purpose: string;
+  followUpDate: string;
+  status: 'PENDING' | 'DONE' | 'CANCELLED';
+  priority: 'LOW' | 'MEDIUM' | 'HIGH';
+  notes?: string;
+  recordedBy: string;
+  recordedByName: string;
+  createdAt: string;
+  updatedAt: string;
   deleted?: boolean;
 }

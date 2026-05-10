@@ -13,7 +13,8 @@ import {
   Heart,
   Calendar,
   Shield,
-  ThumbsUp
+  ThumbsUp,
+  PhoneCall
 } from 'lucide-react';
 import { Notification } from '../types';
 import { db } from '../firebase';
@@ -120,6 +121,7 @@ export default function NotificationsCenter({
       case 'BIRTHDAY': return <Gift className="h-4 w-4 text-emerald-500" />;
       case 'DONATION': return <Heart className="h-4 w-4 text-rose-500" />;
       case 'ANNIVERSARY': return <Heart className="h-4 w-4 text-rose-500" />;
+      case 'FOLLOW_UP': return <PhoneCall className="h-4 w-4 text-indigo-500" />;
       case 'PRE_REG': return <Calendar className="h-4 w-4 text-brand-blue" />;
       case 'OCCASION': return <Calendar className="h-4 w-4 text-brand-blue" />;
       case 'SYSTEM': return <Shield className="h-4 w-4 text-slate-700" />;

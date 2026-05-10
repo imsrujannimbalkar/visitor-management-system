@@ -139,12 +139,35 @@
         "organizationId": { "type": "string" },
         "title": { "type": "string" },
         "message": { "type": "string" },
-        "type": { "type": "string", "enum": ["REVIEW", "WAITING", "BIRTHDAY", "SYSTEM", "KIOSK_ASSISTANCE"] },
+        "type": { "type": "string", "enum": ["REVIEW", "WAITING", "BIRTHDAY", "SYSTEM", "KIOSK_ASSISTANCE", "FOLLOW_UP"] },
         "read": { "type": "boolean" },
         "timestamp": { "type": "string", "format": "date-time" },
-        "relatedId": { "type": "string" }
+        "relatedId": { "type": "string" },
+        "approved": { "type": "boolean" }
       },
-      "required": ["id", "organizationId", "title", "message", "type", "read", "timestamp"]
+      "required": ["id", "title", "message", "type", "read", "timestamp"]
+    },
+    "Inquiry": {
+      "title": "Inquiry",
+      "description": "Call inquiries and follow-up tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "organizationId": { "type": "string" },
+        "callerName": { "type": "string" },
+        "callerPhone": { "type": "string" },
+        "callerEmail": { "type": "string" },
+        "purpose": { "type": "string" },
+        "followUpDate": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["PENDING", "DONE", "CANCELLED"] },
+        "priority": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] },
+        "notes": { "type": "string" },
+        "recordedBy": { "type": "string" },
+        "recordedByName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "organizationId", "callerName", "callerPhone", "purpose", "followUpDate", "status", "priority", "recordedBy", "createdAt"]
     },
     "AppFeedback": {
       "title": "AppFeedback",
@@ -261,6 +284,10 @@
     "/organizations/{orgId}/notifications/{notificationId}": {
       "schema": "Notification",
       "description": "System notifications"
+    },
+    "/organizations/{orgId}/inquiries/{inquiryId}": {
+      "schema": "Inquiry",
+      "description": "Call inquiries and follow-up tracking"
     },
     "/appFeedback/{feedbackId}": {
       "schema": "AppFeedback",

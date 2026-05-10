@@ -608,9 +608,9 @@ export default function VisitorTable({
                                             </div>
                                           )}
                                           <div className="hidden sm:block">
-                                            {visit.recordedBy && (
+                                            {visit.recordedByName && (
                                               <div className="text-[10px] font-black text-slate-300 uppercase tracking-widest text-right">
-                                                Audit by {visit.recordedBy}
+                                                Audit by {visit.recordedByName}
                                               </div>
                                             )}
                                           </div>

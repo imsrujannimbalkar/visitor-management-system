@@ -78,6 +78,41 @@ export default function PreRegistrationTab({
     return () => unsubscribe();
   }, [organizationId]);
 
+  const handleWhatsAppNotification = (req: PreRegistration, status: 'APPROVED' | 'REJECTED') => {
+    if (!req || !organizationId) return;
+
+    const baseUrl = window.location.origin;
+    const passUrl = `${baseUrl}/?passId=${encodeURIComponent(req.id)}&orgId=${encodeURIComponent(organizationId)}`;
+    const visitorName = req.name || 'Visitor';
+    
+    let message = '';
+    if (status === 'APPROVED') {
+      message = `*Visit Approved!* ✅\n\nHello ${visitorName},\n\nYour visit request for *${req.visitDate}* has been *APPROVED*.\n\n*View Your Digital Pass:* ${passUrl}\n\nPlease present this digital pass at the entrance for check-in.\n\nPowered by VMS Global Secure`;
+    } else {
+      message = `*Visit Update* ⚠️\n\nHello ${visitorName},\n\nWe regret to inform you that your visit request for *${req.visitDate}* was *NOT APPROVED* at this time.\n\nFor more information, please contact us directly.\n\nPowered by VMS Global Secure`;
+    }
+
+    const digitsOnly = req.phone?.replace(/\D/g, '') || '';
+    
+    if (!digitsOnly || digitsOnly.length < 10) {
+      console.warn('Invalid phone number for WhatsApp:', req.phone);
+      return;
+    }
+    
+    let formattedPhone = digitsOnly;
+    if (formattedPhone.length === 10) {
+      formattedPhone = '91' + formattedPhone;
+    }
+    
+    const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(message)}`;
+    
+    // Open WhatsApp in a new tab
+    const newWindow = window.open(whatsappUrl, '_blank');
+    if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+      window.location.href = whatsappUrl;
+    }
+  };
+
   const handleStatusChange = async (requestId: string, newStatus: 'APPROVED' | 'REJECTED') => {
     try {
       const req = requests.find(r => r.id === requestId);
@@ -104,11 +139,14 @@ export default function PreRegistrationTab({
 
         Swal.fire({
           title: 'Approved!',
-          text: 'The visitor request has been approved. They can now use their pass for entry.',
+          text: 'The visitor request has been approved. They can now use their pass for entry. Opening WhatsApp to notify them...',
           icon: 'success',
-          timer: 2000,
+          timer: 3000,
           showConfirmButton: false
         });
+        
+        // Trigger WhatsApp
+        setTimeout(() => handleWhatsAppNotification(req, 'APPROVED'), 1000);
       } else if (newStatus === 'REJECTED') {
          // Add Notification for rejection
          await addDoc(collection(db, 'organizations', organizationId, 'notifications'), {
@@ -120,6 +158,17 @@ export default function PreRegistrationTab({
           timestamp: new Date().toISOString(),
           relatedId: requestId
         });
+
+        Swal.fire({
+          title: 'Rejected',
+          text: 'The visitor request has been rejected. Opening WhatsApp to notify them...',
+          icon: 'info',
+          timer: 3000,
+          showConfirmButton: false
+        });
+
+        // Trigger WhatsApp
+        setTimeout(() => handleWhatsAppNotification(req, 'REJECTED'), 1000);
       }
     } catch (error) {
       console.error('Error updating status:', error);
@@ -160,7 +209,8 @@ export default function PreRegistrationTab({
         status: 'INSIDE',
         organizationId,
         createdBy: user?.uid || 'SYSTEM',
-        recordedBy: user?.name || 'Staff',
+        recordedBy: user?.uid || 'SYSTEM',
+        recordedByName: user?.name || 'Staff',
         signature: signatureData || req.signature || '',
         preRegistrationId: req.id
       };

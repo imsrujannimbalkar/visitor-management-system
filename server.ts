@@ -33,25 +33,26 @@ async function runDailyTasks() {
   const birthdayPattern = `-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
 
   try {
-    const orgsSnap = await adminDb.collection('organizations').get();
+    const orgsSnap = await safely(adminDb.collection('organizations').get(), getFallback);
     const backupData: any = {};
 
     for (const orgDoc of orgsSnap.docs) {
+      if (!orgDoc.exists) continue;
       const orgId = orgDoc.id;
       const orgData = orgDoc.data();
       
       // 1. Process Birthday Reminders for this Org
-      const visitsSnap = await orgDoc.ref.collection('visits').get();
+      const visitsSnap = await safely(orgDoc.ref.collection('visits').get(), getFallback);
       for (const visitDoc of visitsSnap.docs) {
         const v = visitDoc.data();
         if (v.dob && v.dob.includes(birthdayPattern)) {
           // Check for existing notification to avoid spam
           const id = `BIRTHDAY-${orgId}-${visitDoc.id}-${dateStr}`;
           const notifRef = orgDoc.ref.collection('notifications').doc(id);
-          const notifSnap = await notifRef.get();
+          const notifSnap = await safely(notifRef.get(), getFallback);
           
           if (!notifSnap.exists) {
-            await notifRef.set({
+            await safely(notifRef.set({
               id,
               organizationId: orgId,
               title: 'Birthday Alert! 🎂',
@@ -62,23 +63,23 @@ async function runDailyTasks() {
               timestamp: new Date().toISOString(),
               read: false,
               deleted: false
-            });
+            }), undefined);
             console.log(`[Reminders] Created birthday notification for ${v.name} in ${orgId}`);
           }
         }
       }
 
       // 2. Process Occasions from Donations
-      const donationsSnap = await orgDoc.ref.collection('donations').get();
+      const donationsSnap = await safely(orgDoc.ref.collection('donations').get(), getFallback);
       for (const donationDoc of donationsSnap.docs) {
         const d = donationDoc.data();
         if (d.occasionDate && d.occasionDate.includes(birthdayPattern)) {
           const id = `OCCASION-${orgId}-${donationDoc.id}-${dateStr}`;
           const notifRef = orgDoc.ref.collection('notifications').doc(id);
-          const notifSnap = await notifRef.get();
+          const notifSnap = await safely(notifRef.get(), getFallback);
 
           if (!notifSnap.exists) {
-            await notifRef.set({
+            await safely(notifRef.set({
               id,
               organizationId: orgId,
               title: `${d.occasion || 'Special Occasion'}! ✨`,
@@ -89,40 +90,89 @@ async function runDailyTasks() {
               timestamp: new Date().toISOString(),
               read: false,
               deleted: false
-            });
+            }), undefined);
             console.log(`[Reminders] Created occasion notification for ${d.visitorName} in ${orgId}`);
           }
         }
       }
 
-      // 3. Collect Data for Backup
+      // 3. Process Inquiries for Follow-up Reminders
+      const inquiriesSnap = await safely(orgDoc.ref.collection('inquiries')
+        .where('status', '==', 'PENDING')
+        .where('deleted', '!=', true)
+        .get(), getFallback);
+        
+      for (const inquiryDoc of inquiriesSnap.docs) {
+        const inquiry = inquiryDoc.data();
+        if (inquiry.followUpDate && inquiry.followUpDate <= dateStr) {
+          const id = `FOLLOW-UP-${orgId}-${inquiryDoc.id}-${dateStr}`;
+          const notifRef = orgDoc.ref.collection('notifications').doc(id);
+          const notifSnap = await safely(notifRef.get(), getFallback);
+          
+          if (!notifSnap.exists) {
+            const isOverdue = inquiry.followUpDate < dateStr;
+            await safely(notifRef.set({
+              id,
+              organizationId: orgId,
+              title: isOverdue ? 'Overdue Follow-up! ⚠️' : 'Follow-up Due! 📞',
+              message: `${isOverdue ? 'Overdue' : 'Due'} follow-up for ${inquiry.callerName}. Purpose: ${inquiry.purpose}`,
+              type: 'FOLLOW_UP',
+              inquiryId: inquiryDoc.id,
+              date: dateStr,
+              timestamp: new Date().toISOString(),
+              read: false,
+              deleted: false
+            }), undefined);
+            console.log(`[Reminders] Created ${isOverdue ? 'overdue' : 'due'} follow-up notification for ${inquiry.callerName} in ${orgId}`);
+          }
+        }
+      }
+
+      // 4. Collect Data for Backup
       backupData[orgId] = {
         config: orgData,
         visits: visitsSnap.docs.map(d => ({ id: d.id, ...d.data() })),
         donations: donationsSnap.docs.map(d => ({ id: d.id, ...d.data() })),
-        invitations: (await orgDoc.ref.collection('invitations').get()).docs.map(d => ({ id: d.id, ...d.data() })),
-        notifications: (await orgDoc.ref.collection('notifications').get()).docs.map(d => ({ id: d.id, ...d.data() })),
-        preRegistrations: (await orgDoc.ref.collection('preRegistrations').get()).docs.map(d => ({ id: d.id, ...d.data() })),
-        reviews: (await orgDoc.ref.collection('reviews').get()).docs.map(d => ({ id: d.id, ...d.data() })),
-        profiles: (await orgDoc.ref.collection('profiles').get()).docs.map(d => ({ id: d.id, ...d.data() })),
+        inquiries: inquiriesSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+        invitations: (await safely(orgDoc.ref.collection('invitations').get(), getFallback)).docs.map(d => ({ id: d.id, ...d.data() })),
+        notifications: (await safely(orgDoc.ref.collection('notifications').get(), getFallback)).docs.map(d => ({ id: d.id, ...d.data() })),
+        preRegistrations: (await safely(orgDoc.ref.collection('preRegistrations').get(), getFallback)).docs.map(d => ({ id: d.id, ...d.data() })),
+        reviews: (await safely(orgDoc.ref.collection('reviews').get(), getFallback)).docs.map(d => ({ id: d.id, ...d.data() })),
+        profiles: (await safely(orgDoc.ref.collection('profiles').get(), getFallback)).docs.map(d => ({ id: d.id, ...d.data() })),
       };
     }
 
     // 4. Save Backup to Storage
-    const timestamp = today.toISOString().replace(/[:.]/g, '-');
-    const fileName = `backups/firestore-backup-${timestamp}.json`;
-    const bucket = getStorage().bucket();
-    const file = bucket.file(fileName);
-    
-    await file.save(JSON.stringify(backupData, null, 2), {
-      contentType: 'application/json',
-      metadata: {
-        backupDate: today.toISOString(),
-        projectId: projectId
+    try {
+      const timestamp = today.toISOString().replace(/[:.]/g, '-');
+      const bucket = getStorage().bucket();
+
+      // Org-specific backups (discoverable in Profile)
+      for (const orgId in backupData) {
+        const orgFileName = `backups/visitor-data-${orgId}-${timestamp}.json`;
+        const orgFile = bucket.file(orgFileName);
+        await orgFile.save(JSON.stringify(backupData[orgId], null, 2), {
+          contentType: 'application/json',
+          metadata: { backupDate: today.toISOString() }
+        });
       }
-    });
-    
-    console.log(`[Backup] Successfully saved to ${fileName}`);
+
+      // Global backup
+      const globalFileName = `backups/firestore-backup-${timestamp}.json`;
+      const globalFile = bucket.file(globalFileName);
+      
+      await globalFile.save(JSON.stringify(backupData, null, 2), {
+        contentType: 'application/json',
+        metadata: {
+          backupDate: today.toISOString(),
+          projectId: projectId
+        }
+      });
+      
+      console.log(`[Backup Hub] Synchronized global backup and ${Object.keys(backupData).length} organizational snapshots.`);
+    } catch (storageErr) {
+      console.warn('[System] Storage backup failed (likely permission or not enabled):', storageErr);
+    }
   } catch (error) {
     console.error('[System] Daily tasks failed:', error);
   }
@@ -142,11 +192,11 @@ const checkConnection = async () => {
     // Attempt a lightweight read to check connection
     // Use a specific doc in a test collection to be safe
     const testDocRef = adminDb.collection('_connection_test').doc('status');
-    await testDocRef.get();
+    await safely(testDocRef.get(), getFallback);
     
     // Attempt safe write to ensure collections can exist (optional, mostly for initialization)
     try {
-      await testDocRef.set({ lastChecked: new Date().toISOString(), status: 'OK' }, { merge: true });
+      await safely(testDocRef.set({ lastChecked: new Date().toISOString(), status: 'OK' }, { merge: true }), undefined);
     } catch (writeErr) {
       console.warn('Firestore write warning:', writeErr);
     }
