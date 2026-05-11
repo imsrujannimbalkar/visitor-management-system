@@ -220,7 +220,19 @@ export default function VisitorPass({
     const vid = visitor.visitId || visitor.visitorId;
     const passUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization.id}&mode=checkout`;
     const visitorName = visitor.name || visitor.visitorName || 'Visitor';
-    const message = `*Visitor Pass: ${visitorName}*\n\nYour digital pass for *${organization.name}* is ready.\n\n*ID:* ${vid}\n*Purpose:* ${visitor.purpose}\n*Check-in:* ${visitor.checkInTime}\n\n*View Pass & Self Check-out:* ${passUrl}\n\nPowered by VMS Global Secure`;
+    const visitDate = visitor.date ? new Date(visitor.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Today';
+    
+    const message = `🌟 *Visitor Digital Pass - ${organization.name}* 🌟\n\n` +
+                   `Hello *${visitorName}*,\n\n` +
+                   `Your official digital entry pass is below.\n\n` +
+                   `📌 *Visit Summary:*\n` +
+                   `📅 Date: ${visitDate}\n` +
+                   `🕒 Check-in: ${visitor.checkInTime}\n` +
+                   `🎯 Purpose: ${visitor.purpose}\n\n` +
+                   `🎫 *Access Link:*\n` +
+                   `👉 ${passUrl}\n\n` +
+                   `💡 *Pro Tip:* You can also use this link for quick *Self Check-out* when you leave!\n\n` +
+                   `Powered by VMS Global Secure`;
     
     const phoneToUse = visitor.visitorPhone || visitor.phone;
     const digitsOnly = phoneToUse?.replace(/\D/g, '') || '';

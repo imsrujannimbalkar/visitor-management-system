@@ -126,7 +126,7 @@ service cloud.firestore {
                       isValidId(orgId) &&
                       incoming().createdBy == request.auth.uid;
       allow update: if isAdminOfOrg(orgId) && 
-                      incoming().createdBy == existing().createdBy;
+                      (incoming().createdBy == existing().createdBy || !existing().keys().hasAll(['createdBy']));
       
       // ORG SUB-COLLECTIONS
       

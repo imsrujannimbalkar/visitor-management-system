@@ -1408,7 +1408,7 @@ export default function App() {
             }
             
             // Auto-initialize missing settings
-            if (!orgData.visitPurposes || !orgData.visitorCategories || !orgData.donationOccasions || !orgData.eventOccasions) {
+            if (user?.role === 'ADMIN' && (!orgData.visitPurposes || !orgData.visitorCategories || !orgData.donationOccasions || !orgData.eventOccasions)) {
               try {
                 const orgRef = doc(db, 'organizations', orgId);
                 await updateDoc(orgRef, {
@@ -4318,6 +4318,7 @@ export default function App() {
             >
               <PreRegistrationTab 
                 organizationId={user?.organizationId || ''} 
+                organizationName={organization?.name}
                 user={user} 
                 initialStatus={preRegFilter}
                 onCheckOut={async (preRegId) => {

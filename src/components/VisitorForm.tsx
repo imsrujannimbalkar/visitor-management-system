@@ -8,6 +8,8 @@ import SignatureCanvasFromLib from 'react-signature-canvas';
 const SignatureCanvas = (SignatureCanvasFromLib as any).default || SignatureCanvasFromLib;
 
 import VoiceInput from './VoiceInput';
+import { db } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 interface VisitorFormProps {
   onClose: () => void;
@@ -162,8 +164,38 @@ export default function VisitorForm({
   organizationName = 'Visitor Management System',
   organizationId
 }: VisitorFormProps) {
-  const finalPurposes = customPurposes && customPurposes.length > 0 ? customPurposes : PURPOSES;
-  const finalCategories = customCategories && customCategories.length > 0 ? customCategories : TYPES;
+  const [orgSettings, setOrgSettings] = useState<{
+    purposes?: string[];
+    visitorTypes?: string[];
+    defaultLocation?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (organizationId && !customPurposes && !customCategories) {
+      const loadOrgSettings = async () => {
+        try {
+          const orgDoc = await getDoc(doc(db, 'organizations', organizationId));
+          if (orgDoc.exists()) {
+            const data = orgDoc.data();
+            if (data.preRegSettings) {
+              setOrgSettings(data.preRegSettings);
+            }
+          }
+        } catch (err) {
+          console.error('Error loading org settings in form:', err);
+        }
+      };
+      loadOrgSettings();
+    }
+  }, [organizationId, customPurposes, customCategories]);
+
+  const finalPurposes = customPurposes && customPurposes.length > 0 
+    ? customPurposes 
+    : (orgSettings?.purposes || PURPOSES);
+  const finalCategories = customCategories && customCategories.length > 0 
+    ? customCategories 
+    : (orgSettings?.visitorTypes || TYPES);
+  const finalOrgName = orgSettings?.defaultLocation || organizationName;
 
   const finalDonationOccasions = donationOccasions && donationOccasions.length > 0 ? donationOccasions : DEFAULT_DONATION_OCCASIONS;
   const finalEventOccasions = eventOccasions && eventOccasions.length > 0 ? eventOccasions : DEFAULT_EVENT_OCCASIONS;
@@ -374,9 +406,28 @@ export default function VisitorForm({
           <div className="flex items-center gap-2">
             {formData.phone && formData.name && (
               <a
-                href={formData.phone ? `https://api.whatsapp.com/send?phone=${(formData.countryCode + formData.phone).replace(/\D/g, '')}&text=${encodeURIComponent(`Hello ${formData.name}, your digital pass for ${organizationName} is ready: ${window.location.origin}/?passId=${formData.visitorId}&orgId=${organizationId || ''}`)}` : undefined}
-                target="_blank"
-                rel="noopener noreferrer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  const visitorName = formData.name || 'Visitor';
+                  const visitDate = new Date(formData.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                  const passUrl = `${window.location.origin}/?passId=${formData.visitorId}&orgId=${organizationId || ''}`;
+                  
+                  const message = `🌟 *Visitor Digital Pass - ${finalOrgName}* 🌟\n\n` +
+                                 `Hello *${visitorName}*,\n\n` +
+                                 `Your digital pass for your visit today is ready.\n\n` +
+                                 `📌 *Visit Details:*\n` +
+                                 `📅 Date: ${visitDate}\n` +
+                                 `📍 Location: ${finalOrgName}\n\n` +
+                                 `🎫 *Your Digital Pass:*\n` +
+                                 `👉 ${passUrl}\n\n` +
+                                 `💡 *Note:* Please present this pass at the gate for a faster check-in process.\n\n` +
+                                 `Thank you!\n` +
+                                 `_Seamless Visitor Management_`;
+                  
+                  const phone = (formData.countryCode + formData.phone).replace(/\D/g, '');
+                  window.open(`https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`, '_blank');
+                }}
+                href="#"
                 className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-xl transition-all active:scale-90 flex items-center gap-2"
                 title="Send WhatsApp Message"
               >

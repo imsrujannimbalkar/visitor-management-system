@@ -194,6 +194,11 @@ export interface Organization {
   autoSyncEnabled?: boolean;
   deactivated?: boolean;
   deactivatedAt?: string;
+  preRegSettings?: {
+    purposes?: string[];
+    visitorTypes?: string[];
+    defaultLocation?: string;
+  };
 }
 
 export interface Notification {

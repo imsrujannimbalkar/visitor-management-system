@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Search, 
@@ -15,12 +15,17 @@ import {
   MoreVertical,
   Mail,
   Loader2,
+  MessageSquare,
   Share2,
   Eye,
   Trash2,
   AlertCircle,
   UserPlus,
-  LogOut
+  LogOut,
+  Settings,
+  Plus,
+  X,
+  ChevronDown
 } from 'lucide-react';
 import { db } from '../firebase';
 import { sanitizeForFirestore } from '../lib/utils';
@@ -34,14 +39,17 @@ import {
   setDoc,
   serverTimestamp,
   orderBy,
-  addDoc
+  addDoc,
+  getDoc
 } from 'firebase/firestore';
 import { PreRegistration, User as UserType, PurposeType } from '../types';
 import Swal from 'sweetalert2';
 import SignatureModal from './SignatureModal';
+import { PURPOSES, TYPES } from './VisitorForm';
 
 interface PreRegistrationTabProps {
   organizationId: string;
+  organizationName?: string;
   user: UserType | null;
   initialStatus?: 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CHECKED_IN' | 'COMPLETED';
   onCheckOut?: (preRegId: string) => void;
@@ -49,6 +57,7 @@ interface PreRegistrationTabProps {
 
 export default function PreRegistrationTab({ 
   organizationId, 
+  organizationName = 'VMS Global',
   user, 
   initialStatus = 'PENDING',
   onCheckOut
@@ -60,8 +69,37 @@ export default function PreRegistrationTab({
   const [copying, setCopying] = useState(false);
   const [isSigModalOpen, setIsSigModalOpen] = useState(false);
   const [pendingCheckInReq, setPendingCheckInReq] = useState<PreRegistration | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settings, setSettings] = useState({
+    purposes: [...PURPOSES],
+    visitorTypes: [...TYPES],
+    defaultLocation: organizationName
+  });
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   useEffect(() => {
+    if (!organizationId) return;
+
+    // Load Settings
+    const loadSettings = async () => {
+      try {
+        const orgDoc = await getDoc(doc(db, 'organizations', organizationId));
+        if (orgDoc.exists()) {
+          const data = orgDoc.data();
+          if (data.preRegSettings) {
+            setSettings(prev => ({
+              purposes: data.preRegSettings.purposes || prev.purposes,
+              visitorTypes: data.preRegSettings.visitorTypes || prev.visitorTypes,
+              defaultLocation: data.preRegSettings.defaultLocation || prev.defaultLocation
+            }));
+          }
+        }
+      } catch (err) {
+        console.error('Error loading pre-reg settings:', err);
+      }
+    };
+    loadSettings();
+
     const q = query(
       collection(db, 'organizations', organizationId, 'preRegistrations'),
       orderBy('submittedAt', 'desc')
@@ -78,24 +116,44 @@ export default function PreRegistrationTab({
     return () => unsubscribe();
   }, [organizationId]);
 
-  const handleWhatsAppNotification = (req: PreRegistration, status: 'APPROVED' | 'REJECTED') => {
+  const handleWhatsAppNotification = (req: PreRegistration, status: 'APPROVED' | 'REJECTED', customLocation?: string) => {
     if (!req || !organizationId) return;
 
     const baseUrl = window.location.origin;
     const passUrl = `${baseUrl}/?passId=${encodeURIComponent(req.id)}&orgId=${encodeURIComponent(organizationId)}`;
     const visitorName = req.name || 'Visitor';
+    const visitDate = new Date(req.visitDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    const location = customLocation || settings.defaultLocation || organizationName || 'VMS Global';
     
     let message = '';
     if (status === 'APPROVED') {
-      message = `*Visit Approved!* ✅\n\nHello ${visitorName},\n\nYour visit request for *${req.visitDate}* has been *APPROVED*.\n\n*View Your Digital Pass:* ${passUrl}\n\nPlease present this digital pass at the entrance for check-in.\n\nPowered by VMS Global Secure`;
+      message = `🌟 *Visitor Entry Approval - VMS Global* 🌟\n\n` +
+                `Hello *${visitorName}*,\n\n` +
+                `We are pleased to inform you that your visit request has been *APPROVED*.\n\n` +
+                `📌 *Visit Details:*\n` +
+                `📅 Date: ${visitDate}\n` +
+                `📍 Location: ${location}\n\n` +
+                `🎫 *Your Digital Pass:*\n` +
+                `Please access your entry pass here:\n` +
+                `👉 ${passUrl}\n\n` +
+                `💡 *Note:* Please keep this pass ready on your phone for a smooth check-in at the entrance.\n\n` +
+                `Thank you for your cooperation!\n` +
+                `_Integrated Visitor Management System_`;
     } else {
-      message = `*Visit Update* ⚠️\n\nHello ${visitorName},\n\nWe regret to inform you that your visit request for *${req.visitDate}* was *NOT APPROVED* at this time.\n\nFor more information, please contact us directly.\n\nPowered by VMS Global Secure`;
+      message = `⚠️ *Visit Status Update - VMS Global* ⚠️\n\n` +
+                `Hello *${visitorName}*,\n\n` +
+                `Regarding your visit request for *${visitDate}* at *${location}*.\n\n` +
+                `We regret to inform you that your request has *NOT BEEN APPROVED* at this time.\n\n` +
+                `📞 For further clarification or to reschedule, please contact the office directly.\n\n` +
+                `Thank you,\n` +
+                `_Security Administration_`;
     }
 
     const digitsOnly = req.phone?.replace(/\D/g, '') || '';
     
     if (!digitsOnly || digitsOnly.length < 10) {
       console.warn('Invalid phone number for WhatsApp:', req.phone);
+      Swal.fire('Error', 'Invalid phone number for WhatsApp notification', 'error');
       return;
     }
     
@@ -110,6 +168,28 @@ export default function PreRegistrationTab({
     const newWindow = window.open(whatsappUrl, '_blank');
     if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
       window.location.href = whatsappUrl;
+    }
+  };
+
+  const handleManualNotification = async (req: PreRegistration) => {
+    const { value: location } = await Swal.fire({
+      title: 'WhatsApp Notification',
+      input: 'text',
+      inputLabel: 'Set Visit Location / Address',
+      inputValue: settings.defaultLocation || organizationName || '',
+      inputPlaceholder: 'Enter the specific address or location...',
+      showCancelButton: true,
+      inputValidator: (value) => {
+        if (!value) {
+          return 'You need to specify a location!';
+        }
+      },
+      confirmButtonText: 'Send WhatsApp',
+      confirmButtonColor: '#10b981', // emerald-500
+    });
+
+    if (location) {
+      handleWhatsAppNotification(req, req.status === 'REJECTED' ? 'REJECTED' : 'APPROVED', location);
     }
   };
 
@@ -139,14 +219,11 @@ export default function PreRegistrationTab({
 
         Swal.fire({
           title: 'Approved!',
-          text: 'The visitor request has been approved. They can now use their pass for entry. Opening WhatsApp to notify them...',
+          text: 'The visitor request has been approved. Use the WhatsApp button to notify them.',
           icon: 'success',
           timer: 3000,
           showConfirmButton: false
         });
-        
-        // Trigger WhatsApp
-        setTimeout(() => handleWhatsAppNotification(req, 'APPROVED'), 1000);
       } else if (newStatus === 'REJECTED') {
          // Add Notification for rejection
          await addDoc(collection(db, 'organizations', organizationId, 'notifications'), {
@@ -161,14 +238,11 @@ export default function PreRegistrationTab({
 
         Swal.fire({
           title: 'Rejected',
-          text: 'The visitor request has been rejected. Opening WhatsApp to notify them...',
+          text: 'The visitor request has been rejected. Use the WhatsApp button to notify them.',
           icon: 'info',
           timer: 3000,
           showConfirmButton: false
         });
-
-        // Trigger WhatsApp
-        setTimeout(() => handleWhatsAppNotification(req, 'REJECTED'), 1000);
       }
     } catch (error) {
       console.error('Error updating status:', error);
@@ -279,15 +353,63 @@ export default function PreRegistrationTab({
     });
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'APPROVED': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-      case 'CHECKED_IN': return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'COMPLETED': return 'bg-slate-100 text-slate-600 border-slate-200';
-      case 'REJECTED': return 'bg-red-100 text-red-700 border-red-200';
-      case 'PENDING': return 'bg-amber-100 text-amber-700 border-amber-200';
-      default: return 'bg-slate-100 text-slate-700 border-slate-200';
+  const saveSettings = async () => {
+    if (!organizationId) return;
+    setIsSavingSettings(true);
+    try {
+      await updateDoc(doc(db, 'organizations', organizationId), {
+        preRegSettings: settings
+      });
+      setShowSettings(false);
+      Swal.fire({
+        title: 'Settings Saved',
+        icon: 'success',
+        timer: 1500,
+        showConfirmButton: false,
+        toast: true,
+        position: 'top-end'
+      });
+    } catch (err) {
+      console.error('Error saving settings:', err);
+      Swal.fire('Error', 'Failed to save settings', 'error');
+    } finally {
+      setIsSavingSettings(false);
     }
+  };
+
+  const addItem = (type: 'purposes' | 'visitorTypes') => {
+    Swal.fire({
+      title: `Add ${type === 'purposes' ? 'Purpose' : 'Visitor Type'}`,
+      input: 'text',
+      showCancelButton: true,
+      inputValidator: (value) => !value && 'Field cannot be empty!'
+    }).then(result => {
+      if (result.isConfirmed) {
+        setSettings(prev => ({
+          ...prev,
+          [type]: [...prev[type], result.value]
+        }));
+      }
+    });
+  };
+
+  const removeItem = (type: 'purposes' | 'visitorTypes', index: number) => {
+    setSettings(prev => ({
+      ...prev,
+      [type]: prev[type].filter((_, i) => i !== index)
+    }));
+  };
+
+  const statusColorMap = {
+    'APPROVED': 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    'CHECKED_IN': 'bg-blue-100 text-blue-700 border-blue-200',
+    'COMPLETED': 'bg-slate-100 text-slate-600 border-slate-200',
+    'REJECTED': 'bg-red-100 text-red-700 border-red-200',
+    'PENDING': 'bg-amber-100 text-amber-700 border-amber-200'
+  };
+
+  const getStatusColor = (status: string) => {
+    return statusColorMap[status as keyof typeof statusColorMap] || 'bg-slate-100 text-slate-700 border-slate-200';
   };
 
   const filteredRequests = requests.filter(req => {
@@ -310,13 +432,25 @@ export default function PreRegistrationTab({
           <p className="text-slate-500">Manage incoming visitor requests and approvals</p>
         </div>
         
-        <button
-          onClick={copyPublicLink}
-          className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-95"
-        >
-          {copying ? <Check className="w-5 h-5" /> : <Share2 className="w-5 h-5" />}
-          Copy Registration Link
-        </button>
+        <div className="flex items-center gap-3">
+          {user?.role === 'ADMIN' && (
+            <button
+              onClick={() => setShowSettings(true)}
+              className="flex items-center gap-2 px-4 py-3 bg-white text-slate-700 border border-slate-200 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm active:scale-95"
+              title="Pre-reg Settings"
+            >
+              <Settings className="w-5 h-5 text-slate-400" />
+              Settings
+            </button>
+          )}
+          <button
+            onClick={copyPublicLink}
+            className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-95"
+          >
+            {copying ? <Check className="w-5 h-5" /> : <Share2 className="w-5 h-5" />}
+            Copy Registration Link
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -475,6 +609,15 @@ export default function PreRegistrationTab({
                             <span className="text-xs font-bold">Check-out</span>
                           </button>
                         )}
+                        {(req.status === 'APPROVED' || req.status === 'REJECTED') && (
+                          <button
+                            onClick={() => handleManualNotification(req)}
+                            className="p-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors"
+                            title="Notify via WhatsApp"
+                          >
+                            <MessageSquare className="w-5 h-5" />
+                          </button>
+                        )}
                         <button
                           onClick={() => {
                             const baseUrl = window.location.origin;
@@ -509,6 +652,150 @@ export default function PreRegistrationTab({
         onConfirm={confirmCheckIn}
         title={`Signature - ${pendingCheckInReq?.name}`}
       />
+
+      {/* Settings Modal */}
+      <AnimatePresence>
+        {showSettings && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowSettings(false)}
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              {/* Header */}
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
+                    <Settings className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-900">Pre-registration Settings</h3>
+                    <p className="text-sm text-slate-500">Customize forms and notifications</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 overflow-y-auto space-y-8 custom-scrollbar">
+                {/* Default Location */}
+                <div className="space-y-3">
+                  <label className="text-sm font-bold text-slate-700 tracking-tight block px-1">
+                    Custom Location / Address (for WhatsApp)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={settings.defaultLocation}
+                      onChange={(e) => setSettings(prev => ({ ...prev, defaultLocation: e.target.value }))}
+                      placeholder="e.g. Main Gate, Building A, 123 Tech Lane..."
+                      className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium text-slate-900 pr-12"
+                    />
+                  </div>
+                  <p className="text-xs text-slate-400 px-1 italic">
+                    This location will be used by default in approval/rejection messages.
+                  </p>
+                </div>
+
+                {/* Purposes Dropdown */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-bold text-slate-700 tracking-tight px-1">
+                      Visit Purposes
+                    </label>
+                    <button
+                      onClick={() => addItem('purposes')}
+                      className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add New
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {settings.purposes.map((purpose, index) => (
+                      <div 
+                        key={index}
+                        className="group flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm font-medium text-slate-700 hover:bg-white transition-all shadow-sm"
+                      >
+                        {purpose}
+                        <button 
+                          onClick={() => removeItem('purposes', index)}
+                          className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Visitor Types Dropdown */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-bold text-slate-700 tracking-tight px-1">
+                      Visitor Types / Categories
+                    </label>
+                    <button
+                      onClick={() => addItem('visitorTypes')}
+                      className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add New
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {settings.visitorTypes.map((type, index) => (
+                      <div 
+                        key={index}
+                        className="group flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm font-medium text-slate-700 hover:bg-white transition-all shadow-sm"
+                      >
+                        {type}
+                        <button 
+                          onClick={() => removeItem('visitorTypes', index)}
+                          className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-4">
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="px-6 py-2.5 text-slate-600 font-bold hover:text-slate-900 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveSettings}
+                  disabled={isSavingSettings}
+                  className="px-8 py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-95 flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isSavingSettings ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
+                  Save Changes
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

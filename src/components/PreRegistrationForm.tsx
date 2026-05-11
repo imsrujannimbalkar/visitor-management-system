@@ -295,7 +295,7 @@ export default function PreRegistrationForm({ organizationId, onComplete }: PreR
                           className="w-full pl-11 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all font-bold text-slate-900 appearance-none"
                         >
                           <option value="">Select Category</option>
-                          {(org?.visitorCategories || ['Donor', 'Volunteer', 'Partner', 'Vendor', 'Guest', 'Staff', 'Student']).map(c => (
+                          {(org?.preRegSettings?.visitorTypes || org?.visitorCategories || ['Donor', 'Volunteer', 'Partner', 'Vendor', 'Guest', 'Staff', 'Student']).map(c => (
                             <option key={c} value={c}>{c}</option>
                           ))}
                         </select>
@@ -356,7 +356,9 @@ export default function PreRegistrationForm({ organizationId, onComplete }: PreR
                           className="w-full pl-11 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all appearance-none font-bold text-slate-900"
                         >
                           <option value="">Select Purpose</option>
-                          {org?.visitPurposes?.map(p => (
+                          {org?.preRegSettings?.purposes?.map(p => (
+                            <option key={p} value={p}>{p}</option>
+                          )) || org?.visitPurposes?.map(p => (
                             <option key={p} value={p}>{p}</option>
                           )) || (
                             <>
