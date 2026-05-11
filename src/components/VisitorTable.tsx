@@ -161,26 +161,37 @@ export default function VisitorTable({
   };
 
   const sendThankYou = (visitor: Visitor) => {
-    const visitorName = visitor.name || 'Visitor';
-    const orgName = organizationName;
-    const visitDate = visitor.date || new Date().toLocaleDateString();
+    const visitorName = visitor.name || visitor.visitorName || 'Visitor';
+    const orgName = organizationName || 'VMS Global';
+    const visitDate = visitor.date ? new Date(visitor.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString();
 
-    let message = '';
+    const template = templates?.thankYou || DEFAULT_WHATSAPP_TEMPLATES.thankYou;
     
-    const replacePlaceholders = (tmpl: string) => {
-      return tmpl
-        .replace(/{{name}}/g, visitorName)
-        .replace(/{{date}}/g, visitDate)
-        .replace(/{{location}}/g, orgName);
-    };
+    const message = template
+      .replace(/{{name}}/g, visitorName)
+      .replace(/{{date}}/g, visitDate)
+      .replace(/{{location}}/g, orgName);
 
-    message = replacePlaceholders(templates?.thankYou || DEFAULT_WHATSAPP_TEMPLATES.thankYou);
-
-    const digitsOnly = visitor.phone?.replace(/\D/g, '') || '';
-    if (digitsOnly) {
-      window.open(`https://api.whatsapp.com/send?phone=${digitsOnly}&text=${encodeURIComponent(message)}`, '_blank');
+    const phoneToUse = visitor.phone || visitor.visitorPhone || '';
+    let formattedPhone = phoneToUse.replace(/\D/g, '');
+    if (formattedPhone.length === 10) {
+      formattedPhone = '91' + formattedPhone;
+    }
+    
+    if (formattedPhone) {
+      const url = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
+      const win = window.open(url, '_blank');
+      if (!win) {
+        // Fallback for blocked popups
+        window.location.href = url;
+      }
     } else {
-      Swal.fire('Error', 'No valid phone number found for this visitor.', 'error');
+      Swal.fire({
+        title: 'Error',
+        text: 'No valid phone number found for this visitor.',
+        icon: 'error',
+        confirmButtonColor: '#2563eb'
+      });
     }
   };
 

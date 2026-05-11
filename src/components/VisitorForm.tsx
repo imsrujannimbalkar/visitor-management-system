@@ -429,7 +429,11 @@ export default function VisitorForm({
                   message = replacePlaceholders(orgSettings?.templates?.digitalPass || DEFAULT_WHATSAPP_TEMPLATES.digitalPass);
                   
                   const phone = (formData.countryCode + formData.phone).replace(/\D/g, '');
-                  window.open(`https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`, '_blank');
+                  const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+                  const win = window.open(url, '_blank');
+                  if (!win) {
+                    window.location.href = url;
+                  }
                 }}
                 href="#"
                 className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-xl transition-all active:scale-90 flex items-center gap-2"
