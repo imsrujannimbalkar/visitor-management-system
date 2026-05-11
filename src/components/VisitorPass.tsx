@@ -20,6 +20,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { Visitor, Organization } from '../types';
 import { db } from '../firebase';
 import { doc, getDoc, updateDoc, onSnapshot, query, collection, where, getDocs, addDoc } from 'firebase/firestore';
+import { DEFAULT_WHATSAPP_TEMPLATES } from '../constants';
 import Swal from 'sweetalert2';
 import ReviewModal from './ReviewModal';
 
@@ -222,17 +223,12 @@ export default function VisitorPass({
     const visitorName = visitor.name || visitor.visitorName || 'Visitor';
     const visitDate = visitor.date ? new Date(visitor.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Today';
     
-    const message = `🌟 *Visitor Digital Pass - ${organization.name}* 🌟\n\n` +
-                   `Hello *${visitorName}*,\n\n` +
-                   `Your official digital entry pass is below.\n\n` +
-                   `📌 *Visit Summary:*\n` +
-                   `📅 Date: ${visitDate}\n` +
-                   `🕒 Check-in: ${visitor.checkInTime}\n` +
-                   `🎯 Purpose: ${visitor.purpose}\n\n` +
-                   `🎫 *Access Link:*\n` +
-                   `👉 ${passUrl}\n\n` +
-                   `💡 *Pro Tip:* You can also use this link for quick *Self Check-out* when you leave!\n\n` +
-                   `Powered by VMS Global Secure`;
+    const template = organization.preRegSettings?.templates?.digitalPass || DEFAULT_WHATSAPP_TEMPLATES.digitalPass;
+    const message = template
+      .replace(/{{name}}/g, visitorName)
+      .replace(/{{date}}/g, visitDate)
+      .replace(/{{location}}/g, organization.name)
+      .replace(/{{url}}/g, passUrl);
     
     const phoneToUse = visitor.visitorPhone || visitor.phone;
     const digitsOnly = phoneToUse?.replace(/\D/g, '') || '';

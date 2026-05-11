@@ -25,7 +25,8 @@ import {
   Settings,
   Plus,
   X,
-  ChevronDown
+  ChevronDown,
+  RotateCcw
 } from 'lucide-react';
 import { db } from '../firebase';
 import { sanitizeForFirestore } from '../lib/utils';
@@ -43,6 +44,7 @@ import {
   getDoc
 } from 'firebase/firestore';
 import { PreRegistration, User as UserType, PurposeType } from '../types';
+import { DEFAULT_WHATSAPP_TEMPLATES } from '../constants';
 import Swal from 'sweetalert2';
 import SignatureModal from './SignatureModal';
 import { PURPOSES, TYPES } from './VisitorForm';
@@ -55,6 +57,7 @@ interface PreRegistrationTabProps {
   onCheckOut?: (preRegId: string) => void;
 }
 
+// No longer need local DEFAULT_TEMPLATES
 export default function PreRegistrationTab({ 
   organizationId, 
   organizationName = 'VMS Global',
@@ -73,7 +76,13 @@ export default function PreRegistrationTab({
   const [settings, setSettings] = useState({
     purposes: [...PURPOSES],
     visitorTypes: [...TYPES],
-    defaultLocation: organizationName
+    defaultLocation: organizationName,
+    templates: {
+      preRegApproved: '',
+      preRegRejected: '',
+      digitalPass: '',
+      thankYou: ''
+    }
   });
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
@@ -90,7 +99,11 @@ export default function PreRegistrationTab({
             setSettings(prev => ({
               purposes: data.preRegSettings.purposes || prev.purposes,
               visitorTypes: data.preRegSettings.visitorTypes || prev.visitorTypes,
-              defaultLocation: data.preRegSettings.defaultLocation || prev.defaultLocation
+              defaultLocation: data.preRegSettings.defaultLocation || prev.defaultLocation,
+              templates: {
+                ...prev.templates,
+                ...(data.preRegSettings.templates || {})
+              }
             }));
           }
         }
@@ -126,27 +139,19 @@ export default function PreRegistrationTab({
     const location = customLocation || settings.defaultLocation || organizationName || 'VMS Global';
     
     let message = '';
+    
+    const replacePlaceholders = (tmpl: string) => {
+      return tmpl
+        .replace(/{{name}}/g, visitorName)
+        .replace(/{{date}}/g, visitDate)
+        .replace(/{{location}}/g, location)
+        .replace(/{{url}}/g, passUrl);
+    };
+
     if (status === 'APPROVED') {
-      message = `🌟 *Visitor Entry Approval - VMS Global* 🌟\n\n` +
-                `Hello *${visitorName}*,\n\n` +
-                `We are pleased to inform you that your visit request has been *APPROVED*.\n\n` +
-                `📌 *Visit Details:*\n` +
-                `📅 Date: ${visitDate}\n` +
-                `📍 Location: ${location}\n\n` +
-                `🎫 *Your Digital Pass:*\n` +
-                `Please access your entry pass here:\n` +
-                `👉 ${passUrl}\n\n` +
-                `💡 *Note:* Please keep this pass ready on your phone for a smooth check-in at the entrance.\n\n` +
-                `Thank you for your cooperation!\n` +
-                `_Integrated Visitor Management System_`;
+      message = replacePlaceholders(settings.templates.preRegApproved || DEFAULT_WHATSAPP_TEMPLATES.preRegApproved);
     } else {
-      message = `⚠️ *Visit Status Update - VMS Global* ⚠️\n\n` +
-                `Hello *${visitorName}*,\n\n` +
-                `Regarding your visit request for *${visitDate}* at *${location}*.\n\n` +
-                `We regret to inform you that your request has *NOT BEEN APPROVED* at this time.\n\n` +
-                `📞 For further clarification or to reschedule, please contact the office directly.\n\n` +
-                `Thank you,\n` +
-                `_Security Administration_`;
+      message = replacePlaceholders(settings.templates.preRegRejected || DEFAULT_WHATSAPP_TEMPLATES.preRegRejected);
     }
 
     const digitsOnly = req.phone?.replace(/\D/g, '') || '';
@@ -771,6 +776,118 @@ export default function PreRegistrationTab({
                         </button>
                       </div>
                     ))}
+                  </div>
+                </div>
+
+                {/* WhatsApp Message Templates */}
+                <div className="space-y-6 pt-4 border-t border-slate-100">
+                  <div className="flex items-center gap-2 px-1">
+                    <MessageSquare className="w-5 h-5 text-indigo-500" />
+                    <label className="text-sm font-bold text-slate-700 tracking-tight">
+                      WhatsApp message Templates
+                    </label>
+                  </div>
+                  
+                  <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest leading-none">
+                        Dynamic Variables: <code className="text-indigo-600 bg-white px-1.5 py-0.5 rounded border border-indigo-100">{"{{name}}"}</code> <code className="text-indigo-600 bg-white px-1.5 py-0.5 rounded border border-indigo-100">{"{{date}}"}</code> <code className="text-indigo-600 bg-white px-1.5 py-0.5 rounded border border-indigo-100">{"{{location}}"}</code> <code className="text-indigo-600 bg-white px-1.5 py-0.5 rounded border border-indigo-100">{"{{url}}"}</code>
+                      </p>
+                      <button 
+                        onClick={() => {
+                          Swal.fire({
+                            title: 'Reset All Templates?',
+                            text: "This will replace all your custom templates with professional defaults.",
+                            icon: 'warning',
+                            showCancelButton: true,
+                            confirmButtonColor: '#indigo-600',
+                            confirmButtonText: 'Yes, Reset All'
+                          }).then(result => {
+                            if (result.isConfirmed) {
+                              setSettings(prev => ({
+                                ...prev,
+                                templates: { ...DEFAULT_WHATSAPP_TEMPLATES }
+                              }));
+                            }
+                          });
+                        }}
+                        className="text-[10px] font-bold text-slate-500 hover:text-indigo-600 flex items-center gap-1 transition-colors"
+                      >
+                         <RotateCcw className="w-3 h-3" />
+                         Reset All
+                      </button>
+                    </div>
+
+                    <div className="space-y-6">
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-xs font-bold text-slate-500">Pre-registration Approved</label>
+                          <button 
+                            onClick={() => setSettings(prev => ({ ...prev, templates: { ...prev.templates, preRegApproved: DEFAULT_WHATSAPP_TEMPLATES.preRegApproved } }))}
+                            className="text-[10px] font-bold text-indigo-400 hover:text-indigo-600"
+                          >
+                            Reset to Default
+                          </button>
+                        </div>
+                        <textarea
+                          value={settings.templates.preRegApproved}
+                          onChange={(e) => setSettings(prev => ({ ...prev, templates: { ...prev.templates, preRegApproved: e.target.value } }))}
+                          placeholder="Leave empty for default professional message..."
+                          className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm min-h-[100px]"
+                        />
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-xs font-bold text-slate-500">Pre-registration Rejected</label>
+                          <button 
+                            onClick={() => setSettings(prev => ({ ...prev, templates: { ...prev.templates, preRegRejected: DEFAULT_WHATSAPP_TEMPLATES.preRegRejected } }))}
+                            className="text-[10px] font-bold text-indigo-400 hover:text-indigo-600"
+                          >
+                            Reset to Default
+                          </button>
+                        </div>
+                        <textarea
+                          value={settings.templates.preRegRejected}
+                          onChange={(e) => setSettings(prev => ({ ...prev, templates: { ...prev.templates, preRegRejected: e.target.value } }))}
+                          placeholder="Leave empty for default professional message..."
+                          className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm min-h-[100px]"
+                        />
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-xs font-bold text-slate-500">Digital Visitor Pass</label>
+                          <button 
+                            onClick={() => setSettings(prev => ({ ...prev, templates: { ...prev.templates, digitalPass: DEFAULT_WHATSAPP_TEMPLATES.digitalPass } }))}
+                            className="text-[10px] font-bold text-indigo-400 hover:text-indigo-600"
+                          >
+                            Reset to Default
+                          </button>
+                        </div>
+                        <textarea
+                          value={settings.templates.digitalPass}
+                          onChange={(e) => setSettings(prev => ({ ...prev, templates: { ...prev.templates, digitalPass: e.target.value } }))}
+                          placeholder="Leave empty for default professional message..."
+                          className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm min-h-[100px]"
+                        />
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-xs font-bold text-slate-500">Thank You Message</label>
+                          <button 
+                            onClick={() => setSettings(prev => ({ ...prev, templates: { ...prev.templates, thankYou: DEFAULT_WHATSAPP_TEMPLATES.thankYou } }))}
+                            className="text-[10px] font-bold text-indigo-400 hover:text-indigo-600"
+                          >
+                            Reset to Default
+                          </button>
+                        </div>
+                        <textarea
+                          value={settings.templates.thankYou}
+                          onChange={(e) => setSettings(prev => ({ ...prev, templates: { ...prev.templates, thankYou: e.target.value } }))}
+                          placeholder="Leave empty for default professional message..."
+                          className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm min-h-[100px]"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

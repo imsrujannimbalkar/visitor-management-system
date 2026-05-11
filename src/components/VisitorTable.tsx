@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LogOut, Edit2, Search, Trash2, FileText, Phone, MessageCircle, History, ChevronDown, ChevronUp, User, MapPin, PenTool, CheckSquare, Square, Trash, CheckCircle, X, Calendar, Star, Heart, Shield, Clock, TrendingUp, Share2, ShieldCheck, Ticket, Gift } from 'lucide-react';
 import { Visitor, UserRole, Donation } from '../types';
+import { DEFAULT_WHATSAPP_TEMPLATES } from '../constants';
 import Swal from 'sweetalert2';
 
 interface VisitorTableProps {
@@ -18,6 +19,10 @@ interface VisitorTableProps {
   onGeneratePass?: (visitor: Visitor) => void;
   userRole?: UserRole;
   loadingStates?: Record<string, boolean>;
+  organizationName?: string;
+  templates?: {
+    thankYou?: string;
+  };
 }
 
 export default function VisitorTable({ 
@@ -33,7 +38,9 @@ export default function VisitorTable({
   onAddDonation,
   onGeneratePass,
   userRole,
-  loadingStates = {}
+  loadingStates = {},
+  organizationName = 'VMS Global',
+  templates
 }: VisitorTableProps) {
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -150,6 +157,30 @@ export default function VisitorTable({
     if (result.isConfirmed && onBulkCheckOut) {
       onBulkCheckOut(selectedIds);
       setSelectedIds([]);
+    }
+  };
+
+  const sendThankYou = (visitor: Visitor) => {
+    const visitorName = visitor.name || 'Visitor';
+    const orgName = organizationName;
+    const visitDate = visitor.date || new Date().toLocaleDateString();
+
+    let message = '';
+    
+    const replacePlaceholders = (tmpl: string) => {
+      return tmpl
+        .replace(/{{name}}/g, visitorName)
+        .replace(/{{date}}/g, visitDate)
+        .replace(/{{location}}/g, orgName);
+    };
+
+    message = replacePlaceholders(templates?.thankYou || DEFAULT_WHATSAPP_TEMPLATES.thankYou);
+
+    const digitsOnly = visitor.phone?.replace(/\D/g, '') || '';
+    if (digitsOnly) {
+      window.open(`https://api.whatsapp.com/send?phone=${digitsOnly}&text=${encodeURIComponent(message)}`, '_blank');
+    } else {
+      Swal.fire('Error', 'No valid phone number found for this visitor.', 'error');
     }
   };
 
@@ -402,6 +433,15 @@ export default function VisitorTable({
                                   <span>Finalize</span>
                                 </>
                               )}
+                            </button>
+                         )}
+                         {visitor.status === 'CHECKED OUT' && (
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); sendThankYou(visitor); }}
+                              className="p-2.5 bg-emerald-500 text-white hover:bg-emerald-600 rounded-[1rem] shadow-lg shadow-emerald-500/10 transition-all active:scale-95"
+                              title="Send Thank You Note"
+                            >
+                              <MessageCircle className="h-4 w-4" />
                             </button>
                          )}
                          <button 

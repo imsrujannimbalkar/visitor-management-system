@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, User, Phone, Mail, Calendar, MapPin, UserCheck, FileText, Search, History, CheckCircle2, PenTool, Undo2, Redo2, Trash2, AlertCircle, MessageCircle, ChevronDown, Gift, DollarSign } from 'lucide-react';
 import { PurposeType, VisitorType, Visitor } from '../types';
+import { DEFAULT_WHATSAPP_TEMPLATES } from '../constants';
 import Swal from 'sweetalert2';
 import SignatureCanvasFromLib from 'react-signature-canvas';
 
@@ -168,6 +169,9 @@ export default function VisitorForm({
     purposes?: string[];
     visitorTypes?: string[];
     defaultLocation?: string;
+    templates?: {
+      digitalPass?: string;
+    };
   } | null>(null);
 
   useEffect(() => {
@@ -412,17 +416,17 @@ export default function VisitorForm({
                   const visitDate = new Date(formData.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
                   const passUrl = `${window.location.origin}/?passId=${formData.visitorId}&orgId=${organizationId || ''}`;
                   
-                  const message = `🌟 *Visitor Digital Pass - ${finalOrgName}* 🌟\n\n` +
-                                 `Hello *${visitorName}*,\n\n` +
-                                 `Your digital pass for your visit today is ready.\n\n` +
-                                 `📌 *Visit Details:*\n` +
-                                 `📅 Date: ${visitDate}\n` +
-                                 `📍 Location: ${finalOrgName}\n\n` +
-                                 `🎫 *Your Digital Pass:*\n` +
-                                 `👉 ${passUrl}\n\n` +
-                                 `💡 *Note:* Please present this pass at the gate for a faster check-in process.\n\n` +
-                                 `Thank you!\n` +
-                                 `_Seamless Visitor Management_`;
+                  let message = '';
+                  
+                  const replacePlaceholders = (tmpl: string) => {
+                    return tmpl
+                      .replace(/{{name}}/g, visitorName)
+                      .replace(/{{date}}/g, visitDate)
+                      .replace(/{{location}}/g, finalOrgName)
+                      .replace(/{{url}}/g, passUrl);
+                  };
+
+                  message = replacePlaceholders(orgSettings?.templates?.digitalPass || DEFAULT_WHATSAPP_TEMPLATES.digitalPass);
                   
                   const phone = (formData.countryCode + formData.phone).replace(/\D/g, '');
                   window.open(`https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`, '_blank');

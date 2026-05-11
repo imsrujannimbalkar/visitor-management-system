@@ -3823,6 +3823,14 @@ export default function App() {
                   label="Donations"
                 />
               )}
+              {isTabVisible('birthdays') && (
+                <NavButton 
+                  active={activeTab === 'birthdays'} 
+                  onClick={() => setActiveTab('birthdays')}
+                  icon={<Gift />}
+                  label="Birthdays"
+                />
+              )}
               {isTabVisible('reviews') && (
                 <NavButton 
                   active={activeTab === 'reviews'} 
@@ -3853,6 +3861,14 @@ export default function App() {
                   onClick={() => { setLegalSubView('support'); setActiveTab('legal'); }}
                   icon={<HelpCircle />}
                   label="Support"
+                />
+              )}
+              {isTabVisible('profile') && (
+                <NavButton 
+                  active={activeTab === 'profile'} 
+                  onClick={() => setActiveTab('profile')}
+                  icon={<UserIcon />}
+                  label="Profile"
                 />
               )}
             </nav>
@@ -3925,16 +3941,16 @@ export default function App() {
     <div className="lg:hidden fixed bottom-0 left-0 right-0 border-t border-slate-100 py-0.5 flex items-center justify-start overflow-x-auto no-scrollbar scroll-smooth bg-white/95 backdrop-blur-md px-2 z-[100] shadow-[0_-8px_30px_rgba(0,0,0,0.08)] pb-safe-area-bottom gap-1">
         {isTabVisible('dashboard') && <MobileNavBtn active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard />} label="Home" />}
         {isTabVisible('visitors') && <MobileNavBtn active={activeTab === 'visitors'} onClick={() => setActiveTab('visitors')} icon={<UserPlus />} label="Entry" />}
-        <MobileNavBtn active={activeTab === 'inquiries'} onClick={() => setActiveTab('inquiries')} icon={<PhoneCall />} label="Calls" />
+        <MobileNavBtn active={activeTab === 'inquiries'} onClick={() => setActiveTab('inquiries')} icon={<PhoneCall />} label="Inquiries" />
         <MobileNavBtn active={activeTab === 'pre-registrations'} onClick={() => setActiveTab('pre-registrations')} icon={<Calendar />} label="Pre-Reg" />
         {isTabVisible('records') && <MobileNavBtn active={activeTab === 'records'} onClick={() => setActiveTab('records')} icon={<ClipboardList />} label="Records" />}
-        {isTabVisible('analysis') && (user.role === 'ADMIN') && <MobileNavBtn active={activeTab === 'analysis'} onClick={() => setActiveTab('analysis')} icon={<BarChart3 />} label="Analysis" />}
+        {isTabVisible('analysis') && (user.role === 'ADMIN') && <MobileNavBtn active={activeTab === 'analysis'} onClick={() => setActiveTab('analysis')} icon={<BarChart3 />} label="Analytics" />}
         {isTabVisible('donations') && (user.role === 'ADMIN') && <MobileNavBtn active={activeTab === 'donations'} onClick={() => setActiveTab('donations')} icon={<Heart />} label="Donations" />}
-        {isTabVisible('birthdays') && <MobileNavBtn active={activeTab === 'birthdays'} onClick={() => setActiveTab('birthdays')} icon={<Gift />} label="Birthday" />}
+        {isTabVisible('birthdays') && <MobileNavBtn active={activeTab === 'birthdays'} onClick={() => setActiveTab('birthdays')} icon={<Gift />} label="Birthdays" />}
         {isTabVisible('reviews') && <MobileNavBtn active={activeTab === 'reviews'} onClick={() => setActiveTab('reviews')} icon={<Star />} label="Reviews" />}
         {isTabVisible('logs') && (user.role === 'ADMIN') && <MobileNavBtn active={activeTab === 'logs'} onClick={() => setActiveTab('logs')} icon={<History />} label="Logs" />}
         {user.role === 'ADMIN' && <MobileNavBtn active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={<Shield />} label="Security" />}
-        {isTabVisible('legal') && <MobileNavBtn active={activeTab === 'legal'} onClick={() => { setLegalSubView('support'); setActiveTab('legal'); }} icon={<Mail />} label="Support" />}
+        {isTabVisible('legal') && <MobileNavBtn active={activeTab === 'legal'} onClick={() => { setLegalSubView('support'); setActiveTab('legal'); }} icon={<HelpCircle />} label="Support" />}
         {isTabVisible('profile') && <MobileNavBtn active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} icon={<UserIcon />} label="Profile" />}
     </div>
 
@@ -4192,6 +4208,8 @@ export default function App() {
                       onGeneratePass={handleGeneratePass}
                       userRole={user.role}
                       loadingStates={loadingStates}
+                      organizationName={organization?.name}
+                      templates={organization?.preRegSettings?.templates}
                     />
                     
                     {/* Fake Pagination for design match */}
@@ -4401,6 +4419,8 @@ export default function App() {
                   onGeneratePass={handleGeneratePass}
                   userRole={user.role}
                   loadingStates={loadingStates}
+                  organizationName={organization?.name}
+                  templates={organization?.preRegSettings?.templates}
                 />
               </div>
             </motion.div>
@@ -4493,6 +4513,8 @@ export default function App() {
                   onGeneratePass={handleGeneratePass}
                   userRole={user.role}
                   loadingStates={loadingStates}
+                  organizationName={organization?.name}
+                  templates={organization?.preRegSettings?.templates}
                 />
               </div>
             </motion.div>

@@ -198,6 +198,12 @@ export interface Organization {
     purposes?: string[];
     visitorTypes?: string[];
     defaultLocation?: string;
+    templates?: {
+      preRegApproved?: string;
+      preRegRejected?: string;
+      digitalPass?: string;
+      thankYou?: string;
+    };
   };
 }
 
