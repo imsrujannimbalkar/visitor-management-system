@@ -221,7 +221,7 @@ export default function ProfileTab({
         text: 'Your administrative profile has been successfully synchronized.',
         icon: 'success',
         toast: true,
-        position: 'top-right',
+        position: 'center',
         showConfirmButton: false,
         timer: 3000
       });

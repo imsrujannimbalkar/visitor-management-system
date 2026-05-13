@@ -279,7 +279,7 @@ export interface Inquiry {
   callerEmail?: string;
   purpose: string;
   followUpDate: string;
-  status: 'PENDING' | 'DONE' | 'CANCELLED';
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
   priority: 'LOW' | 'MEDIUM' | 'HIGH';
   notes?: string;
   recordedBy: string;

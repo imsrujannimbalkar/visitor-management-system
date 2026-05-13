@@ -17,7 +17,9 @@ import {
   Trash2,
   Edit2,
   ChevronDown,
-  ArrowRight
+  ArrowRight,
+  Download,
+  UserCheck
 } from 'lucide-react';
 import { 
   collection, 
@@ -25,6 +27,7 @@ import {
   updateDoc, 
   deleteDoc, 
   doc, 
+  setDoc,
   query, 
   where, 
   orderBy, 
@@ -32,9 +35,10 @@ import {
   Timestamp 
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Inquiry, Organization, User as AppUser } from '../types';
+import { Inquiry, Organization, User as AppUser, PurposeType } from '../types';
 import Swal from 'sweetalert2';
 import { format } from 'date-fns';
+import { sanitizeForFirestore } from '../lib/utils';
 
 interface InquiryTrackerProps {
   organization: Organization;
@@ -47,8 +51,8 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingInquiry, setEditingInquiry] = useState<Inquiry | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'DONE' | 'CANCELLED'>('ALL');
-  const [sortBy, setSortBy] = useState<'date' | 'priority'>('date');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'>('ALL');
+  const [sortBy, setSortBy] = useState<'date' | 'priority' | 'newest'>('newest');
   
   // Form state
   const [formData, setFormData] = useState({
@@ -94,7 +98,7 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
         callerEmail: formData.callerEmail,
         purpose: formData.purpose,
         followUpDate: formData.followUpDate,
-        status: editingInquiry ? editingInquiry.status : 'PENDING',
+        status: editingInquiry ? editingInquiry.status : 'PENDING' as const,
         priority: formData.priority,
         notes: formData.notes,
         recordedBy: user.uid,
@@ -159,16 +163,170 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
     }
   };
 
-  const toggleStatus = async (inquiry: Inquiry) => {
-    const nextStatus = inquiry.status === 'PENDING' ? 'DONE' : 'PENDING';
+  const updateStatus = async (id: string, nextStatus: Inquiry['status']) => {
     try {
-      await updateDoc(doc(db, 'organizations', organization.id, 'inquiries', inquiry.id), {
+      await updateDoc(doc(db, 'organizations', organization.id, 'inquiries', id), {
         status: nextStatus,
         updatedAt: new Date().toISOString()
       });
+      
+      const statusLabels = {
+        'PENDING': 'set to Pending',
+        'IN_PROGRESS': 'moved to In Progress',
+        'COMPLETED': 'marked as Completed',
+        'CANCELLED': 'cancelled'
+      };
+
+      Swal.fire({
+        title: 'Status Updated',
+        text: `Inquiry has been ${statusLabels[nextStatus]}.`,
+        icon: 'success',
+        toast: true,
+        position: 'center',
+        showConfirmButton: false,
+        timer: 2000
+      });
     } catch (error) {
       console.error('Error updating status:', error);
+      Swal.fire({
+        title: 'Update Failed',
+        text: 'Failed to update inquiry status.',
+        icon: 'error',
+        position: 'center'
+      });
     }
+  };
+
+  const sendWhatsAppFollowup = (inquiry: Inquiry) => {
+    const phone = inquiry.callerPhone.replace(/\D/g, '');
+    const formattedPhone = phone.length === 10 ? '91' + phone : phone;
+    
+    const message = `Dear ${inquiry.callerName},\n\nThis is regarding your inquiry about *${inquiry.purpose}* at *${organization.name}*.\n\nWe would like to follow up with you. Please let us know if you have any further questions.\n\nRegards,\n*${user?.name || organization.name}*`;
+    
+    const url = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleManualCheckIn = async (inquiry: Inquiry) => {
+    const result = await Swal.fire({
+      title: 'Direct Check-In?',
+      text: `Do you want to check in ${inquiry.callerName} as an active visitor?`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#4f46e5',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Yes, Check In'
+    });
+
+    if (result.isConfirmed) {
+      try {
+        setLoading(true);
+        const visitId = `v_${Date.now()}`;
+        const timestamp = new Date().toISOString();
+        const date = new Date().toISOString().split('T')[0];
+        const checkInTime = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+        // Map Inquiry Purpose to PurposeType or 'Other'
+        const validPurposes: PurposeType[] = [
+          'Meeting', 'Donation', 'Volunteering', 'Inquiry', 'Event', 'Interview', 
+          'Student Visit', 'Service Visit', 'Delivery', 'Official Visit', 
+          'Company Visit', 'Maintenance Work', 'Other'
+        ];
+        
+        let mappedPurpose: PurposeType = 'Inquiry';
+        if (validPurposes.includes(inquiry.purpose as PurposeType)) {
+          mappedPurpose = inquiry.purpose as PurposeType;
+        }
+
+        const visitData = {
+          visitId,
+          visitorPhone: inquiry.callerPhone,
+          visitorName: inquiry.callerName,
+          visitorEmail: inquiry.callerEmail || '',
+          purpose: mappedPurpose,
+          category: 'Guest',
+          notes: inquiry.notes || `Referenced from Inquiry ID: ${inquiry.id}`,
+          date,
+          checkInTime,
+          status: 'INSIDE' as const,
+          organizationId: organization.id,
+          createdBy: user?.uid || 'SYSTEM',
+          recordedBy: user?.uid || 'SYSTEM',
+          recordedByName: user?.name || 'Staff'
+        };
+
+        await setDoc(doc(db, 'organizations', organization.id, 'visits', visitId), sanitizeForFirestore(visitData));
+        
+        // Mark inquiry as COMPLETED
+        await updateDoc(doc(db, 'organizations', organization.id, 'inquiries', inquiry.id), {
+          status: 'COMPLETED',
+          updatedAt: new Date().toISOString()
+        });
+
+        Swal.fire({
+          title: 'Checked In!',
+          text: 'Visitor has been registered as INSIDE.',
+          icon: 'success',
+          position: 'center'
+        });
+      } catch (error) {
+        console.error('Error during manual check-in:', error);
+        Swal.fire({
+          title: 'Check-In Failed',
+          text: 'An error occurred during the process.',
+          icon: 'error',
+          position: 'center'
+        });
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const exportToCSV = () => {
+    if (inquiries.length === 0) return;
+
+    const headers = [
+      'Name', 'Phone', 'Email', 'Purpose', 'Follow-up Date', 'Priority', 'Status', 'CreatedAt', 'Recorded By'
+    ];
+
+    const csvContent = [
+      headers.join(','),
+      ...inquiries.map(i => [
+        `"${i.callerName}"`,
+        `"${i.callerPhone}"`,
+        `"${i.callerEmail || ''}"`,
+        `"${i.purpose}"`,
+        `"${i.followUpDate}"`,
+        `"${i.priority}"`,
+        `"${i.status}"`,
+        `"${i.createdAt}"`,
+        `"${i.recordedByName}"`
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Inquiries_${organization.name}_${format(new Date(), 'yyyyMMdd')}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    addToast('Inquiries exported successfully', 'success');
+  };
+
+  const addToast = (msg: string, icon: 'success' | 'info') => {
+    Swal.fire({
+      title: msg,
+      icon: icon,
+      toast: true,
+      position: 'center',
+      showConfirmButton: false,
+      timer: 2000
+    });
   };
 
   const filteredAndSortedInquiries = React.useMemo(() => {
@@ -176,7 +334,8 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
       const matchesSearch = 
         i.callerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         i.callerPhone.includes(searchTerm) ||
-        i.purpose.toLowerCase().includes(searchTerm.toLowerCase());
+        i.purpose.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (i.notes || '').toLowerCase().includes(searchTerm.toLowerCase());
       
       const matchesStatus = statusFilter === 'ALL' || i.status === statusFilter;
       
@@ -190,6 +349,8 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
         if (diff !== 0) return diff;
         return new Date(a.followUpDate).getTime() - new Date(b.followUpDate).getTime();
       });
+    } else if (sortBy === 'newest') {
+      result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     } else {
       result.sort((a, b) => new Date(a.followUpDate).getTime() - new Date(b.followUpDate).getTime());
     }
@@ -205,11 +366,12 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
     }
   };
 
-  const getStatusIcon = (status: string) => {
+  const getStatusConfig = (status: Inquiry['status']) => {
     switch (status) {
-      case 'DONE': return <CheckCircle2 className="h-5 w-5 text-emerald-500" />;
-      case 'CANCELLED': return <XCircle className="h-5 w-5 text-slate-400" />;
-      default: return <Clock className="h-5 w-5 text-amber-500" />;
+      case 'COMPLETED': return { icon: <CheckCircle2 className="h-5 w-5" />, color: 'emerald', label: 'Completed' };
+      case 'CANCELLED': return { icon: <XCircle className="h-5 w-5" />, color: 'slate', label: 'Cancelled' };
+      case 'IN_PROGRESS': return { icon: <ArrowRight className="h-5 w-5" />, color: 'indigo', label: 'In Progress' };
+      default: return { icon: <Clock className="h-5 w-5" />, color: 'amber', label: 'Pending' };
     }
   };
 
@@ -225,13 +387,42 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
           <p className="text-sm font-medium text-slate-500">Manage calls and follow-up schedules</p>
         </div>
         
-        <button
-          onClick={() => { resetForm(); setShowAddModal(true); }}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-indigo-200 active:scale-95"
-        >
-          <Plus className="h-5 w-5" />
-          Add Inquiry
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={exportToCSV}
+            className="flex items-center gap-2 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 px-5 py-2.5 rounded-xl font-bold transition-all shadow-sm active:scale-95"
+          >
+            <Download className="h-5 w-5" />
+            Export
+          </button>
+          <button
+            onClick={() => { resetForm(); setShowAddModal(true); }}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-indigo-200 active:scale-95"
+          >
+            <Plus className="h-5 w-5" />
+            Add Inquiry
+          </button>
+        </div>
+      </div>
+
+      {/* Dashboard Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Total', value: inquiries.length, color: 'indigo', icon: PhoneCall },
+          { label: 'Pending', value: inquiries.filter(i => i.status === 'PENDING').length, color: 'amber', icon: Clock },
+          { label: 'In Progress', value: inquiries.filter(i => i.status === 'IN_PROGRESS').length, color: 'blue', icon: ArrowRight },
+          { label: 'Completed', value: inquiries.filter(i => i.status === 'COMPLETED').length, color: 'emerald', icon: CheckCircle2 }
+        ].map(stat => (
+          <div key={stat.label} className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+            <div className={`p-3 rounded-2xl bg-${stat.color}-50 text-${stat.color}-600`}>
+              <stat.icon className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{stat.label}</p>
+              <p className="text-xl font-black text-slate-800">{stat.value}</p>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Filters & Sorting */}
@@ -248,12 +439,12 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-1.5 p-1 bg-slate-50 rounded-2xl border border-slate-200">
-            {(['ALL', 'PENDING', 'DONE'] as const).map(status => (
+          <div className="flex items-center gap-1.5 p-1 bg-slate-50 rounded-2xl border border-slate-200 overflow-x-auto no-scrollbar">
+            {(['ALL', 'PENDING', 'IN_PROGRESS', 'COMPLETED'] as const).map(status => (
               <button
                 key={status}
                 onClick={() => setStatusFilter(status)}
-                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
                   statusFilter === status 
                     ? 'bg-white text-indigo-600 shadow-sm border border-indigo-100' 
                     : 'text-slate-500 hover:text-slate-700'
@@ -270,6 +461,16 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sort:</span>
             <div className="flex items-center gap-1.5 p-1 bg-slate-50 rounded-2xl border border-slate-200">
               <button
+                onClick={() => setSortBy('newest')}
+                className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                  sortBy === 'newest' 
+                    ? 'bg-white text-indigo-600 shadow-sm border border-indigo-100' 
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                New
+              </button>
+              <button
                 onClick={() => setSortBy('date')}
                 className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
                   sortBy === 'date' 
@@ -277,7 +478,7 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
                     : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                Date
+                Follow
               </button>
               <button
                 onClick={() => setSortBy('priority')}
@@ -305,13 +506,17 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
               exit={{ opacity: 0, scale: 0.9 }}
               key={inquiry.id}
               className={`group bg-white rounded-2xl border p-5 transition-all hover:shadow-xl hover:-translate-y-1 ${
-                inquiry.status === 'DONE' ? 'opacity-75 border-slate-100 grayscale-[0.3]' : 'border-slate-200 shadow-sm'
+                inquiry.status === 'COMPLETED' ? 'opacity-75 border-slate-100 grayscale-[0.3]' : 'border-slate-200 shadow-sm'
               }`}
             >
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-3">
-                  <div className={`p-2.5 rounded-xl ${inquiry.status === 'DONE' ? 'bg-emerald-50 text-emerald-600' : 'bg-indigo-50 text-indigo-600'}`}>
-                    <PhoneCall className="h-5 w-5" />
+                  <div className={`p-2.5 rounded-xl ${
+                    inquiry.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-600' : 
+                    inquiry.status === 'IN_PROGRESS' ? 'bg-blue-50 text-blue-600' : 
+                    'bg-amber-50 text-amber-600'
+                  }`}>
+                    {getStatusConfig(inquiry.status).icon}
                   </div>
                   <div>
                     <h3 className="font-black text-slate-800 leading-none">{inquiry.callerName}</h3>
@@ -319,27 +524,50 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => { setEditingInquiry(inquiry); setFormData({
-                      callerName: inquiry.callerName,
-                      callerPhone: inquiry.callerPhone,
-                      callerEmail: inquiry.callerEmail || '',
-                      purpose: inquiry.purpose,
-                      followUpDate: inquiry.followUpDate,
-                      priority: inquiry.priority,
-                      notes: inquiry.notes || ''
-                    }); setShowAddModal(true); }}
-                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                  >
-                    <Edit2 className="h-4 w-4" />
+                <div className="relative group/menu">
+                  <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-xl transition-all">
+                    <MoreVertical className="h-5 w-5" />
                   </button>
-                  <button
-                    onClick={() => handleDelete(inquiry.id)}
-                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  <div className="absolute right-0 top-full pt-2 opacity-0 invisible group-hover/menu:opacity-100 group-hover/menu:visible transition-all z-10 w-48">
+                    <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 space-y-1">
+                      <button
+                        onClick={() => { setEditingInquiry(inquiry); setFormData({
+                          callerName: inquiry.callerName,
+                          callerPhone: inquiry.callerPhone,
+                          callerEmail: inquiry.callerEmail || '',
+                          purpose: inquiry.purpose,
+                          followUpDate: inquiry.followUpDate,
+                          priority: inquiry.priority,
+                          notes: inquiry.notes || ''
+                        }); setShowAddModal(true); }}
+                        className="w-full flex items-center gap-3 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl transition-all"
+                      >
+                        <Edit2 className="h-4 w-4" /> Edit Inquiry
+                      </button>
+                      <button
+                        onClick={() => sendWhatsAppFollowup(inquiry)}
+                        className="w-full flex items-center gap-3 px-3 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
+                      >
+                        <PhoneCall className="h-4 w-4" /> WhatsApp Follow-up
+                      </button>
+                      <button
+                        onClick={() => handleManualCheckIn(inquiry)}
+                        disabled={inquiry.status === 'COMPLETED'}
+                        className={`w-full flex items-center gap-3 px-3 py-2 text-xs font-bold rounded-xl transition-all ${
+                          inquiry.status === 'COMPLETED' ? 'opacity-50 cursor-not-allowed text-slate-400' : 'text-indigo-600 hover:bg-indigo-50'
+                        }`}
+                      >
+                        <UserCheck className="h-4 w-4" /> Convert to Visit
+                      </button>
+                      <div className="h-px bg-slate-50 my-1"></div>
+                      <button
+                        onClick={() => handleDelete(inquiry.id)}
+                        className="w-full flex items-center gap-3 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                      >
+                        <Trash2 className="h-4 w-4" /> Delete Record
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -352,8 +580,8 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
                   <span className={`text-xs font-black uppercase tracking-tighter ${
-                    new Date(inquiry.followUpDate) < new Date() && inquiry.status === 'PENDING'
-                      ? 'text-rose-600 animate-pulse'
+                    new Date(inquiry.followUpDate) < new Date() && (inquiry.status === 'PENDING' || inquiry.status === 'IN_PROGRESS')
+                      ? 'text-rose-600 underline decoration-2'
                       : 'text-slate-500'
                   }`}>
                     Follow up: {format(new Date(inquiry.followUpDate), 'dd MMM yyyy')}
@@ -366,45 +594,33 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
                   </p>
                 )}
 
-                <div className="pt-2 flex items-center justify-between border-t border-slate-50 gap-2">
-                  <div className={`px-2.5 py-1 rounded-lg text-[10px] font-black tracking-widest border ${getPriorityColor(inquiry.priority)}`}>
-                    {inquiry.priority}
+                <div className="pt-2 flex flex-col gap-2 border-t border-slate-50">
+                  <div className="flex items-center justify-between">
+                    <div className={`px-2.5 py-1 rounded-lg text-[10px] font-black tracking-widest border ${getPriorityColor(inquiry.priority)}`}>
+                      {inquiry.priority}
+                    </div>
+                    <div className={`text-[10px] font-black text-slate-400 flex items-center gap-1`}>
+                      <Clock className="h-3 w-3" />
+                      {format(new Date(inquiry.createdAt), 'MMM d')}
+                    </div>
                   </div>
                   
-                  <div className="flex items-center gap-1.5 ml-auto">
-                    <button
-                      onClick={() => toggleStatus(inquiry)}
-                      title={inquiry.status === 'DONE' ? 'Mark as Pending' : 'Mark as Done'}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all active:scale-95 text-[10px] font-black uppercase tracking-widest ${
-                        inquiry.status === 'DONE'
-                          ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-100'
-                          : 'bg-white text-slate-400 border-slate-200 hover:border-emerald-500 hover:text-emerald-500'
-                      }`}
-                    >
-                      <CheckCircle2 className="h-3 w-3" />
-                      {inquiry.status === 'DONE' ? 'COMPLETE' : 'PENDING'}
-                    </button>
-                    
-                    <button
-                      onClick={() => {
-                        Swal.fire({
-                          title: 'Delete Inquiry?',
-                          text: "This record will be permanently removed.",
-                          icon: 'warning',
-                          showCancelButton: true,
-                          confirmButtonColor: '#e11d48',
-                          cancelButtonColor: '#64748b',
-                          confirmButtonText: 'Delete'
-                        }).then((result) => {
-                          if (result.isConfirmed) {
-                            handleDelete(inquiry.id!);
-                          }
-                        });
-                      }}
-                      className="p-2 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-50 border border-slate-100 transition-all"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                  <div className="flex items-center gap-1 p-1 bg-slate-50 rounded-xl border border-slate-100">
+                    {(['PENDING', 'IN_PROGRESS', 'COMPLETED'] as const).map(status => (
+                      <button
+                        key={status}
+                        onClick={() => updateStatus(inquiry.id, status)}
+                        className={`flex-1 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${
+                          inquiry.status === status
+                            ? status === 'COMPLETED' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-100' :
+                              status === 'IN_PROGRESS' ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-100' :
+                              'bg-amber-500 text-white shadow-lg shadow-amber-100'
+                            : 'text-slate-400 hover:text-slate-600 px-1'
+                        }`}
+                      >
+                        {status === 'IN_PROGRESS' ? 'WORKING' : status}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>

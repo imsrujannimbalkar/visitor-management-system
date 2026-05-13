@@ -354,7 +354,7 @@ export default function PreRegistrationTab({
       timer: 1500,
       showConfirmButton: false,
       toast: true,
-      position: 'top-end'
+      position: 'center'
     });
   };
 
@@ -372,7 +372,7 @@ export default function PreRegistrationTab({
         timer: 1500,
         showConfirmButton: false,
         toast: true,
-        position: 'top-end'
+        position: 'center'
       });
     } catch (err) {
       console.error('Error saving settings:', err);

@@ -155,6 +155,16 @@ const Toast = Swal.mixin({
   }
 });
 
+// Center all Swal notifications by default
+const AppSwal = Swal.mixin({
+  position: 'center',
+  customClass: {
+    popup: 'rounded-3xl border-none shadow-2xl',
+    confirmButton: 'rounded-xl font-bold px-8 py-3',
+    cancelButton: 'rounded-xl font-bold px-8 py-3'
+  }
+});
+
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const GOOGLE_REDIRECT_URI = import.meta.env.VITE_GOOGLE_REDIRECT_URI;
 const GOOGLE_SCOPES = [
@@ -393,7 +403,7 @@ export default function App() {
         text: 'Could not generate strategic insights at this time.',
         icon: 'error',
         toast: true,
-        position: 'top',
+        position: 'center',
         showConfirmButton: false,
         timer: 3000
       });
@@ -429,12 +439,12 @@ export default function App() {
       setShowSplash(false);
     }, 5000); // Fallback to hide splash screen after 5 seconds
 
-    if (organization && !authLoading) {
+    if (isAuthReady) {
       setShowSplash(false);
       clearTimeout(timer);
     }
     return () => clearTimeout(timer);
-  }, [organization, authLoading]);
+  }, [isAuthReady]);
 
   // Handle Kiosk Assistance Approval
   useEffect(() => {
@@ -1313,18 +1323,30 @@ export default function App() {
                  setDoc(doc(db, 'organizations', orgId, 'users', firebaseUser.uid), { lastLogin: new Date().toISOString() }, { merge: true });
               }
 
+              let orgReady = false;
+              let userReady = false;
+
+              const checkReady = (isOrg: boolean) => {
+                if (isOrg) orgReady = true;
+                else userReady = true;
+                
+                if (orgReady && userReady) {
+                  setPageLoading(false);
+                  setAuthLoading(false);
+                  setIsAuthReady(true);
+                }
+              };
+
               unsubscribeOrg = onSnapshot(doc(db, 'organizations', orgId), (orgSnap) => {
                 if (orgSnap.exists()) {
                   const orgData = orgSnap.data() as Organization;
                   setOrganization(orgData);
                   document.title = `${orgData.name} - VMS`;
                 }
-                setPageLoading(false);
-                setIsAuthReady(true);
+                checkReady(true);
               }, (error) => {
                 handleFirestoreError(error, OperationType.GET, `organizations/${orgId}`);
-                setPageLoading(false);
-                setIsAuthReady(true);
+                checkReady(true);
               });
 
               // Subscribe to the ORG-NESTED user profile (The "Truth")
@@ -1343,12 +1365,10 @@ export default function App() {
                     preferences: { ...defaultPrefs, ...registryData.preferences } 
                   });
                 }
-                setAuthLoading(false);
-                setIsAuthReady(true);
+                checkReady(false);
               }, (error) => {
                 handleFirestoreError(error, OperationType.GET, `organizations/${orgId}/users/${firebaseUser.uid}`);
-                setAuthLoading(false);
-                setIsAuthReady(true);
+                checkReady(false);
               });
               
             } else {
@@ -3289,8 +3309,14 @@ export default function App() {
       input: 'tel',
       inputPlaceholder: '9876543210',
       showCancelButton: true,
-      confirmButtonColor: '#2563EB',
+      confirmButtonColor: organization?.brandColor || '#2563EB',
       confirmButtonText: 'Search',
+      position: 'center',
+      customClass: {
+        popup: 'rounded-3xl border-none shadow-2xl',
+        confirmButton: 'rounded-xl font-bold px-8 py-3',
+        cancelButton: 'rounded-xl font-bold px-8 py-3'
+      }
     });
 
     if (phone) {
