@@ -324,10 +324,10 @@ function SplashScreen({ organization }: { organization: Organization | null }) {
              transition={{ delay: 0.3, duration: 0.8 }}
            >
               <div className="flex items-center justify-center gap-3">
-                 <span className="text-4xl font-bold text-white tracking-widest uppercase">VMS</span>
-                 <span className="text-4xl font-black text-blue-500 tracking-widest uppercase">Elite</span>
+                 <span className="text-4xl font-bold text-white tracking-widest uppercase">Elite</span>
+                 <span className="text-4xl font-black text-blue-500 tracking-widest uppercase">VMS</span>
               </div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.5em] mt-3">Personnel Monitoring Architecture</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.5em] mt-3">Intelligent Monitor Architecture</p>
            </motion.div>
 
            {/* Loading Bar */}
@@ -1195,12 +1195,26 @@ export default function App() {
             }
           } catch (error: any) {
             console.error('Auto-checkout error:', error);
+            let errorTitle = 'Check-out Error';
+            let errorText = error.message || 'We could not complete your automatic check-out.';
+            
+            if (error.message === 'Visit record not found' || error.message.includes('not found')) {
+              errorTitle = 'Check-out Already Complete';
+              errorText = 'We couldn\'t find an active visit for this link. You may have already checked out or the session has expired.';
+            }
+
             Swal.fire({
-              title: 'Check-out Error',
-              text: error.message || 'We could not complete your automatic check-out.',
-              icon: 'error',
+              title: errorTitle,
+              text: errorText,
+              icon: 'info',
               background: theme === 'dark' ? '#1e293b' : '#ffffff',
               color: theme === 'dark' ? '#ffffff' : '#000000',
+              confirmButtonText: 'OK',
+              confirmButtonColor: '#3b82f6',
+              customClass: {
+                popup: 'rounded-[2rem]',
+                confirmButton: 'rounded-xl px-10 py-3 font-bold'
+              }
             });
           }
         }
@@ -2813,7 +2827,11 @@ export default function App() {
         await fetch(`/api/visitors/${reviewVisitor.visitorId}/review`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rating, comment })
+          body: JSON.stringify({ 
+            organizationId: orgId,
+            rating, 
+            comment 
+          })
         });
       } catch (apiErr) {
         console.error('Failed to sync review to backend:', apiErr);
@@ -4215,18 +4233,18 @@ export default function App() {
                 <div className="lg:col-span-2 space-y-6">
                   <div className="flex items-center justify-between px-2">
                     <div className="space-y-1">
-                      <h3 className="text-xl font-bold text-slate-900 tracking-tight">RECENT NODE ACTIVITY</h3>
-                      <p className="text-[10px] font-bold text-slate-400 tracking-[0.2em] uppercase">Latest visitor movements</p>
+                      <h3 className="text-xl font-bold text-slate-900 tracking-tight">NODE TRAFFIC INTELLIGENCE</h3>
+                      <p className="text-[10px] font-bold text-slate-400 tracking-[0.2em] uppercase">Live sensor data & visitor logs</p>
                     </div>
                     <button 
                       onClick={() => setActiveTab('visitors')}
                       className="flex items-center gap-2 text-blue-600 text-[10px] font-bold uppercase tracking-widest hover:underline"
                     >
-                      View Full Activity <ChevronRight size={14} />
+                      Audit Full Sequence <ChevronRight size={14} />
                     </button>
                   </div>
 
-                  <div className="bg-white rounded-[2rem] shadow-[0_20px_50px_-10px_rgba(0,0,0,0.03)] border border-slate-50 overflow-hidden">
+                  <div className="glass-card rounded-[2.5rem] overflow-hidden">
                     <VisitorTable
                       visitors={latestVisitors}
                       allVisitors={visitors}
@@ -4261,11 +4279,11 @@ export default function App() {
                 {/* Right Sidebar */}
                 <div className="space-y-8">
                   {/* Account Summary Card */}
-                  <div className="bg-white rounded-[2rem] p-8 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.04)] border border-slate-50 relative group overflow-hidden">
+                  <div className="glass-card rounded-[2.5rem] p-8 relative group overflow-hidden">
                     <div className="flex items-center justify-between mb-8">
                        <div className="flex items-center gap-2 text-slate-400">
                           <UserIcon size={16} />
-                          <span className="text-[10px] font-bold uppercase tracking-widest">Account Summary</span>
+                          <span className="text-[10px] font-bold uppercase tracking-widest">Active Operator</span>
                        </div>
                        <button className="text-blue-600"><MoreHorizontal size={20} /></button>
                     </div>
@@ -5864,13 +5882,16 @@ function StatCard({ title, value, icon, trend, color = 'blue' }: { title: string
   return (
     <motion.div
       whileHover={{ y: -5 }}
-      className="bg-white rounded-3xl p-8 border border-slate-50 shadow-[0_15px_35px_-10px_rgba(0,0,0,0.03)] flex flex-col relative group overflow-hidden"
+      className="glass-card rounded-[2.5rem] p-8 flex flex-col relative group overflow-hidden"
     >
+      {/* Sparkle Beam Effect */}
+      <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-blue-400/20 to-transparent transform -translate-x-full group-hover:translate-x-full transition-transform duration-[3s]" />
+      
       <div className="absolute -right-8 -top-8 p-8 opacity-[0.03] group-hover:scale-110 transition-transform duration-[2s] pointer-events-none">
         {React.cloneElement(icon as any, { size: 140 })}
       </div>
 
-      <div className={`h-14 w-14 rounded-2xl flex items-center justify-center mb-10 ${accentColors[color]}`}>
+      <div className={`h-14 w-14 rounded-2xl flex items-center justify-center mb-10 shadow-sm ${accentColors[color]}`}>
         {React.cloneElement(icon as any, { size: 24 })}
       </div>
       

@@ -153,13 +153,22 @@ export default function VisitorPass({
   useEffect(() => {
     if (visitor && !loading && !checkingOut && !checkoutTriggered.current) {
       const params = new URLSearchParams(window.location.search);
-      if (params.get('mode') === 'checkout' && visitor.status !== 'CHECKED OUT') {
-        checkoutTriggered.current = true;
-        // Small delay to let the UI settle
-        const timer = setTimeout(() => {
-          handleCheckOut();
-        }, 1200);
-        return () => clearTimeout(timer);
+      const isCheckoutMode = params.get('mode') === 'checkout';
+      
+      if (isCheckoutMode) {
+        if (visitor.status !== 'CHECKED OUT') {
+          checkoutTriggered.current = true;
+          // Small delay to let the UI settle
+          const timer = setTimeout(() => {
+            handleCheckOut();
+          }, 1200);
+          return () => clearTimeout(timer);
+        } else {
+          // Already checked out, but we should show the review modal if it hasn't been shown yet
+          // and we arrived via a checkout link
+          setShowReviewModal(true);
+          checkoutTriggered.current = true;
+        }
       }
     }
   }, [visitor, loading, checkingOut]);
@@ -167,22 +176,38 @@ export default function VisitorPass({
   const handleCheckOut = async () => {
     const vid = visitor?.visitId || visitor?.visitorId || visitorId;
     if (!visitor || !organization?.id || checkingOut) return;
-    if (visitor.status === 'CHECKED OUT') return;
+    if (visitor.status === 'CHECKED OUT') {
+      setShowReviewModal(true);
+      return;
+    }
 
     setCheckingOut(true);
     try {
       if (!vid) throw new Error('Missing visitor ID');
 
-      const visitorRef = doc(db, 'organizations', organization.id, 'visits', vid);
-      const checkOutTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-      
-      await updateDoc(visitorRef, {
-        status: 'CHECKED OUT',
-        checkOutTime: checkOutTime,
-        updatedAt: new Date().toISOString()
+      // Use API for reliable checkout even if anonymous
+      const response = await fetch(`/api/visitors/${vid}/checkout`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          organizationId: organization.id,
+          checkOutTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+        })
       });
 
-      // Update pre-registration if linked
+      if (!response.ok) {
+        // Fallback to direct Firestore if API fails (might work for logged in users)
+        const visitorRef = doc(db, 'organizations', organization.id, 'visits', vid);
+        const checkOutTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+        
+        await updateDoc(visitorRef, {
+          status: 'CHECKED OUT',
+          checkOutTime: checkOutTime,
+          updatedAt: new Date().toISOString()
+        });
+      }
+
+      // Update pre-registration if linked (best effort)
       if (visitor.preRegistrationId) {
         try {
           await updateDoc(doc(db, 'organizations', organization.id, 'preRegistrations', visitor.preRegistrationId), {
@@ -194,20 +219,14 @@ export default function VisitorPass({
         }
       }
 
-      setVisitor(prev => prev ? { 
-        ...prev, 
-        status: 'CHECKED OUT', 
-        checkOutTime 
-      } : null);
-
       // Trigger review modal after successful checkout
       setTimeout(() => {
         setShowReviewModal(true);
-      }, 1500);
+      }, 1000);
       
     } catch (err) {
       console.error('Check-out failed:', err);
-      showToast('Check-out failed. Please try again.', 'error');
+      showToast('Check-out process encountered an issue.', 'error');
     } finally {
       setCheckingOut(false);
     }
@@ -535,14 +554,29 @@ export default function VisitorPass({
             onSave={async (rating, comment) => {
               if (!organization?.id) return;
               try {
-                // Save review to Firestore
-                await addDoc(collection(db, 'organizations', organization.id, 'reviews'), {
-                  visitorId: visitor.visitorId || visitor.visitId,
-                  visitorName: visitor.name || visitor.visitorName,
-                  rating,
-                  comment,
-                  timestamp: new Date().toISOString()
+                const vid = visitor.visitorId || visitor.visitId;
+                // Use API for review submission to overcome Firestore security rules for anonymous visitors
+                const response = await fetch(`/api/visitors/${vid}/review`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                    organizationId: organization.id,
+                    rating, 
+                    comment 
+                  })
                 });
+
+                if (!response.ok) {
+                   // Fallback attempt to Firestore (might work if user is signed in)
+                   await addDoc(collection(db, 'organizations', organization.id, 'reviews'), {
+                     visitorId: vid,
+                     visitorName: visitor.name || visitor.visitorName,
+                     rating,
+                     comment,
+                     timestamp: new Date().toISOString()
+                   });
+                }
+                
                 setShowReviewModal(false);
                 showToast('Thank you for your feedback!', 'success');
               } catch (err) {

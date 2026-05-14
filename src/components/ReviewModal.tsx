@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Star, X, MessageSquare, Send, ExternalLink } from 'lucide-react';
+import { Star, X, MessageSquare, Send, ExternalLink, AlertCircle } from 'lucide-react';
+import Swal from 'sweetalert2';
 
 interface ReviewModalProps {
   visitorName: string;
@@ -16,6 +17,7 @@ export default function ReviewModal({ visitorName, visitorId, googleReviewUrl, o
   const [hover, setHover] = useState(0);
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const t = {
     EN: {
@@ -27,7 +29,10 @@ export default function ReviewModal({ visitorName, visitorId, googleReviewUrl, o
       submit: "Submit Review",
       google: "Post to Google",
       skip: "Skip / No Thanks",
-      submitting: "Submitting..."
+      submitting: "Submitting...",
+      errorTitle: "Wait a moment",
+      errorMessage: "Please select a star rating before submitting.",
+      errorOk: "Got it"
     },
     HI: {
       title: "आपकी यात्रा कैसी रही?",
@@ -38,14 +43,32 @@ export default function ReviewModal({ visitorName, visitorId, googleReviewUrl, o
       submit: "समीक्षा भेजें",
       google: "गूगल पर पोस्ट करें",
       skip: "छोड़ें / धन्यवाद नहीं",
-      submitting: "भेज रहा है..."
+      submitting: "भेज रहा है...",
+      errorTitle: "एक क्षण ठहरें",
+      errorMessage: "सबमिट करने से पहले कृपया स्टार रेटिंग चुनें।",
+      errorOk: "ठीक है"
     }
   }[lang];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (rating === 0) return;
+    if (rating === 0) {
+      setError(t.errorMessage);
+      Swal.fire({
+        title: t.errorTitle,
+        text: t.errorMessage,
+        icon: 'warning',
+        confirmButtonText: t.errorOk,
+        confirmButtonColor: '#2563EB',
+        customClass: {
+          popup: 'rounded-[2rem]',
+          confirmButton: 'rounded-xl font-black uppercase tracking-widest px-8 py-3'
+        }
+      });
+      return;
+    }
     
+    setError(null);
     setIsSubmitting(true);
     await onSave(rating, comment);
     setIsSubmitting(false);
@@ -85,7 +108,10 @@ export default function ReviewModal({ visitorName, visitorId, googleReviewUrl, o
                   <button
                     key={star}
                     type="button"
-                    onClick={() => setRating(star)}
+                    onClick={() => {
+                        setRating(star);
+                        setError(null);
+                    }}
                     onMouseEnter={() => setHover(star)}
                     onMouseLeave={() => setHover(0)}
                     className="p-1 transition-transform active:scale-90"
@@ -100,8 +126,8 @@ export default function ReviewModal({ visitorName, visitorId, googleReviewUrl, o
                   </button>
                 ))}
               </div>
-              <p className="text-xs font-black text-gray-400 uppercase tracking-widest">
-                {t.ratingLabel}
+              <p className={`text-xs font-black uppercase tracking-widest ${error ? 'text-rose-500 animate-pulse' : 'text-gray-400'}`}>
+                {error || t.ratingLabel}
               </p>
             </div>
 
@@ -119,10 +145,21 @@ export default function ReviewModal({ visitorName, visitorId, googleReviewUrl, o
               />
             </div>
 
+            {error && (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-2 p-4 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 rounded-2xl text-rose-600 dark:text-rose-400 text-xs font-bold"
+              >
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                {error}
+              </motion.div>
+            )}
+
             <div className="flex flex-col gap-3">
               <button
                 type="submit"
-                disabled={rating === 0 || isSubmitting}
+                disabled={isSubmitting}
                 className="w-full py-4 bg-brand-blue text-white font-black rounded-2xl hover:bg-brand-blue/90 transition-all shadow-xl shadow-blue-100 dark:shadow-none active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-[0.2em] text-xs"
               >
                 {isSubmitting ? (

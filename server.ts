@@ -344,6 +344,47 @@ app.put('/api/visitors/:id/checkout', asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Checked out successfully', visitor: updatedData });
 }));
 
+app.post('/api/visitors/:id/review', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { organizationId, rating, comment } = req.body;
+
+  if (!organizationId || typeof organizationId !== 'string') {
+    return res.status(400).json({ error: 'organizationId is required for review submission' });
+  }
+
+  const visitRef = adminDb.collection('organizations').doc(organizationId).collection('visits').doc(id);
+  const visitSnap = await safely(visitRef.get(), getFallback);
+
+  if (!visitSnap.exists) {
+    return res.status(404).json({ error: 'Visit record not found' });
+  }
+
+  const reviewRecord = {
+    rating,
+    comment,
+    timestamp: new Date().toISOString()
+  };
+
+  await safely(visitRef.update({
+    review: reviewRecord,
+    updatedAt: new Date().toISOString()
+  }), undefined);
+
+  // Also record in the reviews subcollection for better organization reporting
+  const reviewId = `REV-${Date.now()}`;
+  await safely(adminDb.collection('organizations').doc(organizationId).collection('reviews').doc(reviewId).set({
+    id: reviewId,
+    visitorId: id,
+    visitorName: visitSnap.data()?.visitorName || 'Visitor',
+    rating,
+    comment,
+    organizationId,
+    timestamp: new Date().toISOString()
+  }), undefined);
+
+  res.json({ success: true, message: 'Review recorded successfully' });
+}));
+
 app.post('/api/donations', asyncHandler(async (req, res) => {
   const donation = req.body;
   const { organizationId } = donation;

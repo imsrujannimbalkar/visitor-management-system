@@ -11,6 +11,7 @@ const SignatureCanvas = (SignatureCanvasFromLib as any).default || SignatureCanv
 import VoiceInput from './VoiceInput';
 import { db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import Swal from 'sweetalert2';
 
 interface VisitorFormProps {
   onClose: () => void;
@@ -46,9 +47,10 @@ interface UnifiedDropdownProps {
   placeholder: string;
   required?: boolean;
   supportVoice?: boolean;
+  error?: boolean;
 }
 
-function UnifiedDropdown({ label, icon, value, options, onChange, placeholder, required, supportVoice }: UnifiedDropdownProps) {
+function UnifiedDropdown({ label, icon, value, options, onChange, placeholder, required, supportVoice, error }: UnifiedDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -64,7 +66,7 @@ function UnifiedDropdown({ label, icon, value, options, onChange, placeholder, r
 
   return (
     <div className="space-y-2" ref={dropdownRef}>
-      <label className="flex items-center gap-2 text-[11px] font-bold text-gray-500 uppercase tracking-wider ml-1">
+      <label className={`flex items-center gap-2 text-[11px] font-bold ${error ? 'text-red-500' : 'text-gray-500'} uppercase tracking-wider ml-1`}>
         {icon}
         {label} {required && '*'}
       </label>
@@ -74,7 +76,7 @@ function UnifiedDropdown({ label, icon, value, options, onChange, placeholder, r
             required={required}
             type="text"
             placeholder={placeholder}
-            className="w-full pr-6 py-4 bg-white border border-gray-200 rounded-xl focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/5 transition-all outline-none font-bold text-gray-900 shadow-sm hover:border-gray-300 group-hover:bg-gray-50/50"
+            className={`w-full pr-6 py-4 bg-white border ${error ? 'border-red-500 animate-pulse' : 'border-gray-200'} rounded-xl focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/5 transition-all outline-none font-bold text-gray-900 shadow-sm hover:border-gray-300 group-hover:bg-gray-50/50`}
             value={value}
             onValueChange={onChange}
             onFocus={() => setIsOpen(true)}
@@ -83,7 +85,7 @@ function UnifiedDropdown({ label, icon, value, options, onChange, placeholder, r
         ) : (
           <div 
             onClick={() => setIsOpen(!isOpen)}
-            className="w-full px-6 py-4 bg-white border border-gray-200 rounded-xl focus-within:border-brand-blue focus-within:ring-4 focus-within:ring-brand-blue/5 transition-all outline-none font-bold text-gray-900 shadow-sm hover:border-gray-300 group-hover:bg-gray-50/50 cursor-pointer flex items-center justify-between"
+            className={`w-full px-6 py-4 bg-white border ${error ? 'border-red-500 animate-pulse' : 'border-gray-200'} rounded-xl focus-within:border-brand-blue focus-within:ring-4 focus-within:ring-brand-blue/5 transition-all outline-none font-bold text-gray-900 shadow-sm hover:border-gray-300 group-hover:bg-gray-50/50 cursor-pointer flex items-center justify-between`}
           >
             <span className={value ? 'text-gray-900' : 'text-gray-300'}>
               {value || placeholder}
@@ -224,6 +226,7 @@ export default function VisitorForm({
   });
 
   const [returningVisitor, setReturningVisitor] = useState<Visitor | null>(null);
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
   const [visitCount, setVisitCount] = useState(0);
   const [previousVisits, setPreviousVisits] = useState<Visitor[]>([]);
   const [isAlreadyInside, setIsAlreadyInside] = useState(false);
@@ -321,26 +324,61 @@ export default function VisitorForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    const newErrors: Record<string, boolean> = {
+      name: !formData.name,
+      purpose: !formData.purpose,
+      category: !formData.category,
+      phone: !formData.phone,
+      signature: !formData.signature && !initialData
+    };
+
+    setErrors(newErrors);
+
+    const showAlert = (message: string) => {
+      Swal.fire({
+        title: 'Form Incomplete',
+        text: message,
+        icon: 'warning',
+        confirmButtonText: 'OK',
+        confirmButtonColor: '#3b82f6',
+        customClass: {
+          popup: 'rounded-[2.5rem] shadow-2xl p-8 border-none',
+          confirmButton: 'rounded-xl px-10 py-3 font-bold uppercase tracking-widest text-xs',
+          title: 'text-2xl font-black text-slate-900 mb-2',
+          htmlContainer: 'text-sm font-medium text-slate-500'
+        },
+        buttonsStyling: true,
+        showClass: {
+          popup: 'animate__animated animate__fadeInDown animate__faster'
+        }
+      });
+    };
+
     if (isAlreadyInside) {
-      showToast('This visitor is already checked in and currently inside.', 'error');
+      showAlert('This visitor is already checked in and currently inside.');
       return;
     }
     
-    if (!formData.name) {
-      showToast("Please enter the visitor's name.", 'error');
+    if (newErrors.name) {
+      showAlert("Please enter the visitor's name.");
+      return;
+    }
+
+    if (newErrors.phone) {
+      showAlert("Please enter the visitor's phone number.");
       return;
     }
     
-    if (!formData.purpose) {
-      showToast('Please select a purpose of visit.', 'error');
+    if (newErrors.purpose) {
+      showAlert('Please select a purpose of visit.');
       return;
     }
-    if (!formData.category) {
-      showToast('Please select a visitor type.', 'error');
+    if (newErrors.category) {
+      showAlert('Please select a visitor type.');
       return;
     }
-    if (!formData.signature && !initialData) {
-      showToast('Please provide your signature.', 'error');
+    if (newErrors.signature) {
+      showAlert('Please provide your signature.');
       return;
     }
 
@@ -558,7 +596,7 @@ export default function VisitorForm({
                   <input
                     required
                     type="date"
-                    className="w-full px-5 py-3.5 bg-white border border-gray-200 rounded-xl focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/5 transition-all outline-none font-bold text-gray-900 shadow-sm hover:border-gray-300"
+                    className={`w-full px-5 py-3.5 bg-white border ${errors.date ? 'border-red-500 animate-pulse' : 'border-gray-200'} rounded-xl focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/5 transition-all outline-none font-bold text-gray-900 shadow-sm hover:border-gray-300`}
                     value={formData.date}
                     onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                   />
@@ -596,10 +634,13 @@ export default function VisitorForm({
                     required
                     type="text"
                     placeholder={t("Enter visitor's full name", "आगंतुक का पूरा नाम दर्ज करें")}
-                    className="w-full pr-6 py-4.5 bg-white border border-gray-200 rounded-xl focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/5 transition-all outline-none font-bold text-gray-900 shadow-sm hover:border-gray-300 text-lg"
+                    className={`w-full pr-6 py-4.5 bg-white border ${errors.name ? 'border-red-500 animate-pulse' : 'border-gray-200'} rounded-xl focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/5 transition-all outline-none font-bold text-gray-900 shadow-sm hover:border-gray-300 text-lg`}
                     value={formData.name}
-                    onValueChange={(val) => setFormData({ ...formData, name: val })}
-                    icon={<User className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 group-focus-within:text-brand-blue transition-colors" />}
+                    onValueChange={(val) => {
+                      setFormData({ ...formData, name: val });
+                      if (val) setErrors(prev => ({ ...prev, name: false }));
+                    }}
+                    icon={<User className={`h-4 w-4 sm:h-5 sm:w-5 ${errors.name ? 'text-red-400' : 'text-gray-400'} group-focus-within:text-brand-blue transition-colors`} />}
                   />
                 </div>
 
@@ -609,7 +650,7 @@ export default function VisitorForm({
                       <Phone className="h-3 w-3" />
                       {t('Phone Number', 'फ़ोन नंबर')} *
                     </label>
-                    <div className="flex items-stretch gap-0 border border-gray-200 rounded-xl overflow-hidden focus-within:border-brand-blue focus-within:ring-4 focus-within:ring-brand-blue/5 transition-all shadow-sm">
+                    <div className={`flex items-stretch gap-0 border ${errors.phone ? 'border-red-500 animate-pulse' : 'border-gray-200'} rounded-xl overflow-hidden focus-within:border-brand-blue focus-within:ring-4 focus-within:ring-brand-blue/5 transition-all shadow-sm`}>
                       <div className="relative flex items-center bg-gray-50 border-r border-gray-100">
                         <select
                           className="pl-4 pr-8 py-4 bg-transparent outline-none font-bold text-gray-900 appearance-none cursor-pointer text-sm"
@@ -631,7 +672,10 @@ export default function VisitorForm({
                         placeholder="9876543210"
                         className="flex-1 px-5 py-4 bg-white outline-none font-bold text-gray-900 placeholder:text-gray-300 min-w-0"
                         value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        onChange={(e) => {
+                          setFormData({ ...formData, phone: e.target.value });
+                          if (e.target.value) setErrors(prev => ({ ...prev, phone: false }));
+                        }}
                       />
                       {formData.phone && (
                         <div className="flex items-center gap-1 px-2 bg-gray-50 border-l border-gray-100">
@@ -677,12 +721,16 @@ export default function VisitorForm({
 
                   <UnifiedDropdown
                     label={t("Visitor Category", "आगंतुक श्रेणी")}
-                    icon={<UserCheck className="h-3 w-3" />}
+                    icon={<UserCheck className={`h-3 w-3 ${errors.category ? 'text-red-500' : ''}`} />}
                     value={formData.category}
                     options={finalCategories}
-                    onChange={(val) => setFormData({ ...formData, category: val as any })}
+                    onChange={(val) => {
+                      setFormData({ ...formData, category: val as any });
+                      if (val) setErrors(prev => ({ ...prev, category: false }));
+                    }}
                     placeholder={t("Select Category", "श्रेणी चुनें")}
                     required
+                    error={errors.category}
                   />
                 </div>
 
@@ -713,13 +761,17 @@ export default function VisitorForm({
               <div className="space-y-6">
                 <UnifiedDropdown
                   label={t("Purpose of Visit", "भेंट का उद्देश्य")}
-                  icon={<Search className="h-3 w-3" />}
+                  icon={<Search className={`h-3 w-3 ${errors.purpose ? 'text-red-500' : ''}`} />}
                   value={formData.purpose}
                   options={finalPurposes}
-                  onChange={(val) => setFormData({ ...formData, purpose: val as PurposeType })}
+                  onChange={(val) => {
+                    setFormData({ ...formData, purpose: val as PurposeType });
+                    if (val) setErrors(prev => ({ ...prev, purpose: false }));
+                  }}
                   placeholder={t("e.g. Meeting, Interview...", "जैसे: मीटिंग, इंटरव्यू...")}
                   required
                   supportVoice
+                  error={errors.purpose}
                 />
 
                 <AnimatePresence>
@@ -838,10 +890,10 @@ export default function VisitorForm({
                   </div>
                 )}
                 
-                <div className="w-full bg-gray-50 border border-gray-200 rounded-2xl overflow-hidden shadow-inner relative group">
+                <div className={`w-full bg-gray-50 border ${errors.signature ? 'border-red-500 animate-pulse' : 'border-gray-200'} rounded-2xl overflow-hidden shadow-inner relative group`}>
                   {formData.signature === '' && (
                     <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                      <span className="text-gray-300 font-bold text-xl opacity-50 select-none uppercase tracking-widest">{t('Sign Here', 'यहाँ हस्ताक्षर करें')}</span>
+                      <span className={`font-bold text-xl opacity-50 select-none uppercase tracking-widest ${errors.signature ? 'text-red-400' : 'text-gray-300'}`}>{t('Sign Here', 'यहाँ हस्ताक्षर करें')}</span>
                     </div>
                   )}
                   <SignatureCanvas
