@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, User, Phone, Mail, Calendar, MapPin, UserCheck, FileText, Search, History, CheckCircle2, PenTool, Undo2, Redo2, Trash2, AlertCircle, MessageCircle, ChevronDown, Gift, DollarSign } from 'lucide-react';
 import { PurposeType, VisitorType, Visitor } from '../types';
 import { DEFAULT_WHATSAPP_TEMPLATES } from '../constants';
-import Swal from 'sweetalert2';
+import { useToast } from './Toast';
 import SignatureCanvasFromLib from 'react-signature-canvas';
 
 const SignatureCanvas = (SignatureCanvasFromLib as any).default || SignatureCanvasFromLib;
@@ -165,6 +165,7 @@ export default function VisitorForm({
   organizationName = 'Visitor Management System',
   organizationId
 }: VisitorFormProps) {
+  const { showToast } = useToast();
   const [orgSettings, setOrgSettings] = useState<{
     purposes?: string[];
     visitorTypes?: string[];
@@ -305,22 +306,10 @@ export default function VisitorForm({
         }));
         setIsAutoFilled(true);
 
-        Swal.fire({
-          title: t('Welcome Back!', 'वापसी पर स्वागत है!'),
-          text: t(`Found existing record for ${lastVisit.name}. Details auto-filled.`, `${lastVisit.name} के लिए मौजूदा रिकॉर्ड मिला। विवरण स्वतः भर गए।`),
-          icon: 'success',
-          toast: true,
-          position: 'center',
-          showConfirmButton: false,
-          timer: 3000,
-          background: 'rgba(255, 255, 255, 0.98)',
-          color: '#0f172a',
-          customClass: {
-            popup: 'rounded-[2.5rem] shadow-[0_30px_60px_-12px_rgba(0,0,0,0.25)] border border-emerald-100 backdrop-blur-3xl px-8 py-6',
-            title: 'text-lg font-black uppercase tracking-widest text-emerald-800',
-            htmlContainer: 'text-sm font-bold text-slate-500 mt-1'
-          }
-        });
+        showToast(
+          t(`Found existing record for ${lastVisit.name}. Details auto-filled.`, `${lastVisit.name} के लिए मौजूदा रिकॉर्ड मिला। विवरण स्वतः भर गए।`),
+          'info'
+        );
       }
     } else if (cleanPhone.length < 10) {
       setReturningVisitor(null);
@@ -333,36 +322,25 @@ export default function VisitorForm({
     e.preventDefault();
     
     if (isAlreadyInside) {
-      Swal.fire({ 
-        title: 'Duplicate Entry', 
-        text: 'This visitor is already checked in and currently inside.', 
-        icon: 'error',
-        background: 'rgba(255, 255, 255, 0.98)',
-        confirmButtonColor: '#2563EB',
-        customClass: {
-          popup: 'rounded-[2.5rem] p-10 shadow-2xl border border-rose-100 backdrop-blur-3xl',
-          title: 'text-2xl font-black text-rose-900 uppercase tracking-tighter',
-          confirmButton: 'px-10 py-3 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-blue-200'
-        }
-      });
+      showToast('This visitor is already checked in and currently inside.', 'error');
       return;
     }
     
     if (!formData.name) {
-      Swal.fire({ title: 'Missing Field', text: 'Please enter the visitor\'s name.', icon: 'warning' });
+      showToast("Please enter the visitor's name.", 'error');
       return;
     }
     
     if (!formData.purpose) {
-      Swal.fire({ title: 'Missing Field', text: 'Please select a purpose of visit.', icon: 'warning' });
+      showToast('Please select a purpose of visit.', 'error');
       return;
     }
     if (!formData.category) {
-      Swal.fire({ title: 'Missing Field', text: 'Please select a visitor type.', icon: 'warning' });
+      showToast('Please select a visitor type.', 'error');
       return;
     }
     if (!formData.signature && !initialData) {
-      Swal.fire({ title: 'Missing Signature', text: 'Please provide your signature.', icon: 'warning' });
+      showToast('Please provide your signature.', 'error');
       return;
     }
 
@@ -376,7 +354,7 @@ export default function VisitorForm({
       await onSave(submissionData);
     } catch (error) {
       console.error("Error saving visitor:", error);
-      Swal.fire({ title: 'Error', text: 'An error occurred while saving. Please try again.', icon: 'error' });
+      showToast('An error occurred while saving. Please try again.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -429,11 +407,15 @@ export default function VisitorForm({
                   message = replacePlaceholders(orgSettings?.templates?.digitalPass || DEFAULT_WHATSAPP_TEMPLATES.digitalPass);
                   
                   const phone = (formData.countryCode + formData.phone).replace(/\D/g, '');
-                  const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+                  let formattedPhone = phone;
+                  if (formattedPhone.length === 10) formattedPhone = '91' + formattedPhone;
+
+                  const url = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
                   const win = window.open(url, '_blank');
                   if (!win) {
                     window.location.href = url;
                   }
+                  showToast('WhatsApp message generated', 'success');
                 }}
                 href="#"
                 className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-xl transition-all active:scale-90 flex items-center gap-2"

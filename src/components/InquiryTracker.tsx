@@ -39,6 +39,7 @@ import { Inquiry, Organization, User as AppUser, PurposeType } from '../types';
 import Swal from 'sweetalert2';
 import { format } from 'date-fns';
 import { sanitizeForFirestore } from '../lib/utils';
+import { useToast } from './Toast';
 
 interface InquiryTrackerProps {
   organization: Organization;
@@ -53,6 +54,7 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'>('ALL');
   const [sortBy, setSortBy] = useState<'date' | 'priority' | 'newest'>('newest');
+  const { showToast } = useToast();
   
   // Form state
   const [formData, setFormData] = useState({
@@ -197,14 +199,27 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
     }
   };
 
-  const sendWhatsAppFollowup = (inquiry: Inquiry) => {
-    const phone = inquiry.callerPhone.replace(/\D/g, '');
-    const formattedPhone = phone.length === 10 ? '91' + phone : phone;
-    
-    const message = `Dear ${inquiry.callerName},\n\nThis is regarding your inquiry about *${inquiry.purpose}* at *${organization.name}*.\n\nWe would like to follow up with you. Please let us know if you have any further questions.\n\nRegards,\n*${user?.name || organization.name}*`;
-    
-    const url = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
+  const sendWhatsAppFollowup = async (inquiry: Inquiry) => {
+    try {
+      const phone = inquiry.callerPhone.replace(/\D/g, '');
+      const formattedPhone = phone.length === 10 ? '91' + phone : phone;
+      
+      const message = `Dear ${inquiry.callerName},\n\nThis is regarding your inquiry about *${inquiry.purpose}* at *${organization.name}*.\n\nWe would like to follow up with you. Please let us know if you have any further questions.\n\nRegards,\n*${user?.name || organization.name}*`;
+      
+      const url = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
+      
+      // Update status in Firestore
+      await updateDoc(doc(db, 'organizations', organization.id, 'inquiries', inquiry.id), {
+        whatsappStatus: 'SENT',
+        whatsappSentAt: new Date().toISOString()
+      });
+
+      window.open(url, '_blank');
+      showToast(`Follow-up sent to ${inquiry.callerName}`, 'success');
+    } catch (error) {
+      console.error('Error sending WhatsApp follow-up:', error);
+      showToast('Failed to send WhatsApp follow-up', 'error');
+    }
   };
 
   const handleManualCheckIn = async (inquiry: Inquiry) => {
@@ -315,18 +330,7 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
     link.click();
     document.body.removeChild(link);
     
-    addToast('Inquiries exported successfully', 'success');
-  };
-
-  const addToast = (msg: string, icon: 'success' | 'info') => {
-    Swal.fire({
-      title: msg,
-      icon: icon,
-      toast: true,
-      position: 'center',
-      showConfirmButton: false,
-      timer: 2000
-    });
+    showToast('Inquiries exported successfully', 'success');
   };
 
   const filteredAndSortedInquiries = React.useMemo(() => {
@@ -546,9 +550,15 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
                       </button>
                       <button
                         onClick={() => sendWhatsAppFollowup(inquiry)}
-                        className="w-full flex items-center gap-3 px-3 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
+                        className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold rounded-xl transition-all ${
+                          inquiry.whatsappStatus === 'SENT' ? 'text-emerald-600 bg-emerald-50' : 'text-slate-600 hover:bg-indigo-50 hover:text-indigo-600'
+                        }`}
                       >
-                        <PhoneCall className="h-4 w-4" /> WhatsApp Follow-up
+                        <div className="flex items-center gap-3">
+                          <PhoneCall className="h-4 w-4" /> 
+                          {inquiry.whatsappStatus === 'SENT' ? 'Follow-up Sent' : 'WhatsApp Follow-up'}
+                        </div>
+                        {inquiry.whatsappStatus === 'SENT' && <CheckCircle2 className="h-4 w-4" />}
                       </button>
                       <button
                         onClick={() => handleManualCheckIn(inquiry)}

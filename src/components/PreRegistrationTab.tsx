@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { db } from '../firebase';
 import { sanitizeForFirestore } from '../lib/utils';
+import { useToast } from './Toast';
 import { 
   collection, 
   query, 
@@ -85,6 +86,7 @@ export default function PreRegistrationTab({
     }
   });
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const { showToast } = useToast();
 
   useEffect(() => {
     if (!organizationId) return;
@@ -129,50 +131,63 @@ export default function PreRegistrationTab({
     return () => unsubscribe();
   }, [organizationId]);
 
-  const handleWhatsAppNotification = (req: PreRegistration, status: 'APPROVED' | 'REJECTED', customLocation?: string) => {
+  const handleWhatsAppNotification = async (req: PreRegistration, status: 'APPROVED' | 'REJECTED', customLocation?: string) => {
     if (!req || !organizationId) return;
 
-    const baseUrl = window.location.origin;
-    const passUrl = `${baseUrl}/?passId=${encodeURIComponent(req.id)}&orgId=${encodeURIComponent(organizationId)}`;
-    const visitorName = req.name || 'Visitor';
-    const visitDate = new Date(req.visitDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-    const location = customLocation || settings.defaultLocation || organizationName || 'VMS Global';
-    
-    let message = '';
-    
-    const replacePlaceholders = (tmpl: string) => {
-      return tmpl
-        .replace(/{{name}}/g, visitorName)
-        .replace(/{{date}}/g, visitDate)
-        .replace(/{{location}}/g, location)
-        .replace(/{{url}}/g, passUrl);
-    };
+    try {
+      const baseUrl = window.location.origin;
+      const passUrl = `${baseUrl}/?passId=${encodeURIComponent(req.id)}&orgId=${encodeURIComponent(organizationId)}`;
+      const visitorName = req.name || 'Visitor';
+      const visitDate = new Date(req.visitDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      const location = customLocation || settings.defaultLocation || organizationName || 'VMS Global';
+      
+      let message = '';
+      
+      const replacePlaceholders = (tmpl: string) => {
+        return tmpl
+          .replace(/{{name}}/g, visitorName)
+          .replace(/{{date}}/g, visitDate)
+          .replace(/{{location}}/g, location)
+          .replace(/{{url}}/g, passUrl);
+      };
 
-    if (status === 'APPROVED') {
-      message = replacePlaceholders(settings.templates.preRegApproved || DEFAULT_WHATSAPP_TEMPLATES.preRegApproved);
-    } else {
-      message = replacePlaceholders(settings.templates.preRegRejected || DEFAULT_WHATSAPP_TEMPLATES.preRegRejected);
-    }
+      if (status === 'APPROVED') {
+        message = replacePlaceholders(settings.templates.preRegApproved || DEFAULT_WHATSAPP_TEMPLATES.preRegApproved);
+      } else {
+        message = replacePlaceholders(settings.templates.preRegRejected || DEFAULT_WHATSAPP_TEMPLATES.preRegRejected);
+      }
 
-    const digitsOnly = req.phone?.replace(/\D/g, '') || '';
-    
-    if (!digitsOnly || digitsOnly.length < 10) {
-      console.warn('Invalid phone number for WhatsApp:', req.phone);
-      Swal.fire('Error', 'Invalid phone number for WhatsApp notification', 'error');
-      return;
-    }
-    
-    let formattedPhone = digitsOnly;
-    if (formattedPhone.length === 10) {
-      formattedPhone = '91' + formattedPhone;
-    }
-    
-    const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(message)}`;
-    
-    // Open WhatsApp in a new tab
-    const newWindow = window.open(whatsappUrl, '_blank');
-    if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
-      window.location.href = whatsappUrl;
+      const digitsOnly = req.phone?.replace(/\D/g, '') || '';
+      
+      if (!digitsOnly || digitsOnly.length < 10) {
+        console.warn('Invalid phone number for WhatsApp:', req.phone);
+        showToast('Invalid phone number for WhatsApp notification', 'error');
+        return;
+      }
+      
+      let formattedPhone = digitsOnly;
+      if (formattedPhone.length === 10) {
+        formattedPhone = '91' + formattedPhone;
+      }
+      
+      const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(message)}`;
+      
+      // Update Firestore status first
+      await updateDoc(doc(db, 'organizations', organizationId, 'preRegistrations', req.id), {
+        whatsappStatus: 'SENT',
+        whatsappSentAt: new Date().toISOString()
+      });
+
+      // Open WhatsApp in a new tab
+      const newWindow = window.open(whatsappUrl, '_blank');
+      if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+        window.location.href = whatsappUrl;
+      }
+
+      showToast(`WhatsApp message generated for ${req.name}`, 'success');
+    } catch (error) {
+      console.error('Error sending WhatsApp:', error);
+      showToast('Failed to update WhatsApp status', 'error');
     }
   };
 
@@ -615,13 +630,28 @@ export default function PreRegistrationTab({
                           </button>
                         )}
                         {(req.status === 'APPROVED' || req.status === 'REJECTED') && (
-                          <button
-                            onClick={() => handleManualNotification(req)}
-                            className="p-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors"
-                            title="Notify via WhatsApp"
-                          >
-                            <MessageSquare className="w-5 h-5" />
-                          </button>
+                          req.whatsappStatus === 'SENT' ? (
+                            <div className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 text-emerald-600 rounded-lg border border-emerald-100">
+                              <Check className="w-4 h-4" />
+                              <span className="text-[10px] font-black uppercase tracking-widest">Sent</span>
+                              <button 
+                                onClick={() => handleManualNotification(req)}
+                                className="ml-1 p-1 hover:bg-emerald-100 rounded-md transition-colors"
+                                title="Retry WhatsApp"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleManualNotification(req)}
+                              className="p-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors flex items-center gap-2 group/wa"
+                              title="Notify via WhatsApp"
+                            >
+                              <MessageSquare className="w-5 h-5" />
+                              <span className="hidden group-hover/wa:block text-[10px] font-black uppercase tracking-widest pr-1">Notify</span>
+                            </button>
+                          )
                         )}
                         <button
                           onClick={() => {

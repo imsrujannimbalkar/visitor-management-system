@@ -102,6 +102,7 @@ import KioskPreRegLookup from './components/KioskPreRegLookup';
 import InquiryTracker from './components/InquiryTracker';
 import { geminiService } from './services/geminiService';
 import { Visitor, User, VisitorStatus, UserRole, Organization, Notification, Profile, Visit, Donation, DonationAuditEntry, PreRegistration } from './types';
+import { useToast } from './components/Toast';
 import { savePendingProfile, savePendingVisit, getPendingProfiles, getPendingVisits, clearPendingProfile, clearPendingVisit } from './lib/offline';
 import { createBackup, getBackups } from './services/backupService';
 import { auth, db, isConfigured, handleFirestoreError, OperationType } from './firebase';
@@ -421,7 +422,6 @@ export default function App() {
   const [legalSubView, setLegalSubView] = useState<'privacy' | 'terms' | 'support'>('support');
   const [showSplash, setShowSplash] = useState(true);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-  const [toasts, setToasts] = useState<{ id: string; message: string; type: 'success' | 'error' | 'info' }[]>([]);
   const [isKioskMode, setIsKioskMode] = useState(() => localStorage.getItem('vms_kiosk_mode') === 'true');
   const [isKioskFormOpen, setIsKioskFormOpen] = useState(false);
   const [isKioskPreRegLookupOpen, setIsKioskPreRegLookupOpen] = useState(false);
@@ -435,15 +435,13 @@ export default function App() {
 
   // Splash Screen Logic
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowSplash(false);
-    }, 5000); // Fallback to hide splash screen after 5 seconds
-
     if (isAuthReady) {
-      setShowSplash(false);
-      clearTimeout(timer);
+      // Add a small delay to ensure React has finished its render cycles for state updates
+      const timer = setTimeout(() => {
+        setShowSplash(false);
+      }, 800);
+      return () => clearTimeout(timer);
     }
-    return () => clearTimeout(timer);
   }, [isAuthReady]);
 
   // Handle Kiosk Assistance Approval
@@ -462,6 +460,7 @@ export default function App() {
   }, [notifications, isKioskMode, user?.organizationId]);
 
   const isSuperAdminValue = useMemo(() => user?.email === 'nimbalkar.srujan@gmail.com', [user]);
+  const { showToast } = useToast();
   
   useEffect(() => {
     setIsSuperAdmin(isSuperAdminValue);
@@ -600,12 +599,8 @@ export default function App() {
   }, [user, createNotification]);
 
   const addToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    const id = Math.random().toString(36).substring(2, 9);
-    setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 4000);
-  }, []);
+    showToast(message, type === 'info' ? 'info' : type);
+  }, [showToast]);
 
   const [googleConfig, setGoogleConfig] = useState<{ 
     connected: boolean; 
@@ -3192,7 +3187,7 @@ export default function App() {
 
   if (showSplash || pageLoading || authLoading || !isAuthReady) {
     return (
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {showSplash ? (
           <SplashScreen key="splash" organization={organization} />
         ) : (
@@ -3201,60 +3196,47 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="min-h-screen bg-white flex flex-col items-center justify-center p-6 transition-all duration-500"
+            className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-8 text-center"
           >
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-              className="max-w-xs w-full flex flex-col items-center gap-12"
+            <div className="fixed top-0 left-0 right-0 z-[100000]">
+              <motion.div 
+                className="h-1 bg-indigo-600 shadow-[0_0_15px_rgba(79,70,229,0.5)]"
+                initial={{ width: "0%" }}
+                animate={{ width: "100%" }}
+                transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+              />
+            </div>
+            
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="space-y-6 max-w-sm w-full"
             >
-              {/* Branded Logo Container */}
-              <div className="relative group">
-                <motion.div
-                  animate={{ 
-                    scale: [1, 1.05, 1],
-                    rotate: [0, 2, -2, 0]
-                  }}
-                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                  className="h-24 w-24 rounded-[2rem] flex items-center justify-center shadow-[0_32px_64px_-16px_rgba(37,99,235,0.25)] border border-white/10"
-                  style={{ backgroundColor: organization?.brandColor || '#2563EB' }}
-                >
-                  <div className="text-white text-3xl font-black italic tracking-tighter select-none">
-                    {organization?.name ? organization.name.substring(0, 2).toUpperCase() : 'VMS'}
-                  </div>
-                </motion.div>
-                
-                <div className="absolute -inset-4 bg-brand-blue/5 rounded-full blur-3xl -z-10 animate-pulse" />
+              <div className="w-20 h-20 bg-white rounded-3xl shadow-xl flex items-center justify-center mx-auto border border-slate-100/50 backdrop-blur-sm">
+                <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
               </div>
-
-              <div className="flex flex-col items-center gap-6 w-full">
-                <div className="space-y-2 text-center">
-                  <h2 className="text-xl font-display font-extrabold text-ngo-primary tracking-tight">
-                    {organization?.name || 'Visitor Management System'}
-                  </h2>
-                  <p className="text-[10px] font-bold text-ngo-accent uppercase tracking-[0.3em] opacity-60">
-                    Visitor Intelligence System
+              
+              <div className="space-y-2">
+                <h3 className="text-slate-900 font-extrabold uppercase tracking-[0.2em] text-[12px]">
+                  Finalizing Authentication
+                </h3>
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse" />
+                  <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">
+                    Synchronizing Workspace Protocol
                   </p>
                 </div>
+              </div>
 
-                {/* Custom Premium Loader */}
-                <div className="w-full h-1 bg-ngo-surface rounded-full overflow-hidden relative">
-                  <motion.div
-                    initial={{ left: "-100%" }}
-                    animate={{ left: "100%" }}
-                    transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-                    className="absolute top-0 bottom-0 w-1/2 bg-ngo-accent"
+              <div className="pt-4 flex flex-col gap-1">
+                <div className="h-0.5 w-32 bg-slate-200 rounded-full mx-auto overflow-hidden">
+                  <motion.div 
+                    className="h-full bg-indigo-400"
+                    animate={{ x: ["-100%", "100%"] }}
+                    transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
                   />
                 </div>
-                
-                <motion.span 
-                  animate={{ opacity: [0.4, 1, 0.4] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                  className="text-[9px] font-black uppercase tracking-[0.2em] text-ngo-primary/40"
-                >
-                  Establishing Secure Protocol
-                </motion.span>
               </div>
             </motion.div>
           </motion.div>
@@ -3285,16 +3267,41 @@ export default function App() {
 
   if (user?.organizationId && !organization) {
     return (
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-center">
-            <div className="space-y-4">
-                <Loader2 className="h-8 w-8 text-brand-blue animate-spin mx-auto" />
-                <p className="text-slate-500 font-bold">Synchronizing workspace data...</p>
-            </div>
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-8 text-center">
+        <div className="fixed top-0 left-0 right-0 z-[100000]">
+          <motion.div 
+            className="h-1 bg-indigo-600 shadow-[0_0_20px_rgba(79,70,229,0.5)]"
+            initial={{ width: "0%" }}
+            animate={{ width: "100%" }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+          />
         </div>
+        
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-6"
+        >
+          <div className="relative">
+            <div className="w-20 h-20 bg-white rounded-3xl shadow-xl shadow-slate-200/50 flex items-center justify-center mx-auto border border-slate-100">
+              <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            <h3 className="text-slate-900 font-extrabold uppercase tracking-[0.25em] text-[12px]">
+              Workspace Recovery
+            </h3>
+            <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest leading-relaxed">
+              Fetching encrypted organizational data<span className="animate-pulse">...</span>
+            </p>
+          </div>
+        </motion.div>
+      </div>
     );
   }
 
-  if (!user?.organizationId) {
+  if (!user?.organizationId && !isSuperAdminValue) {
     return <OrgSetup onComplete={(orgId) => {
         setPageLoading(true);
         setActiveOrgId(orgId);
@@ -4938,6 +4945,7 @@ export default function App() {
 
           {activeTab === 'birthdays' && (
             <BirthdayTab 
+              organizationId={organization?.id || ''}
               visitors={visitors} 
               donations={donations}
               loadingStates={loadingStates}
@@ -5797,49 +5805,6 @@ export default function App() {
       </AnimatePresence>
 
       {/* Toast Notifications */}
-      <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[110000] flex flex-col items-center gap-3 pointer-events-none w-full max-w-sm px-6">
-        <AnimatePresence mode="popLayout">
-          {toasts.map(toast => (
-            <motion.div
-              key={toast.id}
-              initial={{ opacity: 0, y: 30, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              layout
-              className="pointer-events-auto w-full group"
-            >
-              <div className={`
-                flex items-center gap-4 px-6 py-4 rounded-3xl shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] border backdrop-blur-3xl transition-all duration-300
-                ${toast.type === 'success' ? 'bg-white/90 border-emerald-100/50 text-emerald-900' :
-                  toast.type === 'error' ? 'bg-white/90 border-rose-100/50 text-rose-900' :
-                  'bg-white/90 border-blue-100/50 text-blue-900'}
-              `}>
-                <div className={`flex-shrink-0 h-10 w-10 rounded-2xl flex items-center justify-center shadow-sm ${
-                  toast.type === 'success' ? 'bg-emerald-500/10 text-emerald-600' :
-                  toast.type === 'error' ? 'bg-rose-500/10 text-rose-600' :
-                  'bg-ngo-accent/10 text-ngo-accent'
-                }`}>
-                  {toast.type === 'success' && <CheckCircle2 className="h-5 w-5" />}
-                  {toast.type === 'error' && <AlertCircle className="h-5 w-5" />}
-                  {toast.type === 'info' && <Info className="h-5 w-5" />}
-                </div>
-                
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-extrabold tracking-tight leading-tight">{toast.message}</p>
-                </div>
-
-                <button 
-                  onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
-                  className="flex-shrink-0 h-8 w-8 flex items-center justify-center hover:bg-black/5 rounded-xl transition-colors text-gray-400 group-hover:text-gray-900"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
-
       {reviewVisitor && (
         <ReviewModal
           visitorName={reviewVisitor.name}

@@ -78,6 +78,8 @@
         "createdBy": { "type": "string" },
         "recordedBy": { "type": "string" },
         "isEmergency": { "type": "boolean" },
+        "whatsappStatus": { "type": "string", "enum": ["PENDING", "SENT", "FAILED"] },
+        "whatsappSentAt": { "type": "string", "format": "date-time" },
         "review": { 
           "type": "object", 
           "properties": {
@@ -160,6 +162,8 @@
         "purpose": { "type": "string" },
         "followUpDate": { "type": "string", "format": "date-time" },
         "status": { "type": "string", "enum": ["PENDING", "DONE", "CANCELLED"] },
+        "whatsappStatus": { "type": "string", "enum": ["PENDING", "SENT", "FAILED"] },
+        "whatsappSentAt": { "type": "string", "format": "date-time" },
         "priority": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] },
         "notes": { "type": "string" },
         "recordedBy": { "type": "string" },
@@ -222,6 +226,8 @@
         "purpose": { "type": "string" },
         "visitDate": { "type": "string" },
         "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "whatsappStatus": { "type": "string", "enum": ["PENDING", "SENT", "FAILED"] },
+        "whatsappSentAt": { "type": "string", "format": "date-time" },
         "submittedAt": { "type": "string", "format": "date-time" },
         "processedAt": { "type": "string", "format": "date-time" },
         "processedBy": { "type": "string" }

@@ -1,16 +1,21 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { Gift, MessageCircle, Calendar as CalendarIcon, Heart, Star } from 'lucide-react';
+import { Gift, MessageCircle, Calendar as CalendarIcon, Heart, Star, CheckCircle2, RotateCcw } from 'lucide-react';
 import { Visitor, Donation } from '../types';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../firebase';
+import { useToast } from './Toast';
 
 interface BirthdayTabProps {
+  organizationId: string;
   visitors: Visitor[];
   donations: Donation[];
   loadingStates?: Record<string, boolean>;
   organizationName?: string;
 }
 
-export default function BirthdayTab({ visitors, donations, loadingStates = {}, organizationName = 'Visitor Management System' }: BirthdayTabProps) {
+export default function BirthdayTab({ organizationId, visitors, donations, loadingStates = {}, organizationName = 'Visitor Management System' }: BirthdayTabProps) {
+  const { showToast } = useToast();
   const today = new Date();
   const todayMonth = today.getMonth();
   const todayDate = today.getDate();
@@ -42,7 +47,11 @@ export default function BirthdayTab({ visitors, donations, loadingStates = {}, o
         phone: visitor.phone,
         type: 'Birthday',
         date: visitor.dob,
-        icon: <Gift className="h-5 w-5" />
+        icon: <Gift className="h-5 w-5" />,
+        whatsappStatus: visitor.whatsappStatus,
+        isDonation: false,
+        docId: visitor.phone // Profile ID is phone in this app logic usually, or visitorId? 
+        // Wait, Profile is stored by phone? No, organizations/{orgId}/profiles/{phone}
       };
 
       if (birthMonth === todayMonth && birthDate === todayDate) {
@@ -74,7 +83,10 @@ export default function BirthdayTab({ visitors, donations, loadingStates = {}, o
           phone: donation.visitorPhone,
           type: donation.occasion || 'Special Occasion',
           date: donation.occasionDate,
-          icon: donation.occasion?.toLowerCase().includes('anniversary') ? <Heart className="h-5 w-5" /> : <Star className="h-5 w-5" />
+          icon: donation.occasion?.toLowerCase().includes('anniversary') ? <Heart className="h-5 w-5" /> : <Star className="h-5 w-5" />,
+          whatsappStatus: donation.whatsappStatus,
+          isDonation: true,
+          docId: donation.id
         };
 
         if (eventMonth === todayMonth && eventDate === todayDate) {
@@ -112,12 +124,40 @@ export default function BirthdayTab({ visitors, donations, loadingStates = {}, o
     return age;
   };
 
-  const generateWhatsAppLink = (item: any) => {
-    const msg = item.type === 'Birthday' 
-      ? `Happy Birthday ${item.name}! 🎉 Regards, ${organizationName}`
-      : `Happy ${item.type} ${item.name}! ✨ Warm wishes from ${organizationName}`;
-    const cleanPhone = (item.phone || '').replace(/\D/g, '');
-    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
+  const [sendingId, setSendingId] = useState<string | null>(null);
+
+  const handleSendWish = async (item: any) => {
+    if (!organizationId) return;
+    setSendingId(item.id);
+    
+    try {
+      const msg = item.type === 'Birthday' 
+        ? `Happy Birthday ${item.name}! 🎉 Regards, ${organizationName}`
+        : `Happy ${item.type} ${item.name}! ✨ Warm wishes from ${organizationName}`;
+      
+      const cleanPhone = (item.phone || '').replace(/\D/g, '');
+      let formattedPhone = cleanPhone;
+      if (formattedPhone.length === 10) formattedPhone = '91' + formattedPhone;
+      
+      const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(msg)}`;
+
+      // Update Firestore
+      const collectionName = item.isDonation ? 'donations' : 'profiles';
+      const docRef = doc(db, 'organizations', organizationId, collectionName, item.docId);
+      
+      await updateDoc(docRef, {
+        whatsappStatus: 'SENT',
+        whatsappSentAt: new Date().toISOString()
+      });
+
+      window.open(whatsappUrl, '_blank');
+      showToast(`Wish generated for ${item.name}`, 'success');
+    } catch (error) {
+      console.error('Error tracking wish status:', error);
+      showToast('Failed to update status', 'error');
+    } finally {
+      setSendingId(null);
+    }
   };
 
   return (
@@ -172,15 +212,27 @@ export default function BirthdayTab({ visitors, donations, loadingStates = {}, o
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <a
-                        href={generateWhatsAppLink(item)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-6 py-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-2xl transition-all text-[11px] font-black uppercase tracking-widest shadow-lg shadow-emerald-100 active:scale-95"
-                      >
-                        <MessageCircle className="h-4 w-4" />
-                        Send Wish
-                      </a>
+                      {item.whatsappStatus === 'SENT' ? (
+                        <div className="flex items-center gap-1.5 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100">
+                           <CheckCircle2 className="h-4 w-4" />
+                           <span className="text-[10px] font-black uppercase tracking-widest">Sent</span>
+                           <button 
+                             onClick={() => handleSendWish(item)}
+                             className="ml-1 text-emerald-400 hover:text-emerald-600 transition-colors"
+                           >
+                             <RotateCcw className="h-3 w-3" />
+                           </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleSendWish(item)}
+                          disabled={sendingId === item.id}
+                          className="flex items-center gap-2 px-6 py-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-2xl transition-all text-[11px] font-black uppercase tracking-widest shadow-lg shadow-emerald-100 active:scale-95 disabled:opacity-50"
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                          {sendingId === item.id ? 'Sending...' : 'Send Wish'}
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -227,14 +279,18 @@ export default function BirthdayTab({ visitors, donations, loadingStates = {}, o
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                       <a
-                        href={generateWhatsAppLink(item)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 p-3 bg-white border border-slate-200 text-slate-400 hover:text-emerald-500 hover:border-emerald-200 rounded-xl transition-all shadow-sm active:scale-95"
-                      >
-                        <MessageCircle className="h-5 w-5" />
-                      </a>
+                       {item.whatsappStatus === 'SENT' ? (
+                         <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
+                           <CheckCircle2 className="h-5 w-5" />
+                         </div>
+                       ) : (
+                         <button
+                          onClick={() => handleSendWish(item)}
+                          className="flex items-center gap-2 p-3 bg-white border border-slate-200 text-slate-400 hover:text-emerald-500 hover:border-emerald-200 rounded-xl transition-all shadow-sm active:scale-95"
+                        >
+                          <MessageCircle className="h-5 w-5" />
+                        </button>
+                       )}
                     </div>
                   </div>
                 ))}

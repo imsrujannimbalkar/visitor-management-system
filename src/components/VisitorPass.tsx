@@ -21,7 +21,8 @@ import { Visitor, Organization } from '../types';
 import { db } from '../firebase';
 import { doc, getDoc, updateDoc, onSnapshot, query, collection, where, getDocs, addDoc } from 'firebase/firestore';
 import { DEFAULT_WHATSAPP_TEMPLATES } from '../constants';
-import Swal from 'sweetalert2';
+import { useToast } from './Toast';
+import SignatureModal from './SignatureModal';
 import ReviewModal from './ReviewModal';
 
 interface VisitorPassProps {
@@ -47,6 +48,7 @@ export default function VisitorPass({
   const [checkingOut, setCheckingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
+  const { showToast } = useToast();
 
   const x = useMotionValue(0);
   const textOpacity = useTransform(x, [0, 150], [1, 0]);
@@ -205,18 +207,13 @@ export default function VisitorPass({
       
     } catch (err) {
       console.error('Check-out failed:', err);
-      Swal.fire({
-        title: 'Error',
-        text: 'Check-out failed. Please use the button below to retry.',
-        icon: 'error',
-        confirmButtonColor: '#2563EB'
-      });
+      showToast('Check-out failed. Please try again.', 'error');
     } finally {
       setCheckingOut(false);
     }
   };
 
-  const handleShare = () => {
+  const handleShare = async () => {
     if (!visitor || !organization) return;
     const vid = visitor.visitId || visitor.visitorId;
     const passUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization.id}&mode=checkout`;
@@ -234,13 +231,7 @@ export default function VisitorPass({
     const digitsOnly = phoneToUse?.replace(/\D/g, '') || '';
     
     if (!digitsOnly || digitsOnly.length < 10) {
-      Swal.fire({
-        title: 'Invalid Mobile Number',
-        text: 'The mobile number provided is either missing or too short for WhatsApp. Please ensure a valid number is entered.',
-        icon: 'warning',
-        confirmButtonColor: '#2563EB',
-        confirmButtonText: 'Understood'
-      });
+      showToast('The mobile number provided is either missing or invalid for WhatsApp.', 'error');
       return;
     }
     
@@ -249,6 +240,20 @@ export default function VisitorPass({
       formattedPhone = '91' + formattedPhone;
     }
     
+    // Update status in Firestore if possible
+    const vidToUpdate = visitor.visitId || visitor.visitorId || visitorId;
+    if (vidToUpdate && organization?.id) {
+      try {
+        const visitorRef = doc(db, 'organizations', organization.id, 'visits', vidToUpdate);
+        await updateDoc(visitorRef, {
+          whatsappStatus: 'SENT',
+          whatsappSentAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.warn('Could not update WhatsApp status for visit:', err);
+      }
+    }
+
     // Use official WhatsApp API URL which is highly reliable
     const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(message)}`;
     
@@ -259,6 +264,8 @@ export default function VisitorPass({
     if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
       window.location.href = whatsappUrl;
     }
+
+    showToast('WhatsApp message generated successfully', 'success');
   };
 
   if (loading) {
@@ -537,16 +544,10 @@ export default function VisitorPass({
                   timestamp: new Date().toISOString()
                 });
                 setShowReviewModal(false);
-                Swal.fire({
-                  title: 'Thank You!',
-                  text: 'Your feedback helps us improve our services.',
-                  icon: 'success',
-                  timer: 2000,
-                  showConfirmButton: false
-                });
+                showToast('Thank you for your feedback!', 'success');
               } catch (err) {
                 console.error('Failed to save review:', err);
-                Swal.fire({ title: 'Error', text: 'Failed to save review. Please try again.', icon: 'error' });
+                showToast('Failed to save review. Please try again.', 'error');
               }
             }}
           />

@@ -71,6 +71,8 @@ export interface Visit {
   isEmergency?: boolean;
   preRegistrationId?: string;
   deleted?: boolean;
+  whatsappStatus?: 'PENDING' | 'SENT' | 'FAILED';
+  whatsappSentAt?: string;
   review?: {
     rating: number;
     comment: string;
@@ -116,6 +118,8 @@ export interface Donation {
   specialLocation?: string;
   auditLog?: DonationAuditEntry[];
   deleted?: boolean;
+  whatsappStatus?: 'PENDING' | 'SENT' | 'FAILED';
+  whatsappSentAt?: string;
 }
 
 export interface DonationType {
@@ -265,6 +269,8 @@ export interface PreRegistration {
   signature?: string;
   visitDate: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CHECKED_IN' | 'COMPLETED';
+  whatsappStatus?: 'PENDING' | 'SENT' | 'FAILED';
+  whatsappSentAt?: string;
   submittedAt: string;
   processedAt?: string;
   processedBy?: string;
@@ -280,6 +286,8 @@ export interface Inquiry {
   purpose: string;
   followUpDate: string;
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  whatsappStatus?: 'PENDING' | 'SENT' | 'FAILED';
+  whatsappSentAt?: string;
   priority: 'LOW' | 'MEDIUM' | 'HIGH';
   notes?: string;
   recordedBy: string;
