@@ -8,10 +8,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
-// import { getStorage } from 'firebase-admin/storage';
-// import { calendarService } from './calendar.js';
-// import { sheetsService } from './sheets.js';
-// import { getGoogleAuthClient, getFreshAccessToken, generateAuthUrl, exchangeAuthCode, validateTokens } from './lib/googleAuth.js';
+import cron from 'node-cron';
 import { safely, getFallback, setFallback, getAdminDb } from './lib/firestoreSafe.js';
 import { google } from 'googleapis';
 
@@ -34,19 +31,20 @@ async function runDailyTasks() {
 
   try {
     const orgsSnap = await safely(adminDb.collection('organizations').get(), getFallback);
-    const backupData: any = {};
-
+    
     for (const orgDoc of orgsSnap.docs) {
       if (!orgDoc.exists) continue;
       const orgId = orgDoc.id;
       const orgData = orgDoc.data();
+      const orgName = orgData.name || orgId;
       
-      // 1. Process Birthday Reminders for this Org
+      console.log(`[System] Processing ${orgName}...`);
+
+      // 1. Process Birthday Reminders
       const visitsSnap = await safely(orgDoc.ref.collection('visits').get(), getFallback);
       for (const visitDoc of visitsSnap.docs) {
         const v = visitDoc.data();
         if (v.dob && v.dob.includes(birthdayPattern)) {
-          // Check for existing notification to avoid spam
           const id = `BIRTHDAY-${orgId}-${visitDoc.id}-${dateStr}`;
           const notifRef = orgDoc.ref.collection('notifications').doc(id);
           const notifSnap = await safely(notifRef.get(), getFallback);
@@ -64,7 +62,6 @@ async function runDailyTasks() {
               read: false,
               deleted: false
             }), undefined);
-            console.log(`[Reminders] Created birthday notification for ${v.name} in ${orgId}`);
           }
         }
       }
@@ -91,7 +88,6 @@ async function runDailyTasks() {
               read: false,
               deleted: false
             }), undefined);
-            console.log(`[Reminders] Created occasion notification for ${d.visitorName} in ${orgId}`);
           }
         }
       }
@@ -123,37 +119,84 @@ async function runDailyTasks() {
               read: false,
               deleted: false
             }), undefined);
-            console.log(`[Reminders] Created ${isOverdue ? 'overdue' : 'due'} follow-up notification for ${inquiry.callerName} in ${orgId}`);
           }
         }
       }
 
-      // 4. Collect Data for Backup
-      backupData[orgId] = {
-        config: orgData,
-        visits: visitsSnap.docs.map(d => ({ id: d.id, ...d.data() })),
-        donations: donationsSnap.docs.map(d => ({ id: d.id, ...d.data() })),
-        inquiries: inquiriesSnap.docs.map(d => ({ id: d.id, ...d.data() })),
-        invitations: (await safely(orgDoc.ref.collection('invitations').get(), getFallback)).docs.map(d => ({ id: d.id, ...d.data() })),
-        notifications: (await safely(orgDoc.ref.collection('notifications').get(), getFallback)).docs.map(d => ({ id: d.id, ...d.data() })),
-        preRegistrations: (await safely(orgDoc.ref.collection('preRegistrations').get(), getFallback)).docs.map(d => ({ id: d.id, ...d.data() })),
-        reviews: (await safely(orgDoc.ref.collection('reviews').get(), getFallback)).docs.map(d => ({ id: d.id, ...d.data() })),
-        profiles: (await safely(orgDoc.ref.collection('profiles').get(), getFallback)).docs.map(d => ({ id: d.id, ...d.data() })),
-      };
-    }
+      // 4. AUTOMATIC DAILY BACKUP (The Request)
+      const backupTimestamp = new Date().toISOString();
+      const backupId = `AUTO-BK-${dateStr}`;
+      
+      console.log(`[Backup] Creating daily snapshot for ${orgName}...`);
+      
+      try {
+        const snapshotData = {
+          config: orgData,
+          visits: visitsSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+          donations: donationsSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+          inquiries: inquiriesSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+          invitations: (await safely(orgDoc.ref.collection('invitations').get(), getFallback)).docs.map(d => ({ id: d.id, ...d.data() })),
+          notifications: (await safely(orgDoc.ref.collection('notifications').get(), getFallback)).docs.map(d => ({ id: d.id, ...d.data() })),
+          preRegistrations: (await safely(orgDoc.ref.collection('preRegistrations').get(), getFallback)).docs.map(d => ({ id: d.id, ...d.data() })),
+          reviews: (await safely(orgDoc.ref.collection('reviews').get(), getFallback)).docs.map(d => ({ id: d.id, ...d.data() })),
+          profiles: (await safely(orgDoc.ref.collection('profiles').get(), getFallback)).docs.map(d => ({ id: d.id, ...d.data() })),
+        };
 
-    // Storage logic removed as per project constraints
-    console.log(`[Backup Hub] Processed ${Object.keys(backupData).length} organizational snapshots. Scheduled JSON backups are handled by GitHub Actions.`);
+        const backupRecord = {
+          id: backupId,
+          organizationId: orgId,
+          timestamp: backupTimestamp,
+          createdBy: 'SYSTEM_CRON',
+          createdByName: 'Automatic System Backup',
+          data: JSON.stringify(snapshotData).length > 900000 ? null : snapshotData, // Guard against 1MB limit
+          isLargeBackup: JSON.stringify(snapshotData).length > 900000,
+          metadata: {
+            profilesCount: snapshotData.profiles.length,
+            visitsCount: snapshotData.visits.length,
+            donationsCount: snapshotData.donations.length,
+            inquiriesCount: snapshotData.inquiries.length,
+            size: JSON.stringify(snapshotData).length
+          }
+        };
+
+        await adminDb.collection('organizations').doc(orgId).collection('system_backups').doc(backupId).set(backupRecord);
+        
+        // Log Success
+        await adminDb.collection('system_logs').add({
+          type: 'BACKUP_SUCCESS',
+          organizationId: orgId,
+          timestamp: backupTimestamp,
+          message: `Daily automatic backup completed successfully for ${orgName}`
+        });
+        
+        console.log(`[Backup] Daily backup ${backupId} saved for ${orgName}`);
+      } catch (backupError: any) {
+        console.error(`[Backup] Failed for ${orgName}:`, backupError);
+        // Log Failure
+        await adminDb.collection('system_logs').add({
+          type: 'BACKUP_FAILURE',
+          organizationId: orgId,
+          timestamp: backupTimestamp,
+          error: backupError.message,
+          message: `Automatic backup failed for ${orgName}`
+        });
+      }
+    }
   } catch (error) {
-    console.error('[System] Daily tasks failed:', error);
+    console.error('[System] Global daily tasks failed:', error);
   }
 }
 
-// Set up daily schedule (runs every 24 hours)
+// Scheduled with node-cron: Runs every day at midnight (00:00)
 if (!process.env.VERCEL && process.env.VITE_APP_BUILD_ENV !== 'serverless') {
-  setInterval(runDailyTasks, 24 * 60 * 60 * 1000);
+  cron.schedule('0 0 * * *', () => {
+    runDailyTasks();
+  }, {
+    timezone: "UTC"
+  });
+  
   // Also run once on startup (with a slight delay to ensure DB is ready)
-  setTimeout(runDailyTasks, 60000);
+  setTimeout(runDailyTasks, 30000);
 }
 
 // Diagnostic: Periodic connection check with fallback
