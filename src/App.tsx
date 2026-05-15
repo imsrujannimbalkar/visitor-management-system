@@ -331,7 +331,7 @@ function SplashScreen({ organization }: { organization: Organization | null }) {
            </motion.div>
 
            {/* Loading Bar */}
-           <div className="w-48 h-1 bg-white/5 rounded-full mt-10 overflow-hidden relative">
+           <div className="w-48 h-1 bg-white/5 rounded-full mt-10 overflow-hidden relative mx-auto">
               <motion.div 
                 initial={{ left: '-100%' }}
                 animate={{ left: '100%' }}
@@ -3216,7 +3216,7 @@ export default function App() {
       background: '#ffffff',
       customClass: {
         popup: 'rounded-3xl border-none shadow-2xl',
-        input: '!text-center !text-2xl !tracking-[0.5em]',
+        input: '!text-center !text-2xl !tracking-[0.3em] !w-48 !mx-auto',
         confirmButton: 'rounded-xl px-10 py-3 font-bold uppercase tracking-widest text-xs',
         cancelButton: 'rounded-xl px-10 py-3 font-bold uppercase tracking-widest text-xs'
       },
@@ -3263,11 +3263,11 @@ export default function App() {
     const { value: pin } = await Swal.fire({
       title: 'Enter Kiosk PIN',
       input: 'password',
-      inputPlaceholder: 'Enter your PIN',
+      inputPlaceholder: 'PIN',
       showCancelButton: true,
       confirmButtonText: 'Enter Kiosk',
       customClass: {
-        input: '!text-center !text-2xl !tracking-[0.5em]'
+        input: '!text-center !text-2xl !tracking-[0.3em] !w-48 !mx-auto'
       },
       inputValidator: (value) => {
         if (!value) return 'PIN is required';
@@ -3279,6 +3279,7 @@ export default function App() {
     
     localStorage.setItem('vms_kiosk_mode', 'true');
     setIsKioskMode(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     addToast('Kiosk Mode Activated', 'success');
   };
 
@@ -5974,10 +5975,19 @@ function StatCard({ title, value, icon, trend, color = 'blue' }: { title: string
     rose: 'text-rose-600 bg-rose-50'
   };
 
+  const bgStyles = {
+    blue: 'bg-blue-50/50 border-blue-100/50',
+    indigo: 'bg-indigo-50/50 border-indigo-100/50',
+    emerald: 'bg-emerald-50/50 border-emerald-100/50',
+    purple: 'bg-purple-50/50 border-purple-100/50',
+    amber: 'bg-amber-50/50 border-amber-100/50',
+    rose: 'bg-rose-50/50 border-rose-100/50'
+  };
+
   return (
     <motion.div
       whileHover={{ y: -5 }}
-      className="glass-card rounded-[2.5rem] p-8 flex flex-col relative group overflow-hidden"
+      className={`glass-card rounded-[2.5rem] p-8 flex flex-col relative group overflow-hidden ${bgStyles[color]}`}
     >
       {/* Sparkle Beam Effect */}
       <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-blue-400/20 to-transparent transform -translate-x-full group-hover:translate-x-full transition-transform duration-[3s]" />

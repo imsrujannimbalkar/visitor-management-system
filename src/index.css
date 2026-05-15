@@ -152,6 +152,10 @@ input:focus, select:focus, textarea:focus {
   @apply ring-4 ring-blue-500/10;
 }
 
+.glass-card {
+  @apply bg-white/70 backdrop-blur-3xl border border-white/20 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.1)];
+}
+
 .swal2-container {
   z-index: 100000 !important;
 }
