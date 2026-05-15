@@ -4,6 +4,7 @@ import { Star, X, MessageSquare, Send, ThumbsUp, ThumbsDown, Zap, Layout, UserCh
 import { db } from '../firebase';
 import { collection, addDoc } from 'firebase/firestore';
 import { AppFeedback } from '../types';
+import { useToast } from './Toast';
 
 interface AppFeedbackModalProps {
   onClose: () => void;
@@ -17,6 +18,7 @@ export default function AppFeedbackModal({ onClose, userId, organizationId }: Ap
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [step, setStep] = useState(1);
+  const { showToast } = useToast();
 
   const [formData, setFormData] = useState({
     uiRating: 3,
@@ -41,7 +43,7 @@ export default function AppFeedbackModal({ onClose, userId, organizationId }: Ap
     }
 
     if (!formData.frustration.trim() || !formData.missingFeature.trim()) {
-      alert('Please fill out all fields on this step.');
+      showToast('Please fill out all fields on this step.', 'error');
       return;
     }
     
@@ -56,11 +58,12 @@ export default function AppFeedbackModal({ onClose, userId, organizationId }: Ap
       };
       
       await addDoc(collection(db, 'appFeedback'), feedbackData);
+      showToast('Feedback submitted! Thank you for helping us grow.', 'success');
       setIsSuccess(true);
       // We removed the automatic onClose to allow user to see success state
     } catch (error) {
       console.error('Error submitting feedback:', error);
-      alert('Failed to submit feedback. Please try again.');
+      showToast('Transmission error. Feedback not captured.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -69,7 +72,7 @@ export default function AppFeedbackModal({ onClose, userId, organizationId }: Ap
   const nextStep = () => {
     if (step === 1) {
       if (rating === 0) {
-        alert('Please select an overall rating to continue.');
+        showToast('Please select an overall rating to continue.', 'error');
         return;
       }
     }

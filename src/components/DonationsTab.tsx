@@ -1287,7 +1287,7 @@ export default function DonationsTab({
                           </button>
                           <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1.5 mt-1 tracking-tighter">
                             <Hash className="h-3 w-3" />
-                            {donor.profile.phone}
+                            {donor.profile.phone?.startsWith('EMER-') ? 'Private Entry' : donor.profile.phone}
                           </div>
                         </div>
                       </div>
@@ -1398,7 +1398,7 @@ export default function DonationsTab({
                     <div className="flex flex-wrap items-center gap-4 sm:gap-6">
                       <div className="flex items-center gap-2 sm:gap-2.5 text-slate-500 font-bold">
                          <User className="h-3.5 w-3.5 text-brand-blue" />
-                         <span className="text-xs sm:text-sm font-black tracking-tight">{selectedDonor.profile.phone}</span>
+                         <span className="text-xs sm:text-sm font-black tracking-tight">{selectedDonor.profile.phone?.startsWith('EMER-') ? 'Private Entry' : selectedDonor.profile.phone}</span>
                       </div>
                       <div className="flex items-center gap-2 sm:gap-2.5 text-slate-500 font-bold">
                          <Mail className="h-3.5 w-3.5 text-emerald-500" />

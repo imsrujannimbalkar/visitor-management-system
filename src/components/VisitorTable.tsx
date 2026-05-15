@@ -344,7 +344,12 @@ export default function VisitorTable({
                              </span>
                            ))}
                            {visitor.isEmergency && (
-                              <span className="px-2 py-0.5 rounded bg-red-600 text-white text-[8px] font-black uppercase tracking-tighter animate-pulse shadow-sm shadow-red-200">Emergency entry</span>
+                              <div className="flex flex-col gap-1 items-start">
+                                <span className="px-2 py-0.5 rounded bg-red-600 text-white text-[8px] font-black uppercase tracking-tighter animate-pulse shadow-sm shadow-red-200">Emergency entry</span>
+                                {visitor.phone?.startsWith('EMER-') && (
+                                  <span className="px-1.5 py-0.5 bg-red-50 text-red-600 border border-red-100 rounded text-[7px] font-black tracking-widest uppercase">ID: {visitor.phone}</span>
+                                )}
+                              </div>
                            )}
                         </div>
                       </div>
@@ -365,7 +370,7 @@ export default function VisitorTable({
                       <div className="flex flex-col gap-1.5">
                         <div className="text-[11px] font-black text-slate-900 tracking-tight flex items-center gap-2">
                           <Phone className="h-3.5 w-3.5 text-slate-300" />
-                          {visitor.phone}
+                          {visitor.phone?.startsWith('EMER-') ? 'Contact Not Provided' : visitor.phone}
                         </div>
                         {visitor.email && (
                           <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1.5 lowercase truncate max-w-[150px]">
@@ -540,7 +545,12 @@ export default function VisitorTable({
                                         </span>
                                       ))}
                                       {visitor.isEmergency && (
-                                        <span className="px-2 py-0.5 rounded bg-red-600 text-white text-[8px] font-black uppercase tracking-tighter animate-pulse shadow-sm shadow-red-200">Emergency entry</span>
+                                        <div className="flex flex-col gap-1 items-start">
+                                          <span className="px-2 py-0.5 rounded bg-red-600 text-white text-[8px] font-black uppercase tracking-tighter animate-pulse shadow-sm shadow-red-200">Emergency entry</span>
+                                          {visitor.phone?.startsWith('EMER-') && (
+                                            <span className="px-1.5 py-0.5 bg-red-50 text-red-600 border border-red-100 rounded text-[7px] font-black tracking-widest uppercase">ID: {visitor.phone}</span>
+                                          )}
+                                        </div>
                                       )}
                                     </div>
                                   </div>
@@ -555,7 +565,7 @@ export default function VisitorTable({
                                     </div>
                                     <div className="flex flex-col gap-1">
                                       <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Contact Vector</span>
-                                      <span className="text-sm font-bold text-slate-700">{visitor.phone}</span>
+                                      <span className="text-sm font-bold text-slate-700">{visitor.phone?.startsWith('EMER-') ? 'Contact Not Provided (Emergency Protocol)' : visitor.phone}</span>
                                     </div>
                                     {visitor.email && (
                                       <div className="flex flex-col gap-1">

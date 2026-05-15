@@ -100,6 +100,7 @@ import PreRegistrationForm from './components/PreRegistrationForm';
 import PreRegistrationTab from './components/PreRegistrationTab';
 import KioskPreRegLookup from './components/KioskPreRegLookup';
 import InquiryTracker from './components/InquiryTracker';
+import TermsAcceptanceModal from './components/TermsAcceptanceModal';
 import { geminiService } from './services/geminiService';
 import { Visitor, User, VisitorStatus, UserRole, Organization, Notification, Profile, Visit, Donation, DonationAuditEntry, PreRegistration, Inquiry } from './types';
 import { useToast } from './components/Toast';
@@ -357,6 +358,86 @@ function SplashScreen({ organization }: { organization: Organization | null }) {
   );
 }
 
+function LoaderScreen({ progress }: { progress: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, filter: 'blur(20px)' }}
+      className="fixed inset-0 z-[2000] bg-slate-50 flex flex-col items-center justify-center font-sans"
+    >
+      <div className="relative w-full max-w-md px-10">
+        <div className="flex justify-between items-end mb-6">
+          <div className="space-y-1">
+            <h2 className="text-sm font-black text-slate-900 uppercase tracking-[0.3em] flex items-center gap-2">
+              <Activity className="h-4 w-4 text-brand-blue animate-pulse" />
+              Decrypting Core
+            </h2>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Allocating System Resources...</p>
+          </div>
+          <div className="text-right">
+            <span className="text-3xl font-black text-slate-900 font-mono tracking-tighter">
+              {Math.round(progress)}
+              <span className="text-xs text-slate-300 ml-1">%</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Enhanced Progress Bar */}
+        <div className="relative h-6 bg-slate-200/50 rounded-full overflow-hidden p-1 shadow-inner">
+          <motion.div 
+            initial={{ width: 0 }}
+            animate={{ width: `${progress}%` }}
+            transition={{ type: "spring", bounce: 0, duration: 0.5 }}
+            className="h-full bg-gradient-to-r from-brand-blue via-indigo-500 to-blue-400 rounded-full relative group"
+          >
+            {/* Gloss Effect */}
+            <div className="absolute inset-x-0 top-0 h-1/2 bg-white/20 rounded-t-full" />
+            
+            {/* Animated Glow */}
+            <motion.div 
+              animate={{ opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 1.5, repeat: Infinity }}
+              className="absolute right-0 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/40 blur-md rounded-full"
+            />
+          </motion.div>
+        </div>
+
+        {/* Terminal Text Simulation */}
+        <div className="mt-10 overflow-hidden h-16">
+          <motion.div 
+            animate={{ y: [0, -100] }}
+            transition={{ duration: 5, repeat: Infinity, ease: "linear" }}
+            className="space-y-2"
+          >
+            {[
+              "SECURE_LAYER_STRICT_ACTIVE",
+              "ENCRYPTION_NODE_0991_READY",
+              "AUTH_SESSION_ESTABLISHED",
+              "GEO_LOCK_VERIFIED",
+              "DATABASE_MIRROR_SYNC_OK",
+              "HEARTBEAT_PROTOCOL_INIT",
+              "UI_MANIFEST_PARSING",
+              "LEGACY_RESTORE_COMPLETED"
+            ].map((text, i) => (
+              <p key={i} className="text-[9px] font-bold text-slate-300 font-mono tracking-widest uppercase">
+                {">"} {text}
+              </p>
+            ))}
+          </motion.div>
+        </div>
+      </div>
+
+      {/* Decorative Branding */}
+      <div className="absolute bottom-12 flex items-center gap-3 opacity-20">
+         <div className="h-px w-8 bg-slate-400" />
+         <span className="text-[10px] font-black text-slate-500 tracking-[0.5em] uppercase">Elite VMS v4.2.0</span>
+         <div className="h-px w-8 bg-slate-400" />
+      </div>
+    </motion.div>
+  );
+}
+
 const DashboardSkeleton = () => (
   <div className="space-y-8">
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -421,6 +502,8 @@ export default function App() {
   const [preRegFilter, setPreRegFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CHECKED_IN'>('PENDING');
   const [legalSubView, setLegalSubView] = useState<'privacy' | 'terms' | 'support'>('support');
   const [showSplash, setShowSplash] = useState(true);
+  const [showLoader, setShowLoader] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [isKioskMode, setIsKioskMode] = useState(() => localStorage.getItem('vms_kiosk_mode') === 'true');
   const [isKioskFormOpen, setIsKioskFormOpen] = useState(false);
@@ -436,13 +519,46 @@ export default function App() {
   // Splash Screen Logic
   useEffect(() => {
     if (isAuthReady) {
-      // Add a small delay to ensure React has finished its render cycles for state updates
+      // Transition from Splash to Custom Loader
       const timer = setTimeout(() => {
         setShowSplash(false);
-      }, 800);
+        setShowLoader(true);
+      }, 1500);
       return () => clearTimeout(timer);
     }
   }, [isAuthReady]);
+
+  // Loading Progress Logic
+  useEffect(() => {
+    if (showLoader) {
+      const interval = setInterval(() => {
+        setLoadingProgress(prev => {
+          if (prev >= 100) {
+            clearInterval(interval);
+            setTimeout(() => {
+              setShowLoader(false);
+              setPageLoading(false); // Ensure main page loading is also cleared
+            }, 800);
+            return 100;
+          }
+          // Dynamic simulation of resource allocation
+          const increment = Math.random() * 12 + 2;
+          return Math.min(prev + increment, 100);
+        });
+      }, 120);
+      return () => clearInterval(interval);
+    }
+  }, [showLoader]);
+  
+  // Terms Acceptance Check
+  useEffect(() => {
+    if (!showSplash && !showLoader && isAuthReady) {
+      const accepted = localStorage.getItem('vms_terms_accepted') === 'true';
+      if (!accepted) {
+        setShowTermsAcceptance(true);
+      }
+    }
+  }, [showSplash, showLoader, isAuthReady]);
 
   // Handle Kiosk Assistance Approval
   useEffect(() => {
@@ -474,6 +590,7 @@ export default function App() {
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
   const [showAppFeedback, setShowAppFeedback] = useState(false);
   const [showBugReport, setShowBugReport] = useState(false);
+  const [showTermsAcceptance, setShowTermsAcceptance] = useState(false);
   const [showPassForVisitor, setShowPassForVisitor] = useState<any | null>(null);
 
   const [newPurpose, setNewPurpose] = useState('');
@@ -3283,61 +3400,15 @@ export default function App() {
     addToast('Kiosk Mode Activated', 'success');
   };
 
-  if (showSplash || pageLoading || authLoading || !isAuthReady) {
+  if (showSplash || showLoader || pageLoading || authLoading || !isAuthReady) {
     return (
       <AnimatePresence mode="wait">
         {showSplash ? (
           <SplashScreen key="splash" organization={organization} />
+        ) : showLoader ? (
+          <LoaderScreen key="loader" progress={loadingProgress} />
         ) : (
-          <motion.div
-            key="loading"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-8 text-center"
-          >
-            <div className="fixed top-0 left-0 right-0 z-[100000]">
-              <motion.div 
-                className="h-1 bg-indigo-600 shadow-[0_0_15px_rgba(79,70,229,0.5)]"
-                initial={{ width: "0%" }}
-                animate={{ width: "100%" }}
-                transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
-              />
-            </div>
-            
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 0.2 }}
-              className="space-y-6 max-w-sm w-full"
-            >
-              <div className="w-20 h-20 bg-white rounded-3xl shadow-xl flex items-center justify-center mx-auto border border-slate-100/50 backdrop-blur-sm">
-                <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
-              </div>
-              
-              <div className="space-y-2">
-                <h3 className="text-slate-900 font-extrabold uppercase tracking-[0.2em] text-[12px]">
-                  Finalizing Authentication
-                </h3>
-                <div className="flex items-center justify-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse" />
-                  <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">
-                    Synchronizing Workspace Protocol
-                  </p>
-                </div>
-              </div>
-
-              <div className="pt-4 flex flex-col gap-1">
-                <div className="h-0.5 w-32 bg-slate-200 rounded-full mx-auto overflow-hidden">
-                  <motion.div 
-                    className="h-full bg-indigo-400"
-                    animate={{ x: ["-100%", "100%"] }}
-                    transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-                  />
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
+          <DashboardSkeleton />
         )}
       </AnimatePresence>
     );
@@ -5905,6 +5976,16 @@ export default function App() {
             onClose={() => setShowBugReport(false)} 
             userId={user?.uid}
             organizationId={user?.organizationId}
+          />
+        )}
+        {showTermsAcceptance && (
+          <TermsAcceptanceModal
+            organizationName={organization?.name}
+            onAccept={() => {
+              localStorage.setItem('vms_terms_accepted', 'true');
+              setShowTermsAcceptance(false);
+              addToast('Welcome to the workspace. Protocols are active.', 'success');
+            }}
           />
         )}
         {showPassForVisitor && (
