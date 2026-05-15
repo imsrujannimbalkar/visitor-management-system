@@ -292,6 +292,8 @@ export interface Inquiry {
   notes?: string;
   recordedBy: string;
   recordedByName: string;
+  reminderSet?: boolean;
+  reminded?: boolean;
   createdAt: string;
   updatedAt: string;
   deleted?: boolean;

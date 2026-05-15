@@ -130,7 +130,7 @@ export default function EmergencyForm({ onClose, onSave, isSaving = false }: Eme
     name: '',
     phone: '',
     purpose: '',
-    visitorType: 'Guest',
+    visitorType: '',
     notes: '',
     recordedBy: '',
     date: new Date().toISOString().split('T')[0],
@@ -272,25 +272,37 @@ export default function EmergencyForm({ onClose, onSave, isSaving = false }: Eme
     >
       {/* Clean Background Design */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-red-600/10 blur-[120px] rounded-full" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-red-900/10 blur-[120px] rounded-full" />
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-red-600/20 blur-[150px] rounded-full animate-pulse" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-red-900/20 blur-[150px] rounded-full" />
+        
+        {/* Security Grid Effect */}
+        <div className="absolute inset-0 opacity-[0.03]" 
+          style={{ backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`, backgroundSize: '40px 40px' }} 
+        />
+        
+        {/* Subtle Scanlines */}
+        <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.03),rgba(0,255,0,0.01),rgba(0,0,255,0.03))] z-50 bg-[length:100%_2px,3px_100%]" />
       </div>
 
       {/* Protocol ID Header */}
       <div className="fixed top-10 left-10 flex flex-col items-start gap-1 hidden lg:flex z-50">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-          <p className="text-white/40 font-black text-[10px] uppercase tracking-[0.4em]">Emergency Entry Active</p>
-        </div>
-        <p className="text-white/20 font-mono text-[9px] uppercase tracking-[0.2em]">Entry ID: <span className="text-white/50">{formData.visitorId || 'PENDING'}</span></p>
+        <motion.div 
+          animate={{ opacity: [0.4, 1, 0.4] }}
+          transition={{ duration: 2, repeat: Infinity }}
+          className="flex items-center gap-3 mb-2 px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full"
+        >
+          <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+          <p className="text-red-500 font-black text-[9px] uppercase tracking-[0.4em]">Protocol Active</p>
+        </motion.div>
+        <p className="text-white/20 font-mono text-[9px] uppercase tracking-[0.2em] ml-1">Sequence: <span className="text-white/50">{formData.visitorId || 'INITIALIZING...'}</span></p>
       </div>
 
       {/* Close Button */}
       <motion.button 
-        whileHover={{ scale: 1.1, rotate: 90, backgroundColor: "rgba(239, 68, 68, 0.2)" }}
+        whileHover={{ scale: 1.1, rotate: 90, backgroundColor: "rgba(239, 68, 68, 0.3)" }}
         whileTap={{ scale: 0.9 }}
         onClick={onClose}
-        className="fixed top-10 right-10 p-5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-white/60 hover:text-white transition-all backdrop-blur-2xl z-[20001]"
+        className="fixed top-10 right-10 p-5 bg-white/5 hover:bg-red-500/20 border border-white/10 rounded-2xl text-white/60 hover:text-white transition-all backdrop-blur-2xl z-[20001] shadow-2xl"
       >
         <X className="h-6 w-6" />
       </motion.button>
@@ -300,46 +312,53 @@ export default function EmergencyForm({ onClose, onSave, isSaving = false }: Eme
           <motion.div 
             initial={{ y: -20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            className="inline-flex items-center gap-4 px-5 py-2.5 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-[10px] font-black uppercase tracking-[0.4em] mb-6 backdrop-blur-md"
+            className="inline-flex items-center gap-4 px-6 py-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-red-500 shadow-[0_0_50px_rgba(239,68,68,0.1)] mb-8 backdrop-blur-md"
           >
-            <AlertTriangle className="h-4 w-4" />
-            Quick Entry Form
+            <AlertTriangle className="h-4 w-4 animate-pulse" />
+            <span className="text-[10px] font-black uppercase tracking-[0.5em]">System Override: Emergency Mode</span>
           </motion.div>
-          <h2 className="text-5xl sm:text-6xl font-black text-white tracking-tighter mb-4">
-            Emergency <span className="text-red-500">Entry Mode</span>
+          
+          <h2 className="text-6xl sm:text-7xl font-black text-white tracking-tighter mb-4 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <span className="bg-clip-text text-transparent bg-gradient-to-b from-white to-white/50">EMERGENCY</span> 
+            <span className="px-6 py-2 bg-red-600 rounded-3xl shadow-[0_0_60px_rgba(220,38,38,0.4)] rotate-[-2deg]">MODE</span>
           </h2>
-          <p className="text-slate-400 font-bold text-sm sm:text-base max-w-md mx-auto leading-relaxed">
-            A simple, reliable fallback for visitor registration.
+          <p className="text-slate-500 font-bold text-sm sm:text-base max-w-md mx-auto leading-relaxed uppercase tracking-widest opacity-80">
+            Intelligent Monitor Bypass Protocol
           </p>
         </div>
 
-        <div className="w-full max-w-2xl bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-[3rem] p-8 sm:p-12 shadow-[0_64px_128px_-24px_rgba(0,0,0,0.9)] relative overflow-hidden">
+        <div className="w-full max-w-2xl bg-slate-900/60 backdrop-blur-3xl border border-white/10 rounded-[3.5rem] p-8 sm:p-14 shadow-[0_80px_160px_-30px_rgba(0,0,0,0.9),0_0_80px_rgba(239,68,68,0.05)] relative overflow-hidden group">
+          {/* Subtle Glow Ring */}
+          <div className="absolute inset-0 rounded-[3.5rem] border border-red-500/10 group-hover:border-red-500/20 transition-colors pointer-events-none" />
+          
           {/* Progress Bar */}
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-white/[0.05]">
+          <div className="absolute top-0 left-0 right-0 h-2 bg-white/[0.03]">
             <motion.div 
               initial={{ width: "0%" }}
               animate={{ width: step === 1 ? "50%" : "100%" }}
-              className="h-full bg-red-600 shadow-[0_0_20px_rgba(239,68,68,0.5)]"
+              className="h-full bg-gradient-to-r from-red-600 to-red-400 shadow-[0_0_30px_rgba(239,68,68,0.8)]"
             />
           </div>
 
-          <div className="flex justify-between items-end mb-12">
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <span className="w-8 h-8 rounded-xl bg-red-500/20 flex items-center justify-center text-red-500 font-black text-xs border border-red-500/30">
+          <div className="flex justify-between items-end mb-12 relative z-10">
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <span className="w-10 h-10 rounded-2xl bg-red-500/20 flex items-center justify-center text-red-500 font-black text-sm border border-red-500/30 shadow-[0_0_20px_rgba(239,68,68,0.2)]">
                   0{step}
                 </span>
-                <p className="text-white/40 font-mono text-[9px] uppercase tracking-[0.3em]">Status: Ready</p>
+                <div className="space-y-1">
+                  <p className="text-white/40 font-mono text-[10px] uppercase tracking-[0.4em]">Internal System Ready</p>
+                  <h3 className="text-4xl font-black text-white tracking-tight leading-none bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
+                    {step === 1 ? "Visitor Identity" : "Auth Protocol"}
+                  </h3>
+                </div>
               </div>
-              <h3 className="text-3xl font-black text-white tracking-tight">
-                {step === 1 ? "Visitor Details" : "Final Confirmation"}
-              </h3>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-3 mb-2">
               {[1, 2].map((i) => (
                 <div 
                   key={i} 
-                  className={`h-1.5 rounded-full transition-all duration-500 ${step === i ? 'bg-red-500 w-12' : 'bg-white/10 w-6'}`} 
+                  className={`h-2 rounded-full transition-all duration-700 ${step === i ? 'bg-red-500 w-16 shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 'bg-white/5 w-8'}`} 
                 />
               ))}
             </div>
@@ -349,48 +368,53 @@ export default function EmergencyForm({ onClose, onSave, isSaving = false }: Eme
             {step === 1 ? (
               <motion.div
                 key="step1"
-                initial={{ x: 30, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                exit={{ x: -30, opacity: 0 }}
-                className="space-y-8"
+                initial={{ x: 50, opacity: 0, filter: "blur(10px)" }}
+                animate={{ x: 0, opacity: 1, filter: "blur(0px)" }}
+                exit={{ x: -50, opacity: 0, filter: "blur(10px)" }}
+                className="space-y-10"
               >
-                <div className="grid gap-6">
-                  <div className="space-y-2.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-6">Visitor Full Name</label>
+                <div className="grid gap-8">
+                  <div className="space-y-3">
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-[0.4em] ml-8 flex items-center gap-2">
+                      <div className="w-1 h-1 rounded-full bg-red-500" />
+                      Legal Identity
+                    </label>
                     <VoiceInput
                       required
                       autoFocus
                       type="text"
-                      placeholder="Enter identity"
+                      placeholder="Input Full Name..."
                       onKeyDown={(e) => e.key === 'Enter' && handleNext()}
-                      className="w-full pr-8 py-5 sm:py-7 bg-white/[0.03] border border-white/10 rounded-[2rem] focus-within:ring-4 focus-within:ring-red-500/20 focus-within:border-red-500/50 focus-within:bg-white/[0.06] outline-none transition-all font-black text-white text-xl sm:text-2xl placeholder:text-slate-700"
+                      className="w-full pr-8 py-6 sm:py-8 bg-white/[0.02] border border-white/5 rounded-[2.5rem] focus-within:ring-8 focus-within:ring-red-500/10 focus-within:border-red-500/40 focus-within:bg-white/[0.05] outline-none transition-all font-black text-white text-2xl sm:text-3xl placeholder:text-slate-800 tracking-tight"
                       value={formData.name}
                       onValueChange={(val) => setFormData({ ...formData, name: val })}
-                      icon={<User className="h-5 w-5 sm:h-6 sm:w-6 text-slate-500 group-focus-within:text-red-500 transition-colors" />}
+                      icon={<User className="h-6 w-6 sm:h-7 sm:w-7 text-slate-600 group-focus-within:text-red-500 transition-colors" />}
                     />
                   </div>
 
-                  <div className="space-y-2.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-6">Contact Reference</label>
+                  <div className="space-y-3">
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-[0.4em] ml-8 flex items-center gap-2">
+                      <div className="w-1 h-1 rounded-full bg-red-500" />
+                      Contact Comms (Skip if unknown)
+                    </label>
                     <div className="relative group">
-                      <div className="absolute inset-y-0 left-0 pl-8 flex items-center pointer-events-none text-slate-500 group-focus-within:text-red-500 transition-colors">
-                        <Phone className="h-5 w-5 sm:h-6 sm:w-6" />
+                      <div className="absolute inset-y-0 left-0 pl-10 flex items-center pointer-events-none text-slate-600 group-focus-within:text-red-500 transition-colors">
+                        <Phone className="h-6 w-6 sm:h-7 sm:w-7" />
                       </div>
                       <input
-                        required
                         type="tel"
-                        placeholder="Phone number"
+                        placeholder="Tele-com Number"
                         onKeyDown={(e) => e.key === 'Enter' && handleNext()}
-                        className="w-full pl-16 pr-32 py-5 sm:py-7 bg-white/[0.03] border border-white/10 rounded-[2rem] focus:ring-4 focus:ring-red-500/20 focus:border-red-500/50 focus:bg-white/[0.06] outline-none transition-all font-black text-white text-xl sm:text-2xl placeholder:text-slate-700"
+                        className="w-full pl-20 pr-36 py-6 sm:py-8 bg-white/[0.02] border border-white/5 rounded-[2.5rem] focus:ring-8 focus:ring-red-500/10 focus:border-red-500/40 focus:bg-white/[0.05] outline-none transition-all font-black text-white text-2xl sm:text-3xl placeholder:text-slate-800 tracking-tight"
                         value={formData.phone}
                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                       />
                       {formData.phone && (
-                        <div className="absolute inset-y-0 right-4 flex items-center gap-2">
-                          <a href={formData.phone ? `tel:${formData.phone}` : undefined} className="p-2 sm:p-3 bg-white/5 hover:bg-white/10 text-emerald-400 rounded-2xl transition-all" title="Call">
+                        <div className="absolute inset-y-0 right-6 flex items-center gap-3">
+                          <a href={formData.phone ? `tel:${formData.phone}` : undefined} className="p-3 sm:p-4 bg-white/5 hover:bg-emerald-500/20 text-emerald-500 rounded-2xl transition-all border border-emerald-500/10" title="Voice Channel">
                             <Phone className="h-5 w-5" />
                           </a>
-                          <a href={`https://wa.me/${(formData.phone || '').replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="p-2 sm:p-3 bg-white/5 hover:bg-white/10 text-emerald-400 rounded-2xl transition-all" title="WhatsApp">
+                          <a href={`https://wa.me/${(formData.phone || '').replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="p-3 sm:p-4 bg-white/5 hover:bg-emerald-500/20 text-emerald-500 rounded-2xl transition-all border border-emerald-500/10" title="Data Channel">
                             <MessageCircle className="h-5 w-5" />
                           </a>
                         </div>
@@ -399,77 +423,83 @@ export default function EmergencyForm({ onClose, onSave, isSaving = false }: Eme
                   </div>
 
                   <UnifiedDropdown
-                    label="Entry Purpose"
-                    icon={<Search className="h-5 w-5 sm:h-6 sm:w-6" />}
+                    label="Authorized Mission"
+                    icon={<Search className="h-6 w-6" />}
                     value={formData.purpose}
                     options={PURPOSES}
                     onChange={(val) => setFormData({ ...formData, purpose: val })}
-                    placeholder="Select purpose"
+                    placeholder="Select Mission Purpose"
                     required
                     supportVoice
                   />
                 </div>
 
-                <div className="pt-4">
+                <div className="pt-6">
                   <motion.button
-                    whileHover={{ scale: 1.02, backgroundColor: "rgb(220 38 38)" }}
+                    whileHover={{ scale: 1.02, backgroundColor: "rgb(220 38 38)", boxShadow: "0 0 40px rgba(220,38,38,0.4)" }}
                     whileTap={{ scale: 0.98 }}
                     onClick={handleNext}
                     disabled={!formData.name || !formData.purpose}
-                    className="w-full py-6 sm:py-8 bg-red-600 text-white font-black rounded-[2rem] shadow-[0_20px_40px_-10px_rgba(220,38,38,0.3)] transition-all flex items-center justify-center gap-4 text-xl sm:text-2xl disabled:opacity-20 disabled:grayscale"
+                    className="w-full py-8 sm:py-10 bg-red-600 text-white font-black rounded-[2.5rem] shadow-[0_20px_50px_-10px_rgba(220,38,38,0.4)] transition-all flex items-center justify-center gap-6 text-2xl sm:text-3xl disabled:opacity-10 disabled:grayscale uppercase tracking-widest"
                   >
-                    Proceed to Authorization
-                    <ArrowRight className="h-7 w-7" />
+                    Next Logic Gate
+                    <ArrowRight className="h-8 w-8" />
                   </motion.button>
                 </div>
               </motion.div>
             ) : (
               <motion.div
                 key="step2"
-                initial={{ x: 30, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                exit={{ x: -30, opacity: 0 }}
-                className="space-y-8"
+                initial={{ x: 50, opacity: 0, filter: "blur(10px)" }}
+                animate={{ x: 0, opacity: 1, filter: "blur(0px)" }}
+                exit={{ x: -50, opacity: 0, filter: "blur(10px)" }}
+                className="space-y-10"
               >
-                <div className="grid gap-6">
+                <div className="grid gap-8">
                   <UnifiedDropdown
-                    label="Visitor Classification"
-                    icon={<Tag className="h-5 w-5 sm:h-6 sm:w-6" />}
+                    label="Identity Class"
+                    icon={<Tag className="h-6 w-6" />}
                     value={formData.visitorType}
                     options={TYPES}
                     onChange={(val) => setFormData({ ...formData, visitorType: val })}
-                    placeholder="Select category"
+                    placeholder="Classify Identity"
                     required
                   />
 
-                  <div className="space-y-2.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-6">Protocol Notes</label>
+                  <div className="space-y-3">
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-[0.4em] ml-8 flex items-center gap-2">
+                      <div className="w-1 h-1 rounded-full bg-red-500" />
+                      Incident Context
+                    </label>
                     <div className="relative group">
-                      <div className="absolute inset-y-0 left-0 pl-8 pt-6 flex items-start pointer-events-none text-slate-500 group-focus-within:text-red-500 transition-colors">
-                        <FileText className="h-5 w-5 sm:h-6 sm:w-6" />
+                      <div className="absolute inset-y-0 left-0 pl-10 pt-7 flex items-start pointer-events-none text-slate-600 group-focus-within:text-red-500 transition-colors">
+                        <FileText className="h-6 w-6 sm:h-7 sm:w-7" />
                       </div>
                       <textarea
-                        placeholder="Additional context"
+                        placeholder="System additional telemetry data..."
                         rows={2}
-                        className="w-full pl-16 pr-8 py-6 sm:py-8 bg-white/[0.03] border border-white/10 rounded-[2rem] focus:ring-4 focus:ring-red-500/20 focus:border-red-500/50 focus:bg-white/[0.06] outline-none transition-all font-black text-white text-xl sm:text-2xl placeholder:text-slate-700 resize-none"
+                        className="w-full pl-20 pr-8 py-7 sm:py-9 bg-white/[0.02] border border-white/5 rounded-[2.5rem] focus:ring-8 focus:ring-red-500/10 focus:border-red-500/40 focus:bg-white/[0.05] outline-none transition-all font-black text-white text-xl sm:text-2xl placeholder:text-slate-800 resize-none tracking-tight"
                         value={formData.notes}
                         onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-2.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-6">Staff Reference</label>
+                  <div className="space-y-3">
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-[0.4em] ml-8 flex items-center gap-2">
+                      <div className="w-1 h-1 rounded-full bg-red-500" />
+                      Command Center Authorization
+                    </label>
                     <div className="relative group">
-                      <div className="absolute inset-y-0 left-0 pl-8 flex items-center pointer-events-none text-slate-500 group-focus-within:text-red-500 transition-colors">
-                        <PenTool className="h-5 w-5 sm:h-6 sm:w-6" />
+                      <div className="absolute inset-y-0 left-0 pl-10 flex items-center pointer-events-none text-slate-600 group-focus-within:text-red-500 transition-colors">
+                        <PenTool className="h-6 w-6 sm:h-7 sm:w-7" />
                       </div>
                       <input
                         required
                         type="text"
-                        placeholder="Staff member name"
+                        placeholder="Authorized Staff ID/Name"
                         onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                        className="w-full pl-16 pr-8 py-5 sm:py-7 bg-white/[0.03] border border-white/10 rounded-[2rem] focus:ring-4 focus:ring-red-500/20 focus:border-red-500/50 focus:bg-white/[0.06] outline-none transition-all font-black text-white text-xl sm:text-2xl placeholder:text-slate-700"
+                        className="w-full pl-20 pr-8 py-6 sm:py-8 bg-white/[0.02] border border-white/5 rounded-[2.5rem] focus:ring-8 focus:ring-red-500/10 focus:border-red-500/40 focus:bg-white/[0.05] outline-none transition-all font-black text-white text-2xl placeholder:text-slate-800 tracking-tight uppercase"
                         value={formData.recordedBy}
                         onChange={(e) => setFormData({ ...formData, recordedBy: e.target.value })}
                       />
@@ -477,28 +507,28 @@ export default function EmergencyForm({ onClose, onSave, isSaving = false }: Eme
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-6">
                   <motion.button
-                    whileHover={{ backgroundColor: "rgba(255,255,255,0.05)" }}
+                    whileHover={{ backgroundColor: "rgba(255,255,255,0.08)", scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => setStep(1)}
-                    className="py-6 sm:py-8 bg-white/5 text-white font-black rounded-[2rem] border border-white/5 transition-all text-lg uppercase tracking-widest"
+                    className="py-8 sm:py-10 bg-white/5 text-white font-black rounded-[2.5rem] border border-white/10 transition-all text-xl uppercase tracking-[0.3em] backdrop-blur-md"
                   >
-                    Back
+                    Return
                   </motion.button>
                   <motion.button
-                    whileHover={{ scale: 1.02, backgroundColor: "rgb(220 38 38)" }}
+                    whileHover={{ scale: 1.02, backgroundColor: "rgb(220 38 38)", boxShadow: "0 0 50px rgba(220,38,38,0.5)" }}
                     whileTap={{ scale: 0.98 }}
                     onClick={handleSubmit}
                     disabled={isSubmitting || isSaving || !formData.recordedBy}
-                    className="py-6 sm:py-8 bg-red-600 text-white font-black rounded-[2rem] shadow-[0_20px_40px_-10px_rgba(220,38,38,0.3)] transition-all flex items-center justify-center gap-4 text-lg sm:text-xl disabled:opacity-20"
+                    className="py-8 sm:py-10 bg-red-600 text-white font-black rounded-[2.5rem] shadow-[0_20px_50px_-10px_rgba(220,38,38,0.4)] transition-all flex items-center justify-center gap-4 text-xl sm:text-2xl disabled:opacity-20 uppercase tracking-widest"
                   >
                     {isSubmitting || isSaving ? (
-                      <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin" />
+                      <div className="w-10 h-10 border-4 border-white border-t-transparent rounded-full animate-spin" />
                     ) : (
                       <>
-                        <CheckCircle2 className="h-7 w-7" />
-                        Authorize Entry
+                        <CheckCircle2 className="h-8 w-8" />
+                        Finalize
                       </>
                     )}
                   </motion.button>

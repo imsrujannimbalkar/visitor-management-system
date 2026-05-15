@@ -101,7 +101,7 @@ import PreRegistrationTab from './components/PreRegistrationTab';
 import KioskPreRegLookup from './components/KioskPreRegLookup';
 import InquiryTracker from './components/InquiryTracker';
 import { geminiService } from './services/geminiService';
-import { Visitor, User, VisitorStatus, UserRole, Organization, Notification, Profile, Visit, Donation, DonationAuditEntry, PreRegistration } from './types';
+import { Visitor, User, VisitorStatus, UserRole, Organization, Notification, Profile, Visit, Donation, DonationAuditEntry, PreRegistration, Inquiry } from './types';
 import { useToast } from './components/Toast';
 import { savePendingProfile, savePendingVisit, getPendingProfiles, getPendingVisits, clearPendingProfile, clearPendingVisit } from './lib/offline';
 import { createBackup, getBackups } from './services/backupService';
@@ -572,6 +572,43 @@ export default function App() {
       console.error('Failed to create notification:', error);
     }
   }, [user?.organizationId]);
+
+  // Inquiry Reminders Logic
+  useEffect(() => {
+    const orgId = user?.organizationId;
+    if (!orgId || !user) return;
+
+    const q = query(
+      collection(db, 'organizations', orgId, 'inquiries'),
+      where('deleted', '==', false),
+      where('reminderSet', '==', true)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const today = new Date().toISOString().split('T')[0];
+      snapshot.docs.forEach(async (docSnap) => {
+        const inquiry = { id: docSnap.id, ...docSnap.data() } as Inquiry;
+        
+        // Only notify if status is not COMPLETED or CANCELLED
+        if (inquiry.status !== 'PENDING' && inquiry.status !== 'IN_PROGRESS') return;
+        
+        // Trigger notification if today is followUpDate and not yet reminded
+        if (inquiry.followUpDate === today && !inquiry.reminded) {
+          await createNotification({
+            title: 'Follow-up Due Today',
+            message: `Inquiry follow-up for ${inquiry.callerName} is scheduled for today.`,
+            type: 'FOLLOW_UP',
+            relatedId: inquiry.id
+          });
+          
+          const ref = doc(db, 'organizations', orgId, 'inquiries', inquiry.id);
+          await updateDoc(ref, { reminded: true, updatedAt: new Date().toISOString() });
+        }
+      });
+    });
+
+    return () => unsubscribe();
+  }, [user?.organizationId, user?.uid, createNotification]);
 
   const logActivity = useCallback(async (action: string, details: string) => {
     const orgId = user?.organizationId;
@@ -1156,10 +1193,11 @@ export default function App() {
   useEffect(() => {
     const handleUrlChange = async () => {
       const params = new URLSearchParams(window.location.search);
-      const passId = params.get('passId');
-      const orgId = params.get('orgId');
-      const mode = params.get('mode');
-      const view = params.get('view');
+      // Resolve organization first
+      const orgId = params.get('orgId')?.trim() || '';
+      const passId = params.get('passId')?.trim() || '';
+      const mode = params.get('mode')?.trim() || '';
+      const view = params.get('view')?.trim() || '';
 
       if (view === 'register' && orgId) {
         setShowPublicRegister(orgId);
@@ -1169,6 +1207,11 @@ export default function App() {
         setShowPublicRegister(null);
         
         if (mode === 'checkout') {
+          // Check if we already tried this in this session to avoid race with VisitorPass
+          const sessionKey = `checkout_${passId}`;
+          if (sessionStorage.getItem(sessionKey)) return;
+          sessionStorage.setItem(sessionKey, 'processing');
+
           try {
             const response = await fetch(`/api/visitors/${passId}/checkout`, {
               method: 'PUT',
@@ -1195,18 +1238,35 @@ export default function App() {
             }
           } catch (error: any) {
             console.error('Auto-checkout error:', error);
-            let errorTitle = 'Check-out Error';
+            let errorTitle = 'Check-out Status';
             let errorText = error.message || 'We could not complete your automatic check-out.';
             
-            if (error.message === 'Visit record not found' || error.message.includes('not found')) {
+            const errMsg = error.message?.toLowerCase() || '';
+            if (errMsg.includes('not found') || errMsg.includes('already checked out')) {
               errorTitle = 'Check-out Already Complete';
               errorText = 'We couldn\'t find an active visit for this link. You may have already checked out or the session has expired.';
+              
+              // No need to show error for "already complete" as it's not really an error for the user
+              Swal.fire({
+                title: errorTitle,
+                text: errorText,
+                icon: 'info',
+                background: theme === 'dark' ? '#1e293b' : '#ffffff',
+                color: theme === 'dark' ? '#ffffff' : '#000000',
+                confirmButtonText: 'OK',
+                confirmButtonColor: '#3b82f6',
+                customClass: {
+                  popup: 'rounded-[2rem]',
+                  confirmButton: 'rounded-xl px-10 py-3 font-bold'
+                }
+              });
+              return;
             }
 
             Swal.fire({
               title: errorTitle,
               text: errorText,
-              icon: 'info',
+              icon: 'error',
               background: theme === 'dark' ? '#1e293b' : '#ffffff',
               color: theme === 'dark' ? '#ffffff' : '#000000',
               confirmButtonText: 'OK',
@@ -1247,6 +1307,10 @@ export default function App() {
     try {
       // Sync Profiles first
       for (const profile of pendingProfiles) {
+        if (!profile.phone || !profile.organizationId) {
+          await clearPendingProfile(profile.phone);
+          continue;
+        }
         const sanitizedProfile = { ...profile };
         Object.keys(sanitizedProfile).forEach(key => {
           if ((sanitizedProfile as any)[key] === undefined) (sanitizedProfile as any)[key] = '';
@@ -1257,6 +1321,10 @@ export default function App() {
       
       // Sync Visits
       for (const visit of pendingVisits) {
+        if (!visit.visitId || !visit.organizationId || !visit.visitorPhone) {
+          await clearPendingVisit(visit.visitId);
+          continue;
+        }
         const sanitizedVisit = { ...visit };
         Object.keys(sanitizedVisit).forEach(key => {
           if ((sanitizedVisit as any)[key] === undefined) (sanitizedVisit as any)[key] = '';
@@ -2424,6 +2492,17 @@ export default function App() {
     const orgId = user?.organizationId;
     if (!orgId || !user) return;
 
+    // Robust validation for phone number used in document references
+    // Relaxed for emergency entries as per user request
+    if (!data.isEmergency && (!data.phone || typeof data.phone !== 'string' || data.phone.trim() === '')) {
+      console.error('Missing phone number in saveVisitor data:', data);
+      addToast('A valid phone number is required to save the record.', 'error');
+      return;
+    }
+
+    // Use a fallback for phone if missing (only allowed in emergency mode)
+    const effectivePhone = (data.phone && data.phone.trim() !== '') ? data.phone.trim() : `EMER-${Date.now()}`;
+
     // Check for duplicate check-in (currently inside check)
     if (!editingVisitor) {
       const isAlreadyInside = visits.some(v => v.visitorPhone === data.phone && v.status === 'INSIDE');
@@ -2447,7 +2526,7 @@ export default function App() {
         // Update specific visit record
         await updateDoc(doc(db, 'organizations', orgId, 'visits', editingVisitor.visitId), sanitizeForFirestore({
           visitorName: data.name,
-          visitorPhone: data.phone,
+          visitorPhone: effectivePhone,
           visitorEmail: data.email || '',
           visitorDOB: data.dob || '',
           visitorAddress: data.address || '',
@@ -2458,8 +2537,8 @@ export default function App() {
         }));
 
         // Update profile record - Use setDoc with merge to support phone number updates
-        await setDoc(doc(db, 'organizations', orgId, 'profiles', data.phone), sanitizeForFirestore({
-          phone: data.phone,
+        await setDoc(doc(db, 'organizations', orgId, 'profiles', effectivePhone), sanitizeForFirestore({
+          phone: effectivePhone,
           name: data.name,
           email: data.email || '',
           dob: data.dob || '',
@@ -2492,7 +2571,7 @@ export default function App() {
         
         // 1. Prepare Profile
         const profileData: Profile = {
-          phone: data.phone,
+          phone: effectivePhone,
           name: data.name,
           email: data.email || '',
           dob: data.dob || '',
@@ -2507,7 +2586,7 @@ export default function App() {
         const visitData: Visit = {
           visitId,
           serialNumber: visits.length + 1,
-          visitorPhone: data.phone,
+          visitorPhone: effectivePhone,
           visitorName: data.name,
           visitorEmail: data.email || '',
           visitorDOB: data.dob || '',
@@ -2536,7 +2615,7 @@ export default function App() {
           addToast('Saved offline. Data will sync when back online.', 'info');
         } else {
           // Standard Online Save
-          await setDoc(doc(db, 'organizations', orgId, 'profiles', data.phone), sanitizeForFirestore(profileData));
+          await setDoc(doc(db, 'organizations', orgId, 'profiles', effectivePhone), sanitizeForFirestore(profileData));
           await setDoc(doc(db, 'organizations', orgId, 'visits', visitId), sanitizeForFirestore(visitData));
 
           // Create Notification for new visit
@@ -2601,8 +2680,8 @@ export default function App() {
                 status: 'INSIDE',
                 name: data.name,
                 visitorName: data.name,
-                visitorPhone: `${data.countryCode} ${data.phone}`,
-                phone: `${data.countryCode} ${data.phone}`,
+                visitorPhone: data.phone ? `${data.countryCode || ''} ${data.phone}` : effectivePhone,
+                phone: data.phone ? `${data.countryCode || ''} ${data.phone}` : effectivePhone,
                 purpose: data.purpose,
                 checkInTime: data.checkInTime || new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
                 date: data.date || new Date().toISOString().split('T')[0]
@@ -3752,7 +3831,21 @@ export default function App() {
           </main>
         </div>
       ) : (
-        <div className="min-h-screen bg-slate-50/50 font-sans text-ngo-primary flex flex-col overflow-x-hidden relative pb-20 lg:pb-0">
+        <div className={`min-h-screen bg-slate-50/50 font-sans text-ngo-primary flex flex-col overflow-x-hidden relative pb-20 lg:pb-0 transition-all duration-700 ${showEmergencyForm ? 'ring-[16px] ring-inset ring-red-600/30' : ''}`}>
+          {/* Emergency Alert Banner */}
+          <AnimatePresence>
+            {showEmergencyForm && (
+              <motion.div
+                initial={{ y: -100 }}
+                animate={{ y: 0 }}
+                exit={{ y: -100 }}
+                className="fixed top-0 inset-x-0 h-1 bg-red-600 z-[20000] shadow-[0_0_20px_rgba(220,38,38,0.5)]"
+              >
+                <div className="absolute inset-0 bg-red-500 animate-pulse" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Floating Emergency Button - Truly Fixed to Viewport */}
           <AnimatePresence>
             {!showEmergencyForm && (
@@ -5010,14 +5103,16 @@ export default function App() {
                   donationTypes={organization?.donationTypes || DEFAULT_DONATION_TYPES}
                   paymentModes={organization?.paymentModes || DEFAULT_PAYMENT_MODES}
                   onUpdateVisit={async (visitId, data) => {
-                    const visitRef = doc(db, 'organizations', organization?.id || '', 'visits', visitId);
+                    if (!visitId || !organization?.id) return;
+                    const visitRef = doc(db, 'organizations', organization.id, 'visits', visitId);
                     await updateDoc(visitRef, sanitizeForFirestore(data));
-                    addToast('Donation updated!', 'success');
+                    addToast('Record updated successfully!', 'success');
                   }}
                   onUpdateProfile={async (phone, data) => {
-                    const profileRef = doc(db, 'organizations', organization?.id || '', 'profiles', phone);
+                    if (!phone || !organization?.id) return;
+                    const profileRef = doc(db, 'organizations', organization.id, 'profiles', phone);
                     await updateDoc(profileRef, sanitizeForFirestore(data));
-                    addToast('Donor classification updated!', 'success');
+                    addToast('Profile updated successfully!', 'success');
                   }}
                   onAddDonation={async (donationData) => {
                     const orgId = user?.organizationId;

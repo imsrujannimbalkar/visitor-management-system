@@ -19,7 +19,9 @@ import {
   ChevronDown,
   ArrowRight,
   Download,
-  UserCheck
+  UserCheck,
+  Bell,
+  Check
 } from 'lucide-react';
 import { 
   collection, 
@@ -64,7 +66,8 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
     purpose: '',
     followUpDate: format(new Date(), 'yyyy-MM-dd'),
     priority: 'MEDIUM' as 'LOW' | 'MEDIUM' | 'HIGH',
-    notes: ''
+    notes: '',
+    reminderSet: false
   });
 
   useEffect(() => {
@@ -103,6 +106,7 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
         status: editingInquiry ? editingInquiry.status : 'PENDING' as const,
         priority: formData.priority,
         notes: formData.notes,
+        reminderSet: formData.reminderSet,
         recordedBy: user.uid,
         recordedByName: user.name,
         updatedAt: new Date().toISOString(),
@@ -115,7 +119,8 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
       } else {
         await addDoc(collection(db, 'organizations', organization.id, 'inquiries'), {
           ...inquiryData,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          reminded: false
         });
         Swal.fire('Success!', 'New inquiry added.', 'success');
       }
@@ -136,7 +141,8 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
       purpose: '',
       followUpDate: format(new Date(), 'yyyy-MM-dd'),
       priority: 'MEDIUM',
-      notes: ''
+      notes: '',
+      reminderSet: false
     });
     setEditingInquiry(null);
   };
@@ -542,7 +548,8 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
                           purpose: inquiry.purpose,
                           followUpDate: inquiry.followUpDate,
                           priority: inquiry.priority,
-                          notes: inquiry.notes || ''
+                          notes: inquiry.notes || '',
+                          reminderSet: inquiry.reminderSet || false
                         }); setShowAddModal(true); }}
                         className="w-full flex items-center gap-3 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl transition-all"
                       >
@@ -596,6 +603,9 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
                   }`}>
                     Follow up: {format(new Date(inquiry.followUpDate), 'dd MMM yyyy')}
                   </span>
+                  {inquiry.reminderSet && (
+                    <Bell className={`h-3.5 w-3.5 ${inquiry.reminded ? 'text-emerald-500' : 'text-indigo-500 animate-pulse'}`} />
+                  )}
                 </div>
 
                 {inquiry.notes && (
@@ -787,6 +797,19 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
                     value={formData.notes}
                     onChange={e => setFormData({ ...formData, notes: e.target.value })}
                   />
+                </div>
+
+                <div className="flex items-center gap-3 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 group cursor-pointer" onClick={() => setFormData({ ...formData, reminderSet: !formData.reminderSet })}>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${formData.reminderSet ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white text-slate-400 border border-slate-200'}`}>
+                    <Bell className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600">Set Follow-up Reminder</p>
+                    <p className="text-[9px] font-bold text-slate-400">Receive a system notification on the follow-up date</p>
+                  </div>
+                  <div className={`w-6 h-6 rounded-full border-2 transition-all flex items-center justify-center ${formData.reminderSet ? 'bg-indigo-600 border-indigo-600' : 'border-slate-200'}`}>
+                    {formData.reminderSet && <Check className="h-3 w-3 text-white" />}
+                  </div>
                 </div>
 
                 <div className="pt-2 flex gap-3">
