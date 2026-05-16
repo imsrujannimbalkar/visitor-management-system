@@ -58,7 +58,7 @@ service cloud.firestore {
              data.visitorName is string && data.visitorName.size() <= 128 &&
              data.status in ['INSIDE', 'CHECKED OUT', 'DELETED'] &&
              data.organizationId is string &&
-             ((isSignedIn() && data.recordedBy == request.auth.uid) || (!isSignedIn() && data.recordedBy == 'KIOSK'));
+             ((isSignedIn() && data.recordedBy == request.auth.uid) || (!isSignedIn() && data.recordedBy in ['KIOSK', 'EMERGENCY']));
     }
 
     function isValidInquiry(data) {

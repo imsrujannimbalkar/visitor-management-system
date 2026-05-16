@@ -2617,19 +2617,32 @@ export default function App() {
       setIsSaving(true);
       const visitData = {
         ...visitor,
+        visitId: visitor.visitorId, // Add this to match Firestore rules
+        visitorName: visitor.name || 'Emergency Entry',
+        visitorPhone: visitor.phone || `EMER-${Date.now()}`,
         organizationId: organization.id,
         recordedBy: user?.uid || 'EMERGENCY',
-        recordedByName: user?.name || 'Emergency System',
+        recordedByName: visitor.recordedBy || user?.name || 'Emergency System',
         status: 'INSIDE',
         isEmergency: true,
-        entryMethod: 'Emergency Mode'
+        entryMethod: 'Emergency Mode',
+        category: visitor.visitorType || visitor.category || 'Guest'
       };
 
       const visitRef = doc(db, 'organizations', organization.id, 'visits', visitor.visitorId);
       await setDoc(visitRef, sanitizeForFirestore(visitData));
       
       setIsSaving(false);
-      addToast('Emergency entry recorded successfully', 'success');
+      Swal.fire({
+        title: 'Check-in Successful',
+        text: 'Emergency entry has been recorded. Thank you.',
+        icon: 'success',
+        timer: 3000,
+        showConfirmButton: false,
+        background: '#0f172a',
+        color: '#f8fafc',
+        iconColor: '#10b981'
+      });
     } catch (error) {
       console.error('Emergency entry error:', error);
       addToast('Critical: Failed to save emergency record', 'error');

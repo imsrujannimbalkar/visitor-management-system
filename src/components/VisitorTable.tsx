@@ -472,9 +472,10 @@ export default function VisitorTable({
                       </div>
                     </td>
                   </motion.tr>
-                <AnimatePresence>
+                <AnimatePresence mode="wait">
                   {expandedRow === visitor.visitorId && (userRole === 'ADMIN' || userRole === 'STAFF') && (
                     <motion.tr
+                      key={`expanded-${visitor.visitorId}`}
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
                       exit={{ opacity: 0, height: 0 }}
@@ -635,8 +636,8 @@ export default function VisitorTable({
                               </div>
 
                               <div className="space-y-6 max-h-[500px] overflow-y-auto pr-4 custom-scrollbar">
-                                {getVisitorHistory(visitor.phone).map((visit, idx) => (
-                                  <div key={idx} className="group relative pl-10 pb-8 last:pb-0">
+                                {getVisitorHistory(visitor.phone).map((visit) => (
+                                  <div key={visit.visitId} className="group relative pl-10 pb-8 last:pb-0">
                                     <div className="absolute left-0 top-0 bottom-0 w-px bg-slate-100 group-last:bg-transparent" />
                                     <div className={`absolute left-[-5px] top-6 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm transition-transform group-hover:scale-150 ${visit.status === 'INSIDE' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
                                     

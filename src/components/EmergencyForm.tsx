@@ -274,12 +274,46 @@ export default function EmergencyForm({
   }, [formData.date]);
 
   const handleNext = () => {
-    if (formData.name && formData.purpose) {
-      setStep(2);
+    if (!formData.name) {
+      Swal.fire({
+        title: 'Missing Details',
+        text: 'Visitor name is mandatory for emergency protocol.',
+        icon: 'warning',
+        confirmButtonColor: '#dc2626'
+      });
+      return;
     }
+    if (!formData.purpose) {
+      Swal.fire({
+        title: 'Missing Details',
+        text: 'Mission purpose must be assigned.',
+        icon: 'warning',
+        confirmButtonColor: '#dc2626'
+      });
+      return;
+    }
+    setStep(2);
   };
 
   const handleSubmit = async () => {
+    if (!formData.visitorType) {
+      Swal.fire({
+        title: 'Classification Required',
+        text: 'Please select an identity class for the visitor.',
+        icon: 'warning',
+        confirmButtonColor: '#dc2626'
+      });
+      return;
+    }
+    if (!formData.recordedBy) {
+      Swal.fire({
+        title: 'Authorization Required',
+        text: 'Staff name/ID is required to authorize this override.',
+        icon: 'warning',
+        confirmButtonColor: '#dc2626'
+      });
+      return;
+    }
     setIsSubmitting(true);
     try {
       const finalData = {
@@ -445,18 +479,18 @@ export default function EmergencyForm({
             <span className="text-[10px] font-black uppercase tracking-[0.5em]">System Override: Emergency Mode</span>
           </motion.div>
           
-          <h2 className="text-6xl sm:text-7xl font-black text-white tracking-tighter mb-4 flex flex-col sm:flex-row items-center justify-center gap-4">
+          <h2 className="text-5xl sm:text-6xl font-black text-white tracking-tighter mb-4 flex flex-col sm:flex-row items-center justify-center gap-4">
             <span className="bg-clip-text text-transparent bg-gradient-to-b from-white to-white/50">EMERGENCY</span> 
-            <span className="px-6 py-2 bg-red-600 rounded-3xl shadow-[0_0_60px_rgba(220,38,38,0.6)] rotate-[-2deg] border-4 border-white/20 animate-pulse">PROTOCOL</span>
+            <span className="px-5 py-1.5 bg-red-600 rounded-2xl shadow-[0_0_60px_rgba(220,38,38,0.6)] rotate-[-2deg] border-4 border-white/20 animate-pulse">PROTOCOL</span>
           </h2>
           <p className="text-red-500/60 font-black text-[10px] max-w-md mx-auto leading-relaxed uppercase tracking-[0.4em] opacity-80">
             Intelligent Monitor Bypass Protocol v2.4
           </p>
         </div>
 
-        <div className="w-full max-w-2xl bg-slate-900/60 backdrop-blur-3xl border border-white/10 rounded-[3.5rem] p-8 sm:p-14 shadow-[0_80px_160px_-30px_rgba(0,0,0,0.9),0_0_80px_rgba(239,68,68,0.05)] relative overflow-hidden group">
+        <div className="w-full max-w-xl bg-slate-900/60 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] p-6 sm:p-10 shadow-[0_80px_160px_-30px_rgba(0,0,0,0.9),0_0_80px_rgba(239,68,68,0.05)] relative overflow-hidden group">
           {/* Subtle Glow Ring */}
-          <div className="absolute inset-0 rounded-[3.5rem] border border-red-500/10 group-hover:border-red-500/20 transition-colors pointer-events-none" />
+          <div className="absolute inset-0 rounded-[2.5rem] border border-red-500/10 group-hover:border-red-500/20 transition-colors pointer-events-none" />
           
           {/* Progress Bar */}
           <div className="absolute top-0 left-0 right-0 h-2 bg-white/[0.03]">
@@ -475,7 +509,7 @@ export default function EmergencyForm({
                 </span>
                 <div className="space-y-1">
                   <p className="text-white/40 font-mono text-[10px] uppercase tracking-[0.4em]">Internal System Ready</p>
-                  <h3 className="text-4xl font-black text-white tracking-tight leading-none bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
+                  <h3 className="text-3xl font-black text-white tracking-tight leading-none bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
                     {step === 1 ? "Visitor Identity" : "Auth Protocol"}
                   </h3>
                 </div>
@@ -512,10 +546,10 @@ export default function EmergencyForm({
                       type="text"
                       placeholder="Input Full Name..."
                       onKeyDown={(e) => e.key === 'Enter' && handleNext()}
-                      className="w-full pr-8 py-6 sm:py-8 bg-white/[0.02] border border-white/5 rounded-[2.5rem] focus-within:ring-8 focus-within:ring-red-500/10 focus-within:border-red-500/40 focus-within:bg-white/[0.05] outline-none transition-all font-black text-white text-2xl sm:text-3xl placeholder:text-slate-800 tracking-tight"
+                      className="w-full pr-8 py-5 sm:py-6 bg-white/[0.02] border border-white/5 rounded-3xl focus-within:ring-8 focus-within:ring-red-500/10 focus-within:border-red-500/40 focus-within:bg-white/[0.05] outline-none transition-all font-black text-white text-xl sm:text-2xl placeholder:text-slate-800 tracking-tight"
                       value={formData.name}
                       onValueChange={(val) => setFormData({ ...formData, name: val })}
-                      icon={<User className="h-6 w-6 sm:h-7 sm:w-7 text-slate-600 group-focus-within:text-red-500 transition-colors" />}
+                      icon={<User className="h-5 w-5 sm:h-6 sm:w-6 text-slate-600 group-focus-within:text-red-500 transition-colors" />}
                     />
                   </div>
 
@@ -532,7 +566,7 @@ export default function EmergencyForm({
                         type="tel"
                         placeholder="Tele-com Number"
                         onKeyDown={(e) => e.key === 'Enter' && handleNext()}
-                        className="w-full pl-20 pr-36 py-6 sm:py-8 bg-white/[0.02] border border-white/5 rounded-[2.5rem] focus:ring-8 focus:ring-red-500/10 focus:border-red-500/40 focus:bg-white/[0.05] outline-none transition-all font-black text-white text-2xl sm:text-3xl placeholder:text-slate-800 tracking-tight"
+                        className="w-full pl-16 pr-36 py-5 sm:py-6 bg-white/[0.02] border border-white/5 rounded-3xl focus:ring-8 focus:ring-red-500/10 focus:border-red-500/40 focus:bg-white/[0.05] outline-none transition-all font-black text-white text-xl sm:text-2xl placeholder:text-slate-800 tracking-tight"
                         value={formData.phone}
                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                       />
@@ -569,10 +603,10 @@ export default function EmergencyForm({
                     whileTap={{ scale: 0.98 }}
                     onClick={handleNext}
                     disabled={!formData.name || !formData.purpose}
-                    className="w-full py-8 sm:py-10 bg-red-600 text-white font-black rounded-[2.5rem] shadow-[0_20px_50px_-10px_rgba(220,38,38,0.4)] transition-all flex items-center justify-center gap-6 text-2xl sm:text-3xl disabled:opacity-10 disabled:grayscale uppercase tracking-widest"
+                    className="w-full py-6 sm:py-7 bg-red-600 text-white font-black rounded-3xl shadow-[0_20px_50px_-10px_rgba(220,38,38,0.4)] transition-all flex items-center justify-center gap-6 text-xl sm:text-2xl disabled:opacity-10 disabled:grayscale uppercase tracking-widest"
                   >
                     Next Logic Gate
-                    <ArrowRight className="h-8 w-8" />
+                    <ArrowRight className="h-6 w-6" />
                   </motion.button>
                 </div>
               </motion.div>
@@ -609,7 +643,7 @@ export default function EmergencyForm({
                       <textarea
                         placeholder="System additional telemetry data..."
                         rows={2}
-                        className="w-full pl-20 pr-8 py-7 sm:py-9 bg-white/[0.02] border border-white/5 rounded-[2.5rem] focus:ring-8 focus:ring-red-500/10 focus:border-red-500/40 focus:bg-white/[0.05] outline-none transition-all font-black text-white text-xl sm:text-2xl placeholder:text-slate-800 resize-none tracking-tight"
+                        className="w-full pl-16 pr-8 py-5 sm:py-6 bg-white/[0.02] border border-white/5 rounded-3xl focus:ring-8 focus:ring-red-500/10 focus:border-red-500/40 focus:bg-white/[0.05] outline-none transition-all font-black text-white text-lg sm:text-xl placeholder:text-slate-800 resize-none tracking-tight"
                         value={formData.notes}
                         onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                       />
@@ -630,7 +664,7 @@ export default function EmergencyForm({
                         type="text"
                         placeholder="Authorized Staff ID/Name"
                         onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                        className="w-full pl-20 pr-8 py-6 sm:py-8 bg-white/[0.02] border border-white/5 rounded-[2.5rem] focus:ring-8 focus:ring-red-500/10 focus:border-red-500/40 focus:bg-white/[0.05] outline-none transition-all font-black text-white text-2xl placeholder:text-slate-800 tracking-tight uppercase"
+                        className="w-full pl-16 pr-8 py-5 sm:py-6 bg-white/[0.02] border border-white/5 rounded-3xl focus:ring-8 focus:ring-red-500/10 focus:border-red-500/40 focus:bg-white/[0.05] outline-none transition-all font-black text-white text-xl placeholder:text-slate-800 tracking-tight uppercase"
                         value={formData.recordedBy}
                         onChange={(e) => setFormData({ ...formData, recordedBy: e.target.value })}
                       />
@@ -643,7 +677,7 @@ export default function EmergencyForm({
                     whileHover={{ backgroundColor: "rgba(255,255,255,0.08)", scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => setStep(1)}
-                    className="py-8 sm:py-10 bg-white/5 text-white font-black rounded-[2.5rem] border border-white/10 transition-all text-xl uppercase tracking-[0.3em] backdrop-blur-md"
+                    className="py-6 sm:py-7 bg-white/5 text-white font-black rounded-3xl border border-white/10 transition-all text-lg uppercase tracking-[0.3em] backdrop-blur-md"
                   >
                     Return
                   </motion.button>
@@ -652,13 +686,13 @@ export default function EmergencyForm({
                     whileTap={{ scale: 0.98 }}
                     onClick={handleSubmit}
                     disabled={isSubmitting || isSaving || !formData.recordedBy}
-                    className="py-8 sm:py-10 bg-red-600 text-white font-black rounded-[2.5rem] shadow-[0_20px_50px_-10px_rgba(220,38,38,0.4)] transition-all flex items-center justify-center gap-4 text-xl sm:text-2xl disabled:opacity-20 uppercase tracking-widest"
+                    className="py-6 sm:py-7 bg-red-600 text-white font-black rounded-3xl shadow-[0_20px_50px_-10px_rgba(220,38,38,0.4)] transition-all flex items-center justify-center gap-4 text-lg sm:text-xl disabled:opacity-20 uppercase tracking-widest"
                   >
                     {isSubmitting || isSaving ? (
-                      <div className="w-10 h-10 border-4 border-white border-t-transparent rounded-full animate-spin" />
+                      <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin" />
                     ) : (
                       <>
-                        <CheckCircle2 className="h-8 w-8" />
+                        <CheckCircle2 className="h-6 w-6" />
                         Finalize
                       </>
                     )}
