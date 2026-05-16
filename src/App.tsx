@@ -2113,6 +2113,11 @@ export default function App() {
       return;
     }
 
+    if (targetUser.uid === organization?.createdBy) {
+      addToast('Cannot remove the organization creator', 'error');
+      return;
+    }
+
     const { isConfirmed } = await Swal.fire({
       title: 'Remove Team Member?',
       text: `Are you sure you want to remove ${targetUser.name} from the workspace? They will lose all access immediately.`,
@@ -2151,7 +2156,7 @@ export default function App() {
           });
         }
 
-        addToast('Member removed successfully', 'success');
+        addToast(`${targetUser.name} removed from workspace successfully`, 'success');
         logActivity('REMOVE_MEMBER', `Removed user ${targetUser.name} from organization`);
       } catch (error: any) {
         addToast(error.message || 'Failed to remove member', 'error');
@@ -2228,7 +2233,7 @@ export default function App() {
         await updateDoc(doc(db, 'users', targetUser.uid), {
           role: newRole
         });
-        addToast(`Role updated to ${newRole}`, 'success');
+        addToast(`Permissions updated: ${targetUser.name} is now a ${newRole}`, 'success');
       } catch (error: any) {
         addToast(error.message, 'error');
       }
@@ -5770,7 +5775,7 @@ export default function App() {
                             onClick={() => setActiveTab('logs')}
                             className="w-full py-4 bg-white border border-slate-200 text-slate-900 font-bold rounded-xl hover:bg-slate-50 transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-[10px]"
                           >
-                            <History className="h-4 w-4" /> View Protocols
+                            <History className="h-4 w-4" /> View Agreement
                           </button>
                         </div>
                       </div>
@@ -5955,7 +5960,7 @@ export default function App() {
                             }}
                             className="px-8 py-4 bg-emerald-600 text-white font-black rounded-2xl hover:bg-emerald-700 transition-all active:scale-95 shadow-xl shadow-emerald-100 flex items-center gap-3 uppercase tracking-widest text-[10px]"
                           >
-                            <Save className="h-4 w-4" /> Confirm Protocols
+                            <Save className="h-4 w-4" /> Confirm Selection
                           </button>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
@@ -6092,7 +6097,7 @@ export default function App() {
                         </div>
                         <div className="p-8 bg-white border border-red-100 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-8">
                           <div className="space-y-2 text-center md:text-left">
-                            <h4 className="text-sm font-black text-gray-900 uppercase italic tracking-tight">Deactivate Foundation Protocol</h4>
+                            <h4 className="text-sm font-black text-gray-900 uppercase italic tracking-tight">Organization Access Level</h4>
                             <p className="text-xs text-gray-500 font-medium max-w-md leading-relaxed">Terminate all operational activity for this node. Historical data remains securely archived.</p>
                           </div>
                           <button 
