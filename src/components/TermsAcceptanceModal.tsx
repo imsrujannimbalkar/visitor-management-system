@@ -20,18 +20,19 @@ export default function TermsAcceptanceModal({ onAccept, organizationName }: Ter
       <motion.div
         initial={{ scale: 0.9, y: 40 }}
         animate={{ scale: 1, y: 0 }}
-        className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden border border-white/20 flex flex-col max-h-[90vh]"
+        className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] sm:rounded-[3rem] shadow-2xl overflow-hidden border border-white/20 flex flex-col max-h-[85vh] sm:max-h-[90vh]"
       >
-        <AnimatePresence mode="wait">
-          {view === 'decision' ? (
-            <motion.div 
-              key="decision"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              className="flex flex-col h-full"
-            >
-              <div className="p-8 sm:p-12 overflow-y-auto custom-scrollbar flex-1">
+        <div className="flex-1 min-h-0 relative">
+          <AnimatePresence mode="wait">
+            {view === 'decision' ? (
+              <motion.div 
+                key="decision"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="absolute inset-0 flex flex-col"
+              >
+                <div className="p-8 sm:p-12 overflow-y-auto custom-scrollbar flex-1">
                 <div className="flex flex-col items-center text-center space-y-6 mb-10">
                   <div className="w-20 h-20 bg-brand-blue/10 text-brand-blue rounded-3xl flex items-center justify-center shadow-inner">
                     <ShieldCheck className="h-10 w-10" />
@@ -118,9 +119,9 @@ export default function TermsAcceptanceModal({ onAccept, organizationName }: Ter
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              className="flex flex-col h-full bg-white dark:bg-slate-900"
+              className="absolute inset-0 flex flex-col bg-white dark:bg-slate-900"
             >
-              <div className="p-8 border-b border-slate-50 dark:border-white/5 flex items-center justify-between">
+              <div className="p-8 border-b border-slate-50 dark:border-white/5 flex items-center justify-between shrink-0">
                 <button 
                   onClick={() => setView('decision')}
                   className="flex items-center gap-2 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
@@ -149,6 +150,7 @@ export default function TermsAcceptanceModal({ onAccept, organizationName }: Ter
             </motion.div>
           )}
         </AnimatePresence>
+      </div>
       </motion.div>
     </motion.div>
   );
