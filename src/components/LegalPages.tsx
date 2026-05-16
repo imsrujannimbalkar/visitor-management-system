@@ -26,60 +26,69 @@ export const PrivacyPolicy: React.FC<LegalPagesProps> = ({
   appName = "Visitor Management System", 
   organizationName = "The Organization" 
 }) => {
+  const points = [
+    {
+      title: "Secure Data Handling",
+      description: "Secure handling of visitor and organization data ensuring end-to-end encryption.",
+      icon: <Shield className="h-5 w-5" />
+    },
+    {
+      title: "Data Isolation",
+      description: "Organization-level data isolation and protected access to prevent cross-contamination.",
+      icon: <Lock className="h-5 w-5" />
+    },
+    {
+      title: "Cloud Infrastructure",
+      description: "Use of Firebase, Firestore, and secure cloud infrastructure for maximum reliability.",
+      icon: <Database className="h-5 w-5" />
+    },
+    {
+      title: "Operational Continuity",
+      description: "Comprehensive backup and recovery systems for operational continuity and data safety.",
+      icon: <Globe className="h-5 w-5" />
+    },
+    {
+      title: "Audited Communication",
+      description: "Full authentication, audit logs, and encrypted communication for every interaction.",
+      icon: <Eye className="h-5 w-5" />
+    }
+  ];
+
   return (
-    <div className="space-y-8 text-slate-600">
-      <section>
-        <h3 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
-          <Eye className="h-5 w-5 text-brand-blue" />
-          Information We Collect
-        </h3>
-        <p className="mb-4">
-          The {appName} collects information necessary for secure visitor management and organizational efficiency. This includes:
-        </p>
-        <ul className="list-disc pl-6 space-y-2">
-          <li><strong>Personal Identification:</strong> Name, contact number, and email address.</li>
-          <li><strong>Visit Details:</strong> Purpose of visit, time of entry/exit, and host name.</li>
-          <li><strong>Digital Signature:</strong> Authenticated signatures for legal compliance and security.</li>
-          <li><strong>Communication:</strong> Feedback, ratings, and support requests.</li>
-        </ul>
-      </section>
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {points.map((pt, i) => (
+          <motion.div 
+            key={i}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * 0.1 }}
+            className="p-5 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl shadow-sm hover:shadow-md transition-shadow"
+          >
+            <div className="flex gap-4">
+              <div className="shrink-0 w-10 h-10 bg-brand-blue/5 dark:bg-brand-blue/10 text-brand-blue rounded-xl flex items-center justify-center">
+                {pt.icon}
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">{pt.title}</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+                  {pt.description}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
 
-      <section>
-        <h3 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
-          <Database className="h-5 w-5 text-brand-blue" />
-          How We Use Your Data
-        </h3>
-        <p className="mb-4">Your data is processed based on legitimate organizational interests:</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 italic text-sm">
-            "To maintain a secure log of individuals present on the premises."
-          </div>
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 italic text-sm">
-            "To sync visit data with our secure backend for administrative record-keeping."
-          </div>
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 italic text-sm">
-            "To manage appointments and events via our integrated notification system."
-          </div>
-          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 italic text-sm">
-            "To contact you in case of emergencies or for organizational updates."
-          </div>
+      <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-white/5">
+        <div className="flex items-center gap-3 mb-4">
+          <FileText className="h-4 w-4 text-brand-blue" />
+          <h4 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Document Purpose</h4>
         </div>
-      </section>
-
-      <section>
-        <h3 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
-          <Shield className="h-5 w-5 text-brand-blue" />
-          Data Security
-        </h3>
-        <p className="mb-4">
-          We use Google Firebase for secure data storage. Your data is restricted to authorized personnel of {organizationName}.
-        </p>
-      </section>
-
-      <div className="p-6 bg-blue-50 border border-blue-100 rounded-2xl">
-        <p className="text-sm text-blue-800 font-medium">
-          Note: This system complies with modern data protection standards. You may request to review or delete your data at any time by contacting the administrator.
-        </p>
+        <div className="flex items-center justify-between p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+          <span className="text-[11px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Privacy Policy</span>
+          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 italic">Explains how platform data is collected and protected</span>
+        </div>
       </div>
     </div>
   );
@@ -88,35 +97,70 @@ export const PrivacyPolicy: React.FC<LegalPagesProps> = ({
 export const TermsOfService: React.FC<LegalPagesProps> = ({ 
   appName = "Visitor Management System" 
 }) => {
+  const guidelines = [
+    {
+      title: "Intended Use",
+      description: "Platform strictly intended for NGO and visitor management workflows only.",
+      icon: <Globe className="h-5 w-5" />
+    },
+    {
+      title: "Account Security",
+      description: "Users are responsible for account security and authorized use at all times.",
+      icon: <Lock className="h-5 w-5" />
+    },
+    {
+      title: "Service Continuity",
+      description: "Service interruptions may occur during scheduled maintenance or system upgrades.",
+      icon: <Database className="h-5 w-5" />
+    },
+    {
+      title: "Prohibited Access",
+      description: "Unauthorized access or misuse of organization data is strictly prohibited.",
+      icon: <Shield className="h-5 w-5" />
+    },
+    {
+      title: "Accepted Protocols",
+      description: "Continued use of the platform implies full acceptance of all system terms.",
+      icon: <CheckCircle className="h-5 w-5" />
+    }
+  ];
+
   return (
-    <div className="space-y-8 text-slate-600">
-      <section>
-        <h3 className="text-xl font-bold text-slate-900 mb-4">1. Acceptance of Terms</h3>
-        <p>
-          By checking in through the {appName}, you agree to provide accurate information and comply with the facility's security and safety protocols.
-        </p>
-      </section>
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {guidelines.map((pt, i) => (
+          <motion.div 
+            key={i}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * 0.1 }}
+            className="p-5 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl shadow-sm hover:shadow-md transition-shadow"
+          >
+            <div className="flex gap-4">
+              <div className="shrink-0 w-10 h-10 bg-indigo-50 dark:bg-indigo-900/10 text-indigo-600 rounded-xl flex items-center justify-center">
+                {pt.icon}
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">{pt.title}</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+                  {pt.description}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
 
-      <section>
-        <h3 className="text-xl font-bold text-slate-900 mb-4">2. User Responsibility</h3>
-        <p>
-          Users must ensure that the contact details and purpose of visit provided are truthful. Any misuse of the system for fraudulent check-ins may result in restricted access to the facility.
-        </p>
-      </section>
-
-      <section>
-        <h3 className="text-xl font-bold text-slate-900 mb-4">3. Data Integrity</h3>
-        <p>
-          While we strive for 100% uptime, the {appName} relies on cloud services (Google Firebase). We are not liable for data loss caused by third-party service interruptions or incorrect user input.
-        </p>
-      </section>
-
-      <section>
-        <h3 className="text-xl font-bold text-slate-900 mb-4">4. Digital Interaction</h3>
-        <p>
-          By providing your phone number or email, you consent to receive visit-related notifications (check-in confirmation, check-out reminders) via our integrated notification systems.
-        </p>
-      </section>
+      <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-white/5">
+        <div className="flex items-center gap-3 mb-4">
+          <FileText className="h-4 w-4 text-brand-blue" />
+          <h4 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Document Purpose</h4>
+        </div>
+        <div className="flex items-center justify-between p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+          <span className="text-[11px] font-black text-slate-900 dark:text-white uppercase tracking-wider">Terms of Service</span>
+          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 italic">Defines acceptable use and operational responsibilities</span>
+        </div>
+      </div>
     </div>
   );
 };
