@@ -23,6 +23,10 @@ import {
   FileSpreadsheet,
   FileText,
   CheckCircle2,
+  CheckCircle,
+  Database,
+  TrendingUp,
+  Clock,
   AlertCircle,
   AlertTriangle,
   Info,
@@ -58,7 +62,6 @@ import {
   ChevronRight,
   MoreHorizontal,
   HelpCircle,
-  Clock as LucideClock,
   Copy,
   ChevronDown,
   ChevronUp,
@@ -263,12 +266,12 @@ function SplashScreen({ organization }: { organization: Organization | null }) {
       initial={{ opacity: 1 }}
       exit={{ opacity: 0, scale: 1.05, filter: 'blur(10px)' }}
       transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-      className="fixed inset-0 z-[2000] bg-[#051739] flex flex-col items-center justify-center overflow-hidden font-sans italic-none"
+      className="fixed inset-0 z-[2000] bg-slate-50 flex flex-col items-center justify-center overflow-hidden font-sans uppercase-none"
     >
       {/* Background Decor */}
       <div className="absolute inset-0 z-0 overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-blue-600/10 rounded-full blur-[120px]" />
-        <div className="absolute inset-0 opacity-[0.03] bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:32px_32px]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-brand-blue/5 rounded-full blur-[120px]" />
+        <div className="absolute inset-0 opacity-[0.05] bg-[radial-gradient(#000000_1px,transparent_1px)] [background-size:32px_32px]" />
         
         {/* Animated Orbits */}
         {[...Array(3)].map((_, i) => (
@@ -281,11 +284,11 @@ function SplashScreen({ organization }: { organization: Organization | null }) {
             style={{ 
               width: `${400 + i * 200}px`, 
               height: `${400 + i * 200}px`,
-              border: '1px solid rgba(255,255,255,0.05)',
+              border: '1px solid rgba(0,0,0,0.03)',
               borderRadius: '50%'
             }}
           >
-            <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-blue-500 rounded-full blur-[2px] opacity-40`} />
+            <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-brand-blue rounded-full blur-[1px] opacity-20`} />
           </motion.div>
         ))}
       </div>
@@ -298,15 +301,15 @@ function SplashScreen({ organization }: { organization: Organization | null }) {
           transition={{ duration: 1.2, ease: "easeOut" }}
           className="relative mb-12"
         >
-          <div className="h-24 w-24 bg-white/5 backdrop-blur-3xl rounded-[2rem] flex items-center justify-center border border-white/10 shadow-2xl">
+          <div className="h-24 w-24 bg-white rounded-[2.5rem] flex items-center justify-center border border-slate-100 shadow-xl">
              <div className="relative">
-               <Shield className="h-12 w-12 text-white" />
+               <Shield className="h-12 w-12 text-brand-blue" />
                <motion.div 
                  animate={{ opacity: [0.4, 1, 0.4] }}
                  transition={{ duration: 2, repeat: Infinity }}
                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[40%]"
                >
-                 <Users className="h-5 w-5 text-blue-400" />
+                 <Users className="h-5 w-5 text-indigo-500" />
                </motion.div>
              </div>
           </div>
@@ -314,7 +317,7 @@ function SplashScreen({ organization }: { organization: Organization | null }) {
           <motion.div 
             animate={{ rotate: 360 }}
             transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-            className="absolute -inset-4 border-2 border-dashed border-blue-500/20 rounded-[2.5rem]" 
+            className="absolute -inset-4 border-2 border-dashed border-brand-blue/10 rounded-[3rem]" 
           />
         </motion.div>
 
@@ -326,19 +329,19 @@ function SplashScreen({ organization }: { organization: Organization | null }) {
              transition={{ delay: 0.3, duration: 0.8 }}
            >
               <div className="flex items-center justify-center gap-3">
-                 <span className="text-4xl font-bold text-white tracking-widest uppercase">Elite</span>
-                 <span className="text-4xl font-black text-blue-500 tracking-widest uppercase">VMS</span>
+                 <span className="text-4xl font-bold text-slate-900 tracking-tight">Elite</span>
+                 <span className="text-4xl font-black text-brand-blue tracking-tight">VMS</span>
               </div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.5em] mt-3">Intelligent Monitor Architecture</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.5em] mt-3">Smart Visitor Infrastructure</p>
            </motion.div>
 
            {/* Loading Bar */}
-           <div className="w-48 h-1 bg-white/5 rounded-full mt-10 overflow-hidden relative mx-auto">
+           <div className="w-48 h-1 bg-slate-200 rounded-full mt-10 overflow-hidden relative mx-auto shadow-sm">
               <motion.div 
                 initial={{ left: '-100%' }}
                 animate={{ left: '100%' }}
                 transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-blue-500 to-transparent"
+                className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-brand-blue to-transparent"
               />
            </div>
         </div>
@@ -351,8 +354,8 @@ function SplashScreen({ organization }: { organization: Organization | null }) {
         transition={{ delay: 1 }}
         className="absolute bottom-16 text-center"
       >
-        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-          {organization ? `Synchronizing with ${organization.name}` : 'Initializing Secure Terminal'}
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-white/50 backdrop-blur-sm px-6 py-2 rounded-full border border-slate-100">
+          {organization ? `SYNCING: ${organization.name}` : 'COMMENCING INITIALIZATION'}
         </p>
       </motion.div>
     </motion.div>
@@ -360,84 +363,174 @@ function SplashScreen({ organization }: { organization: Organization | null }) {
 }
 
 function LoaderScreen({ progress }: { progress: number }) {
+  const tasks = [
+    { id: 'firebase', label: 'Connecting to Firebase', sub: 'Establishing secure cloud node...', icon: <Database className="h-4 w-4" />, min: 0, max: 25 },
+    { id: 'data', label: 'Fetching App Data', sub: 'Retrieving organization manifest...', icon: <Activity className="h-4 w-4" />, min: 25, max: 55 },
+    { id: 'auth', label: 'Verifying Permissions', sub: 'Auditing user access levels...', icon: <Lock className="h-4 w-4" />, min: 55, max: 80 },
+    { id: 'notify', label: 'Syncing Real-time', sub: 'Preparing live stream socket...', icon: <Bell className="h-4 w-4" />, min: 80, max: 100 }
+  ];
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      exit={{ opacity: 0, filter: 'blur(20px)' }}
-      className="fixed inset-0 z-[2000] bg-slate-50 flex flex-col items-center justify-center font-sans"
+      exit={{ opacity: 0, scale: 0.95, filter: 'blur(20px)' }}
+      className="fixed inset-0 z-[2000] bg-slate-50 flex flex-col items-center justify-start py-12 pt-16 font-sans overflow-y-auto no-scrollbar"
     >
-      <div className="relative w-full max-w-md px-10">
-        <div className="flex justify-between items-end mb-6">
-          <div className="space-y-1">
-            <h2 className="text-sm font-black text-slate-900 uppercase tracking-[0.3em] flex items-center gap-2">
-              <Activity className="h-4 w-4 text-brand-blue animate-pulse" />
-              Decrypting Core
-            </h2>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Allocating System Resources...</p>
-          </div>
-          <div className="text-right">
-            <span className="text-3xl font-black text-slate-900 font-mono tracking-tighter">
-              {Math.round(progress)}
-              <span className="text-xs text-slate-300 ml-1">%</span>
-            </span>
-          </div>
-        </div>
-
-        {/* Enhanced Progress Bar */}
-        <div className="relative h-6 bg-slate-200/50 rounded-full overflow-hidden p-1 shadow-inner">
-          <motion.div 
-            initial={{ width: 0 }}
-            animate={{ width: `${progress}%` }}
-            transition={{ type: "spring", bounce: 0, duration: 0.5 }}
-            className="h-full bg-gradient-to-r from-brand-blue via-indigo-500 to-blue-400 rounded-full relative group"
-          >
-            {/* Gloss Effect */}
-            <div className="absolute inset-x-0 top-0 h-1/2 bg-white/20 rounded-t-full" />
-            
-            {/* Animated Glow */}
-            <motion.div 
-              animate={{ opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-              className="absolute right-0 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/40 blur-md rounded-full"
-            />
-          </motion.div>
-        </div>
-
-        {/* Terminal Text Simulation */}
-        <div className="mt-10 overflow-hidden h-16">
-          <motion.div 
-            animate={{ y: [0, -100] }}
-            transition={{ duration: 5, repeat: Infinity, ease: "linear" }}
-            className="space-y-2"
-          >
-            {[
-              "SECURE_LAYER_STRICT_ACTIVE",
-              "ENCRYPTION_NODE_0991_READY",
-              "AUTH_SESSION_ESTABLISHED",
-              "GEO_LOCK_VERIFIED",
-              "DATABASE_MIRROR_SYNC_OK",
-              "HEARTBEAT_PROTOCOL_INIT",
-              "UI_MANIFEST_PARSING",
-              "LEGACY_RESTORE_COMPLETED"
-            ].map((text, i) => (
-              <p key={i} className="text-[9px] font-bold text-slate-300 font-mono tracking-widest uppercase">
-                {">"} {text}
-              </p>
-            ))}
-          </motion.div>
-        </div>
+      {/* Background Decor */}
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 inset-x-0 h-96 bg-gradient-to-b from-indigo-50/50 to-transparent" />
+        <div className="absolute bottom-0 inset-x-0 h-96 bg-gradient-to-t from-blue-50/30 to-transparent" />
       </div>
 
-      {/* Decorative Branding */}
-      <div className="absolute bottom-12 flex items-center gap-3 opacity-20">
-         <div className="h-px w-8 bg-slate-400" />
-         <span className="text-[10px] font-black text-slate-500 tracking-[0.5em] uppercase">Elite VMS v4.2.0</span>
-         <div className="h-px w-8 bg-slate-400" />
+      <div className="relative z-10 w-full max-w-xl px-6 space-y-10">
+        {/* Header Section */}
+        <div className="text-center space-y-6">
+          <motion.div 
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="flex justify-center"
+          >
+            <div className="w-16 h-16 bg-white rounded-2xl shadow-xl shadow-brand-blue/5 border border-slate-100 flex items-center justify-center p-3 relative">
+              <ShieldCheck className="h-full w-full text-brand-blue" />
+              <motion.div 
+                animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className="absolute inset-0 bg-brand-blue/20 rounded-2xl blur-md"
+              />
+            </div>
+          </motion.div>
+          
+          <div className="space-y-2">
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Initializing Your Workspace</h2>
+            <p className="text-sm font-medium text-slate-500 max-w-xs mx-auto leading-relaxed">
+              Please wait while we securely fetch your data from the cloud
+            </p>
+          </div>
+        </div>
+
+        {/* Central Illustration Area */}
+        <div className="relative h-48 flex items-center justify-center">
+          <div className="absolute w-full h-[1px] bg-slate-200/50" />
+          
+          {/* Main Building Mockup Icon */}
+          <div className="relative z-10 w-24 h-32 bg-white rounded-xl border border-slate-200 shadow-2xl flex items-center justify-center">
+            <div className="grid grid-cols-2 gap-2 p-4 w-full h-full opacity-20">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="bg-slate-200 rounded-sm" />
+              ))}
+            </div>
+            <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 h-1 bg-slate-100 rounded-full" />
+            <div className="absolute inset-x-8 top-[60%] h-1 bg-slate-100 rounded-full" />
+          </div>
+
+          {/* Floating Context Icons */}
+          {[
+            { Icon: Users, color: 'text-indigo-500', pos: 'top-0 left-8', delay: 0 },
+            { Icon: TrendingUp, color: 'text-emerald-500', pos: 'top-4 right-10', delay: 0.5 },
+            { Icon: Bell, color: 'text-amber-500', pos: 'bottom-4 left-10', delay: 1 },
+            { Icon: Shield, color: 'text-blue-500', pos: 'bottom-0 right-12', delay: 1.5 }
+          ].map(({ Icon, color, pos, delay }, idx) => (
+            <motion.div
+              key={idx}
+              animate={{ y: [0, -8, 0] }}
+              transition={{ duration: 3, repeat: Infinity, delay }}
+              className={`absolute ${pos} z-20 h-10 w-10 bg-white rounded-xl shadow-lg border border-slate-50 flex items-center justify-center ${color}`}
+            >
+              <Icon className="h-5 w-5" />
+            </motion.div>
+          ))}
+
+          {/* Connective Dashed Lines */}
+          <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-20 overflow-visible">
+            <path d="M 100,50 Q 150,20 200,80" fill="none" stroke="#6366f1" strokeWidth="2" strokeDasharray="4 4" />
+            <path d="M 400,60 Q 350,10 320,70" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeDasharray="4 4" />
+            <path d="M 120,160 Q 180,180 240,140" fill="none" stroke="#10b981" strokeWidth="2" strokeDasharray="4 4" />
+            <path d="M 450,150 Q 380,180 340,130" fill="none" stroke="#3b82f6" strokeWidth="2" strokeDasharray="4 4" />
+          </svg>
+        </div>
+
+        {/* Progress Section */}
+        <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-xl shadow-slate-200/50 border border-slate-100 space-y-6">
+          <div className="flex justify-between items-end mb-1">
+            <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">Loading your data...</h3>
+            <span className="text-xl font-black text-indigo-600 font-mono tracking-tighter tabular-nums">
+              {Math.round(progress)}%
+            </span>
+          </div>
+
+          <div className="relative h-3 bg-indigo-50 rounded-full overflow-hidden p-0.5 border border-indigo-100/50">
+            <motion.div 
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+              className="h-full bg-gradient-to-r from-indigo-500 to-brand-blue rounded-full relative"
+            >
+              <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/diagonal-stripes.png')] opacity-10" />
+            </motion.div>
+          </div>
+          
+          <p className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] italic">
+            Almost there! This won't take long.
+          </p>
+        </div>
+
+        {/* Task Steps */}
+        <div className="bg-white rounded-[2rem] p-4 sm:p-6 shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden divide-y divide-slate-50">
+          {tasks.map((task) => {
+            const isDone = progress >= task.max;
+            const isDoing = progress >= task.min && progress < task.max;
+            
+            return (
+              <div key={task.id} className="flex items-center justify-between p-4 group transition-colors">
+                <div className="flex items-center gap-5">
+                  <div className={`h-11 w-11 rounded-2xl flex items-center justify-center transition-colors ${isDone ? 'bg-emerald-50 text-emerald-500' : isDoing ? 'bg-indigo-50 text-indigo-500' : 'bg-slate-50 text-slate-300'}`}>
+                    {task.icon}
+                  </div>
+                  <div className="space-y-0.5">
+                    <h4 className={`text-sm font-black tracking-tight transition-colors ${isDone || isDoing ? 'text-slate-900' : 'text-slate-300'}`}>{task.label}</h4>
+                    <p className={`text-[10px] font-medium transition-colors ${isDone || isDoing ? 'text-slate-500' : 'text-slate-300'}`}>{task.sub}</p>
+                  </div>
+                </div>
+                <div>
+                  {isDone ? (
+                    <div className="h-6 w-6 bg-emerald-500 text-white rounded-full flex items-center justify-center">
+                      <CheckCircle className="h-4 w-4" />
+                    </div>
+                  ) : isDoing ? (
+                    <div className="h-5 w-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Clock className="h-5 w-5 text-slate-200" />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Security Footer */}
+        <div className="bg-slate-900 rounded-3xl p-6 flex items-center justify-between shadow-2xl relative overflow-hidden group">
+          <div className="absolute inset-0 bg-gradient-to-r from-brand-blue/10 to-transparent pointer-events-none" />
+          <div className="flex items-center gap-4 relative z-10">
+            <div className="h-10 w-10 bg-white/10 rounded-xl flex items-center justify-center text-brand-blue">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <div className="space-y-0.5">
+              <h4 className="text-[10px] font-black text-white uppercase tracking-widest">Your security is our priority</h4>
+              <p className="text-[9px] font-medium text-slate-400">All data is encrypted and your privacy is always protected.</p>
+            </div>
+          </div>
+          <div className="relative h-10 w-10 flex items-center justify-center text-brand-blue/30 scale-150 rotate-12">
+             <Lock className="h-8 w-8" />
+             <div className="absolute bottom-[-2px] right-[-2px] h-4 w-4 bg-emerald-500 rounded-full border-2 border-slate-900 flex items-center justify-center">
+                <CheckCircle className="h-2 w-2 text-white" />
+             </div>
+          </div>
+        </div>
       </div>
     </motion.div>
   );
 }
+
 
 const DashboardSkeleton = () => (
   <div className="space-y-8">
@@ -4359,7 +4452,7 @@ export default function App() {
                     <div className="absolute right-0 top-0 bottom-0 w-full sm:w-60 flex flex-col gap-4 p-4 justify-center bg-white/20 backdrop-blur-sm sm:bg-transparent">
                       <div className="bg-white p-4 rounded-3xl shadow-[0_10px_30px_-5px_rgba(0,0,0,0.05)] border border-slate-50 space-y-2">
                         <div className="flex items-center gap-2 text-blue-600">
-                           <LucideClock className="h-4 w-4" />
+                           <Clock className="h-4 w-4" />
                            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">System Clock</span>
                         </div>
                         <div className="flex justify-between items-end">
