@@ -23,11 +23,11 @@ export default function LegalAcceptanceModal({ onAccept, onClose, organizationNa
         animate={{ scale: 1, y: 0 }}
         className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] sm:rounded-[3rem] shadow-2xl overflow-hidden border border-white/20 flex flex-col max-h-[85vh] sm:max-h-[90vh]"
       >
-        <div className="flex-1 min-h-0 relative flex flex-col">
+        <div className="flex-1 min-h-[500px] sm:min-h-[600px] relative flex flex-col">
           {/* Close Button */}
           <button 
             onClick={onClose}
-            className="absolute top-6 right-6 z-50 p-3 text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-slate-800 rounded-2xl transition-all active:scale-95 cursor-pointer shadow-sm border border-black/5"
+            className="absolute top-6 right-6 z-[60] p-3 text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-slate-800 rounded-2xl transition-all active:scale-95 cursor-pointer shadow-sm border border-black/5"
           >
             <X className="h-5 w-5" />
           </button>
@@ -41,7 +41,7 @@ export default function LegalAcceptanceModal({ onAccept, onClose, organizationNa
                 exit={{ opacity: 0, x: 20 }}
                 className="absolute inset-0 flex flex-col"
               >
-                <div className="pt-16 px-8 pb-8 sm:pt-20 sm:px-12 sm:pb-12 overflow-y-auto custom-scrollbar flex-1 min-h-0">
+                <div className="pt-20 px-8 pb-8 sm:pt-24 sm:px-12 sm:pb-12 overflow-y-auto custom-scrollbar flex-1 min-h-0">
                 <div className="flex flex-col items-center text-center space-y-6 mb-10">
                   <div className="w-20 h-20 bg-brand-blue/10 text-brand-blue rounded-3xl flex items-center justify-center shadow-inner">
                     <ShieldCheck className="h-10 w-10" />
