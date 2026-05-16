@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LogOut, Edit2, Search, Trash2, FileText, Phone, MessageCircle, History, ChevronDown, ChevronUp, User, MapPin, PenTool, CheckSquare, Square, Trash, CheckCircle, X, Calendar, Star, Heart, Shield, Clock, TrendingUp, Share2, ShieldCheck, Ticket, Gift } from 'lucide-react';
+import { LogOut, Edit2, Search, Trash2, FileText, Phone, MessageCircle, History, ChevronDown, ChevronUp, User, MapPin, PenTool, CheckSquare, Square, Trash, CheckCircle, X, Calendar, Star, Heart, Shield, Clock, TrendingUp, Share2, ShieldCheck, Ticket, Gift, AlertTriangle } from 'lucide-react';
 import { Visitor, UserRole, Donation } from '../types';
 import { DEFAULT_WHATSAPP_TEMPLATES } from '../constants';
 import Swal from 'sweetalert2';
@@ -345,7 +345,10 @@ export default function VisitorTable({
                            ))}
                            {visitor.isEmergency && (
                               <div className="flex flex-col gap-1 items-start">
-                                <span className="px-2 py-0.5 rounded bg-red-600 text-white text-[8px] font-black uppercase tracking-tighter animate-pulse shadow-sm shadow-red-200">Emergency entry</span>
+                                <span className="px-3 py-1 rounded bg-red-600 text-white text-[9px] font-black uppercase tracking-tighter animate-pulse shadow-md shadow-red-200 border border-white/20 flex items-center gap-1.5">
+                                  <AlertTriangle className="h-2.5 w-2.5" />
+                                  EMERGENCY PROTOCOL ENTRY
+                                </span>
                                 {visitor.phone?.startsWith('EMER-') && (
                                   <span className="px-1.5 py-0.5 bg-red-50 text-red-600 border border-red-100 rounded text-[7px] font-black tracking-widest uppercase">ID: {visitor.phone}</span>
                                 )}
@@ -483,7 +486,7 @@ export default function VisitorTable({
                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 pb-8 border-b border-slate-200/60">
                             <div className="flex items-center gap-6">
                               <div className="h-20 w-20 bg-brand-blue rounded-[2rem] flex items-center justify-center text-white font-black text-3xl shadow-2xl shadow-blue-200">
-                                {visitor.name.charAt(0)}
+                                {(visitor.name || 'V').charAt(0)}
                               </div>
                               <div>
                                 <h3 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic mb-1">{visitor.name}</h3>
@@ -545,10 +548,13 @@ export default function VisitorTable({
                                         </span>
                                       ))}
                                       {visitor.isEmergency && (
-                                        <div className="flex flex-col gap-1 items-start">
-                                          <span className="px-2 py-0.5 rounded bg-red-600 text-white text-[8px] font-black uppercase tracking-tighter animate-pulse shadow-sm shadow-red-200">Emergency entry</span>
+                                        <div className="flex flex-col gap-1 items-start mt-2">
+                                          <span className="px-3 py-1 rounded bg-red-600 text-white text-[9px] font-black uppercase tracking-tighter animate-pulse shadow-md shadow-red-200 border-2 border-white/20 flex items-center gap-1.5">
+                                            <AlertTriangle className="h-3 w-3" />
+                                            EMERGENCY PROTOCOL ENTRY
+                                          </span>
                                           {visitor.phone?.startsWith('EMER-') && (
-                                            <span className="px-1.5 py-0.5 bg-red-50 text-red-600 border border-red-100 rounded text-[7px] font-black tracking-widest uppercase">ID: {visitor.phone}</span>
+                                            <span className="px-2 py-0.5 bg-red-50 text-red-600 border border-red-100 rounded text-[8px] font-black tracking-widest uppercase">OFFLINE RECORD ID: {visitor.phone}</span>
                                           )}
                                         </div>
                                       )}

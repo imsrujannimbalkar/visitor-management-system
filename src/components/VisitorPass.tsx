@@ -373,17 +373,26 @@ export default function VisitorPass({
           </div>
 
           <div className="mt-8 sm:mt-10 flex items-center justify-between relative z-10">
-            {!isCheckedOut ? (
-              <div className="flex items-center gap-2 sm:gap-3 bg-emerald-500/20 backdrop-blur-md px-3 sm:px-5 py-2 sm:py-2.5 rounded-2xl border border-emerald-500/30">
-                <div className="h-2 w-2 sm:h-2.5 sm:w-2.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
-                <span className="text-[9px] sm:text-[11px] font-black uppercase tracking-widest text-emerald-100">Inside Now</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 sm:gap-3 bg-rose-500/20 backdrop-blur-md px-3 sm:px-5 py-2 sm:py-2.5 rounded-2xl border border-rose-500/30">
-                <div className="h-2 w-2 sm:h-2.5 sm:w-2.5 bg-rose-400 rounded-full shadow-[0_0_10px_rgba(244,63,94,0.5)]" />
-                <span className="text-[9px] sm:text-[11px] font-black uppercase tracking-widest text-rose-100">Logged Out</span>
-              </div>
-            )}
+            <div className="flex flex-wrap gap-2">
+              {!isCheckedOut ? (
+                <div className="flex items-center gap-2 sm:gap-3 bg-emerald-500/20 backdrop-blur-md px-3 sm:px-5 py-2 sm:py-2.5 rounded-2xl border border-emerald-500/30">
+                  <div className="h-2 w-2 sm:h-2.5 sm:w-2.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
+                  <span className="text-[9px] sm:text-[11px] font-black uppercase tracking-widest text-emerald-100">Inside Now</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 sm:gap-3 bg-rose-500/20 backdrop-blur-md px-3 sm:px-5 py-2 sm:py-2.5 rounded-2xl border border-rose-500/30">
+                  <div className="h-2 w-2 sm:h-2.5 sm:w-2.5 bg-rose-400 rounded-full shadow-[0_0_10px_rgba(244,63,94,0.5)]" />
+                  <span className="text-[9px] sm:text-[11px] font-black uppercase tracking-widest text-rose-100">Logged Out</span>
+                </div>
+              )}
+
+              {visitor.isEmergency && (
+                <div className="flex items-center gap-2 sm:gap-3 bg-red-600 px-3 sm:px-5 py-2 sm:py-2.5 rounded-2xl border border-white/20 shadow-lg shadow-red-500/20 animate-pulse">
+                  <AlertCircle className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
+                  <span className="text-[9px] sm:text-[11px] font-black uppercase tracking-widest text-white italic">Emergency Pass</span>
+                </div>
+              )}
+            </div>
             
             <div className="text-right">
               <p className="text-[8px] sm:text-[9px] font-bold uppercase tracking-widest text-white/50 mb-0.5">Org Unit</p>

@@ -27,6 +27,8 @@ import { Organization, PurposeType } from '../types';
 import SignatureCanvasFromLib from 'react-signature-canvas';
 import { encryptData } from '../lib/encryption';
 
+import Swal from 'sweetalert2';
+
 const SignatureCanvas = (SignatureCanvasFromLib as any).default || SignatureCanvasFromLib;
 
 interface PreRegistrationFormProps {
@@ -81,13 +83,29 @@ export default function PreRegistrationForm({ organizationId, onComplete }: PreR
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.phone || !formData.purpose || !formData.visitDate) {
-      setError('Please fill in all required fields');
+    if (!formData.name || !formData.phone || !formData.purpose || !formData.visitDate || !formData.category) {
+      Swal.fire({
+        title: 'Missing Details',
+        text: 'Please fill in all required fields marked with *',
+        icon: 'warning',
+        confirmButtonColor: '#4f46e5',
+        customClass: {
+          popup: 'rounded-[2rem]'
+        }
+      });
       return;
     }
     
     if (!formData.signature) {
-      setError('Please provide your signature');
+      Swal.fire({
+        title: 'Signature Required',
+        text: 'Please provide your digital signature to proceed.',
+        icon: 'warning',
+        confirmButtonColor: '#4f46e5',
+        customClass: {
+          popup: 'rounded-[2rem]'
+        }
+      });
       return;
     }
 
@@ -196,6 +214,7 @@ export default function PreRegistrationForm({ organizationId, onComplete }: PreR
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onSubmit={handleSubmit}
+              noValidate
               className="bg-white p-8 rounded-3xl shadow-xl space-y-6"
             >
               {error && (

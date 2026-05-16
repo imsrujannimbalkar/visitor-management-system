@@ -24,6 +24,7 @@ import {
   FileText,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Info,
   ExternalLink,
   History,
@@ -644,6 +645,7 @@ export default function App() {
     const mapping: Record<string, string> = {
       'dashboard': 'Home',
       'visitors': 'Entry',
+      'inquiries': 'Inquiries',
       'records': 'Records',
       'analysis': 'Analysis',
       'birthdays': 'Birthday',
@@ -2372,19 +2374,19 @@ export default function App() {
             <div class="relative z-10 flex items-center justify-between">
               <div class="flex items-center gap-6">
                 <div class="w-16 h-16 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20 shadow-inner">
-                  <span class="text-white font-black text-3xl">${visitor.name.charAt(0).toUpperCase()}</span>
+                  <span class="text-white font-black text-3xl">${(visitor.name || visitor.visitorName || 'V').charAt(0).toUpperCase()}</span>
                 </div>
                 <div>
                   <div class="flex items-center gap-2 mb-1">
                     <span class="px-2 py-0.5 bg-rose-500 text-white text-[8px] font-black uppercase tracking-[0.2em] rounded-md">Distinguished Visitor</span>
                     <span class="text-slate-400 font-black text-[9px] uppercase tracking-widest">• Verified Profile</span>
                   </div>
-                  <p class="text-2xl font-black text-white tracking-tight leading-none">${visitor.name}</p>
+                  <p class="text-2xl font-black text-white tracking-tight leading-none">${visitor.name || visitor.visitorName}</p>
                 </div>
               </div>
               <div class="text-right">
                 <p class="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-1">Reference Phone</p>
-                <p class="text-lg font-black text-white font-mono">${visitor.phone}</p>
+                <p class="text-lg font-black text-white font-mono">${visitor.phone || visitor.visitorPhone}</p>
               </div>
             </div>
           </div>
@@ -2602,6 +2604,36 @@ export default function App() {
       } catch (error: any) {
         addToast(error.message || 'Failed to capture contribution', 'error');
       }
+    }
+  };
+
+  const handleEmergencyEntry = async (visitor: any) => {
+    resetIdle();
+    if (!organization?.id) {
+      addToast('Organization context is missing. Try again.', 'error');
+      return;
+    }
+    try {
+      setIsSaving(true);
+      const visitData = {
+        ...visitor,
+        organizationId: organization.id,
+        recordedBy: user?.uid || 'EMERGENCY',
+        recordedByName: user?.name || 'Emergency System',
+        status: 'INSIDE',
+        isEmergency: true,
+        entryMethod: 'Emergency Mode'
+      };
+
+      const visitRef = doc(db, 'organizations', organization.id, 'visits', visitor.visitorId);
+      await setDoc(visitRef, sanitizeForFirestore(visitData));
+      
+      setIsSaving(false);
+      addToast('Emergency entry recorded successfully', 'success');
+    } catch (error) {
+      console.error('Emergency entry error:', error);
+      addToast('Critical: Failed to save emergency record', 'error');
+      setIsSaving(false);
     }
   };
 
@@ -3359,15 +3391,15 @@ export default function App() {
       await addDoc(collection(db, 'organizations', user?.organizationId || '', 'notifications'), {
           organizationId: user?.organizationId || '',
           title: 'Kiosk Assistance Required',
-          message: 'A user is requesting assistance to exit kiosk mode. (Click Approve to allow exit)',
+          message: 'A user is requesting assistance at the kiosk.',
           type: 'KIOSK_ASSISTANCE',
           read: false,
           timestamp: new Date().toISOString()
       });
-      addToast('Staff has been notified. Please wait.', 'success');
+      addToast(kioskLang === 'EN' ? 'Staff has been notified. Please wait.' : 'कर्मचारियों को सूचित कर दिया गया है। कृपया प्रतीक्षा करें।', 'success');
     } catch (err) {
       console.error('Failed to call staff:', err);
-      addToast('Failed to call staff', 'error');
+      addToast(kioskLang === 'EN' ? 'Failed to call staff' : 'कर्मचारियों को बुलाने में विफल', 'error');
     }
   };
 
@@ -3480,18 +3512,21 @@ export default function App() {
   const handleKioskCheckOut = async () => {
     resetIdle();
     const { value: phone } = await Swal.fire({
-      title: 'Check Out',
-      text: 'Enter your phone number to check out',
+      title: kioskLang === 'EN' ? 'Check Out' : 'चेक आउट',
+      text: kioskLang === 'EN' ? 'Enter your phone number to check out' : 'चेक आउट करने के लिए अपना फोन नंबर दर्ज करें',
       input: 'tel',
       inputPlaceholder: '9876543210',
       showCancelButton: true,
       confirmButtonColor: organization?.brandColor || '#2563EB',
-      confirmButtonText: 'Search',
+      confirmButtonText: kioskLang === 'EN' ? 'Search' : 'खोजें',
+      cancelButtonText: kioskLang === 'EN' ? 'Cancel' : 'रद्द करें',
       position: 'center',
       customClass: {
         popup: 'rounded-3xl border-none shadow-2xl',
         confirmButton: 'rounded-xl font-bold px-8 py-3',
-        cancelButton: 'rounded-xl font-bold px-8 py-3'
+        cancelButton: 'rounded-xl font-bold px-8 py-3',
+        title: 'text-2xl font-black text-slate-900 mb-2 italic uppercase',
+        htmlContainer: 'text-sm font-medium text-slate-500'
       }
     });
 
@@ -3499,21 +3534,35 @@ export default function App() {
       const activeVisit = visitors.find(v => v.phone.includes(phone) && v.status === 'INSIDE');
       if (activeVisit) {
         const result = await Swal.fire({
-          title: `Check out ${activeVisit.name}?`,
-          text: `Check-in time: ${activeVisit.checkInTime}`,
+          title: kioskLang === 'EN' ? `Check out ${activeVisit.name}?` : `${activeVisit.name} चेक आउट करें?`,
+          text: kioskLang === 'EN' ? `Check-in time: ${activeVisit.checkInTime}` : `चेक-इन समय: ${activeVisit.checkInTime}`,
           icon: 'question',
           showCancelButton: true,
           confirmButtonColor: '#2563EB',
-          confirmButtonText: 'Yes, Check Out',
+          confirmButtonText: kioskLang === 'EN' ? 'Yes, Check Out' : 'हाँ, चेक आउट करें',
+          cancelButtonText: kioskLang === 'EN' ? 'No, Stay' : 'नहीं, रुकें',
+          customClass: {
+            popup: 'rounded-[3rem] p-12',
+            confirmButton: 'rounded-2xl px-8 py-4 font-black uppercase italic tracking-widest',
+            cancelButton: 'rounded-2xl px-8 py-4 font-black uppercase italic tracking-widest'
+          }
         });
         if (result.isConfirmed) {
           await checkOutVisitor(activeVisit.visitId, true);
-          addToast(`${activeVisit.name} checked out successfully`, 'success');
+          addToast(kioskLang === 'EN' ? `${activeVisit.name} checked out successfully` : `${activeVisit.name} सफलतापूर्वक चेक आउट हो गया`, 'success');
           // Show review modal after checkout in kiosk mode
           setReviewVisitor(activeVisit);
         }
       } else {
-        Swal.fire('Not Found', 'No active check-in found for this number.', 'error');
+        Swal.fire({
+          title: kioskLang === 'EN' ? 'Not Found' : 'नहीं मिला',
+          text: kioskLang === 'EN' ? 'No active check-in found for this number.' : 'इस नंबर के लिए कोई सक्रिय चेक-इन नहीं मिला।',
+          icon: 'error',
+          confirmButtonText: kioskLang === 'EN' ? 'OK' : 'ठीक है',
+          customClass: {
+            popup: 'rounded-[3rem] p-12'
+          }
+        });
       }
     }
   };
@@ -3525,6 +3574,15 @@ export default function App() {
 
   const handleKioskPreRegCheckIn = async (req: PreRegistration, signature: string) => {
     resetIdle();
+    if (!organization?.id) {
+      Swal.fire({
+        title: kioskLang === 'EN' ? 'Configuration Error' : 'कॉन्फ़िगरेशन त्रुटि',
+        text: kioskLang === 'EN' ? 'Organization context is missing. Please restart kiosk.' : 'संगठन डेटा अनुपलब्ध है। कृपया किओस्क पुनरारंभ करें।',
+        icon: 'error',
+        confirmButtonColor: '#ef4444'
+      });
+      return;
+    }
     try {
       setLoadingStates(prev => ({ ...prev, [req.id]: true }));
       
@@ -3539,23 +3597,23 @@ export default function App() {
         visitorName: req.name,
         visitorEmail: req.email || '',
         purpose: req.purpose,
-        category: 'Guest',
+        category: req.category || 'Guest',
         date,
         checkInTime,
         status: 'INSIDE',
-        organizationId: user?.organizationId || organization?.id || '',
-        createdBy: user?.uid || 'KIOSK',
-        recordedBy: user?.uid || 'KIOSK',
+        organizationId: organization.id,
+        createdBy: 'KIOSK',
+        recordedBy: 'KIOSK',
         recordedByName: 'Self Check-in',
         signature,
         preRegistrationId: req.id
       };
 
-      const visitRef = doc(db, 'organizations', organization?.id || '', 'visits', visitId);
+      const visitRef = doc(db, 'organizations', organization.id, 'visits', visitId);
       await setDoc(visitRef, sanitizeForFirestore(visitData));
 
       // Mark pre-registration as CHECKED_IN
-      await updateDoc(doc(db, 'organizations', organization?.id || '', 'preRegistrations', req.id), {
+      await updateDoc(doc(db, 'organizations', organization.id, 'preRegistrations', req.id), {
         status: 'CHECKED_IN',
         processedAt: timestamp,
         processedBy: 'KIOSK'
@@ -3579,7 +3637,12 @@ export default function App() {
       });
     } catch (error) {
       console.error('Kiosk check-in error:', error);
-      addToast('Check-in failed. Please try standard entry.', 'error');
+      Swal.fire({
+        title: kioskLang === 'EN' ? 'Check-in Failed' : 'चेक-इन विफल रहा',
+        text: kioskLang === 'EN' ? 'An unexpected error occurred. Please try standard entry.' : 'एक अप्रत्याशित त्रुटि हुई। कृपया सामान्य चेक-इन का प्रयास करें।',
+        icon: 'error',
+        confirmButtonColor: '#ef4444'
+      });
     } finally {
       setLoadingStates(prev => ({ ...prev, [req.id]: false }));
     }
@@ -3660,8 +3723,8 @@ export default function App() {
                 )}
               </div>
               <div>
-                <h1 className="text-2xl font-black tracking-tight text-gray-900 uppercase italic leading-none">{organization?.name || 'Visitor Management System'}</h1>
-                <p className="text-[10px] font-bold text-brand-blue tracking-[0.3em] uppercase mt-1">Self Check-In Terminal</p>
+                <h1 className="text-2xl font-black tracking-tight text-gray-900 uppercase italic leading-none">{organization?.name || (kioskLang === 'EN' ? 'Visitor Management System' : 'आगंतुक प्रबंधन प्रणाली')}</h1>
+                <p className="text-[10px] font-bold text-brand-blue tracking-[0.3em] uppercase mt-1">{kioskLang === 'EN' ? 'Self Check-In Terminal' : 'स्वयं चेक-इन टर्मिनल'}</p>
               </div>
             </div>
 
@@ -3683,16 +3746,38 @@ export default function App() {
 
               <div className="text-right">
                 <div className="text-3xl font-black text-gray-900 font-mono tracking-tighter">
-                  {new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true })}
+                  {new Date().toLocaleTimeString(kioskLang === 'HI' ? 'hi-IN' : 'en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
                 </div>
                 <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                  {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+                  {new Date().toLocaleDateString(kioskLang === 'HI' ? 'hi-IN' : 'en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                 </div>
               </div>
             </div>
           </header>
 
-          <main className="flex-1 overflow-hidden flex flex-col relative">
+          <main className="flex-1 overflow-hidden flex flex-col relative text-center">
+            {/* Kiosk Notification Bar */}
+            <AnimatePresence>
+              {notifications.filter(n => n.type === 'KIOSK_BROADCAST' && !n.read && !n.deleted).length > 0 && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="bg-brand-blue/90 backdrop-blur-md text-white py-4 px-12 flex items-center justify-center gap-4 relative z-40 overflow-hidden"
+                >
+                  <motion.div 
+                    animate={{ x: [20, -20, 20] }}
+                    transition={{ duration: 4, repeat: Infinity }}
+                    className="flex items-center gap-3"
+                  >
+                    <Bell className="h-4 w-4 text-blue-300" />
+                    <span className="text-xs font-black uppercase tracking-widest italic">
+                      {notifications.find(n => n.type === 'KIOSK_BROADCAST' && !n.read && !n.deleted)?.message}
+                    </span>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
             <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-20">
               <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-brand-blue/30 blur-[120px] rounded-full animate-pulse" />
               <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-indigo-600/20 blur-[120px] rounded-full animate-pulse delay-700" />
@@ -3773,10 +3858,10 @@ export default function App() {
                           <div className="h-10 w-10 bg-slate-50 rounded-xl flex items-center justify-center">
                             <History className="h-5 w-5 text-slate-400" />
                           </div>
-                          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-800">Recent Activity</h3>
+                          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-800">{kioskLang === 'EN' ? 'Recent Activity' : 'हाल की गतिविधि'}</h3>
                         </div>
                         <span className="px-3 py-1 bg-blue-50 text-brand-blue rounded-lg text-[10px] font-black tracking-widest uppercase">
-                          {kioskSessionEntries.length} In Session
+                          {kioskSessionEntries.length} {kioskLang === 'EN' ? 'In Session' : 'सत्र में'}
                         </span>
                       </div>
 
@@ -3791,16 +3876,24 @@ export default function App() {
                             >
                               <div className="flex items-center gap-4">
                                 <div className="h-12 w-12 bg-white rounded-xl flex items-center justify-center font-bold text-brand-blue border border-gray-100 shadow-sm">
-                                  {entry.name.charAt(0)}
+                                  {(entry.name || entry.visitorName || 'V').charAt(0)}
                                 </div>
                                 <div>
-                                  <p className="font-bold text-gray-900">{entry.name}</p>
+                                  <p className="font-bold text-gray-900">{entry.name || entry.visitorName}</p>
                                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{entry.purpose}</p>
                                 </div>
                               </div>
                               <div className="text-right">
                                 <p className="text-[10px] font-black text-brand-blue">{entry.checkInTime}</p>
-                                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-md text-[8px] font-bold uppercase">Success</span>
+                                <div className="flex flex-col items-end gap-1">
+                                  {entry.isEmergency && (
+                                    <span className="px-3 py-1 bg-red-600 text-white rounded-lg text-[8px] font-black uppercase shadow-lg shadow-red-500/20 border border-red-400 animate-pulse tracking-tighter flex items-center gap-1 leading-none">
+                                      <AlertTriangle className="h-2 w-2" />
+                                      EMERGENCY
+                                    </span>
+                                  )}
+                                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-md text-[8px] font-bold uppercase">{kioskLang === 'EN' ? 'Success' : 'सफल'}</span>
+                                </div>
                               </div>
                             </motion.div>
                           ))
@@ -3809,8 +3902,8 @@ export default function App() {
                             <div className="h-20 w-20 bg-gray-50 rounded-full flex items-center justify-center mb-6 border border-gray-100">
                               <History className="h-10 w-10 text-gray-300" />
                             </div>
-                            <p className="text-lg font-black text-gray-900 italic uppercase">No Recent Entries</p>
-                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-2">Activity resets when kiosk is re-opened</p>
+                            <p className="text-lg font-black text-gray-900 italic uppercase">{kioskLang === 'EN' ? 'No Recent Entries' : 'कोई हालिया प्रविष्टि नहीं'}</p>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-2">{kioskLang === 'EN' ? 'Activity resets when kiosk is re-opened' : 'कियोस्क को फिर से खोलने पर गतिविधि रीसेट हो जाती है'}</p>
                           </div>
                         )}
                       </div>
@@ -3820,9 +3913,11 @@ export default function App() {
                     <div className="lg:col-span-2 bg-brand-blue rounded-[3rem] p-12 shadow-xl shadow-blue-500/20 text-white flex flex-col relative overflow-hidden group">
                       <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 blur-3xl rounded-full -mr-20 -mt-20 group-hover:scale-110 transition-transform duration-700 pointer-events-none" />
                       
-                      <h3 className="text-3xl font-black mb-6 italic uppercase leading-[0.9]">Need Help?</h3>
+                      <h3 className="text-3xl font-black mb-6 italic uppercase leading-[0.9]">{kioskLang === 'EN' ? 'Need Help?' : 'क्या आपको मदद चाहिए?'}</h3>
                       <p className="text-blue-100/70 font-bold text-sm leading-relaxed mb-10">
-                        If you're having trouble checking in or need to speak with a staff member, please tap the button below.
+                        {kioskLang === 'EN' 
+                          ? "If you're having trouble checking in or need to speak with a staff member, please tap the button below."
+                          : "यदि आपको चेक-इन करने में समस्या हो रही है या किसी कर्मचारी से बात करने की आवश्यकता है, तो कृपया नीचे दिए गए बटन पर टैप करें।"}
                       </p>
 
                       <motion.button
@@ -3832,7 +3927,7 @@ export default function App() {
                         className="mt-auto w-full py-5 bg-white text-brand-blue font-black rounded-2xl shadow-xl shadow-black/5 flex items-center justify-center gap-3 uppercase text-xs tracking-widest"
                       >
                         <UserCheck className="h-5 w-5" />
-                        Call Staff
+                        {kioskLang === 'EN' ? 'Call Staff' : 'कर्मचारियों को बुलाएं'}
                       </motion.button>
                     </div>
                   </div>
@@ -3848,7 +3943,7 @@ export default function App() {
                           onClick={() => handleExitKiosk()}
                           className="text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-red-500 transition-colors"
                         >
-                          Exit Kiosk
+                          {kioskLang === 'EN' ? 'Exit Kiosk' : 'कियोस्क बंद करें'}
                         </button>
                       </div>
                     </div>
@@ -4009,12 +4104,14 @@ export default function App() {
                   label="Pre-Register"
                 />
               )}
-              <NavButton 
-                active={activeTab === 'inquiries'} 
-                onClick={() => setActiveTab('inquiries')}
-                icon={<PhoneCall />}
-                label="Inquiries"
-              />
+              {isTabVisible('inquiries') && (
+                <NavButton 
+                  active={activeTab === 'inquiries'} 
+                  onClick={() => setActiveTab('inquiries')}
+                  icon={<PhoneCall />}
+                  label="Inquiries"
+                />
+              )}
               {isTabVisible('records') && (
                 <NavButton 
                   active={activeTab === 'records'} 
@@ -4135,7 +4232,7 @@ export default function App() {
               </button>
 
               <div className="hidden lg:flex flex-col items-end mr-1">
-                <span className="text-sm font-bold text-gray-900 leading-none mb-1">{user.name}</span>
+                <span className="text-sm font-bold text-gray-900 leading-none mb-1">{user.name || 'User'}</span>
                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">{user.role}</span>
               </div>
               <div 
@@ -4144,9 +4241,9 @@ export default function App() {
                 title="View Profile"
               >
                 {user.photoURL ? (
-                  <img src={user.photoURL} alt={user.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                  <img src={user.photoURL} alt={user.name || 'User'} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
                 ) : (
-                  <span className="text-white font-black text-lg group-hover:scale-110 transition-transform">{user.name.charAt(0).toUpperCase()}</span>
+                  <span className="text-white font-black text-lg group-hover:scale-110 transition-transform">{(user.name || 'U').charAt(0).toUpperCase()}</span>
                 )}
               </div>
             </div>
@@ -4157,8 +4254,8 @@ export default function App() {
     <div className="lg:hidden fixed bottom-0 left-0 right-0 border-t border-slate-100 py-0.5 flex items-center justify-start overflow-x-auto no-scrollbar scroll-smooth bg-white/95 backdrop-blur-md px-2 z-[100] shadow-[0_-8px_30px_rgba(0,0,0,0.08)] pb-safe-area-bottom gap-1">
         {isTabVisible('dashboard') && <MobileNavBtn active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard />} label="Home" />}
         {isTabVisible('visitors') && <MobileNavBtn active={activeTab === 'visitors'} onClick={() => setActiveTab('visitors')} icon={<UserPlus />} label="Entry" />}
-        <MobileNavBtn active={activeTab === 'inquiries'} onClick={() => setActiveTab('inquiries')} icon={<PhoneCall />} label="Inquiries" />
-        <MobileNavBtn active={activeTab === 'pre-registrations'} onClick={() => setActiveTab('pre-registrations')} icon={<Calendar />} label="Pre-Reg" />
+        {isTabVisible('inquiries') && <MobileNavBtn active={activeTab === 'inquiries'} onClick={() => setActiveTab('inquiries')} icon={<PhoneCall />} label="Inquiries" />}
+        {isTabVisible('pre-registrations') && <MobileNavBtn active={activeTab === 'pre-registrations'} onClick={() => setActiveTab('pre-registrations')} icon={<Calendar />} label="Pre-Reg" />}
         {isTabVisible('records') && <MobileNavBtn active={activeTab === 'records'} onClick={() => setActiveTab('records')} icon={<ClipboardList />} label="Records" />}
         {isTabVisible('analysis') && (user.role === 'ADMIN') && <MobileNavBtn active={activeTab === 'analysis'} onClick={() => setActiveTab('analysis')} icon={<BarChart3 />} label="Analytics" />}
         {isTabVisible('donations') && (user.role === 'ADMIN') && <MobileNavBtn active={activeTab === 'donations'} onClick={() => setActiveTab('donations')} icon={<Heart />} label="Donations" />}
@@ -4172,7 +4269,7 @@ export default function App() {
 
       <main className={`flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 transition-all duration-500 ${user?.preferences?.density ? 'py-2 scale-[0.99] origin-top font-tight' : 'py-8'}`}>
         <AnimatePresence mode="wait">
-          {activeTab === 'dashboard' && (
+          {activeTab === 'dashboard' && isTabVisible('dashboard') && (
             <motion.div
               key="dashboard"
               initial={{ opacity: 0, y: 10 }}
@@ -4196,7 +4293,7 @@ export default function App() {
                     <div className="space-y-4">
                       <h2 className="text-6xl sm:text-7xl font-bold text-[#051739] tracking-tight leading-[1.05] font-sans not-italic">
                         Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, <br />
-                        <span className="text-blue-600">{user.name.split(' ')[0]}</span>
+                        <span className="text-blue-600">{(user.name || 'User').split(' ')[0]}</span>
                       </h2>
                       <p className="text-lg text-slate-400 font-medium max-w-lg">
                         Welcome back! Here's what's happening with <span className="text-slate-900 font-bold">{organization?.name || 'VMS Enterprise'}</span> today.
@@ -4279,7 +4376,7 @@ export default function App() {
                            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Active Session</span>
                         </div>
                         <div className="flex justify-between items-center">
-                           <span className="text-base font-bold text-[#051739] line-clamp-1">{user.name}</span>
+                           <span className="text-base font-bold text-[#051739] line-clamp-1">{user.name || 'User'}</span>
                            <div className="h-2 w-2 rounded-full bg-emerald-500" />
                         </div>
                         <p className="text-[9px] font-medium text-slate-400">{user.role}</p>
@@ -4360,15 +4457,18 @@ export default function App() {
 
                 <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4">
                   {[
-                    { icon: <UserPlus />, label: 'New Entry', color: 'blue', action: () => { setEditingVisitor(null); setShowForm(true); } },
-                    { icon: <Calendar />, label: 'Pre-Register', color: 'rose', action: () => setActiveTab('pre-registrations') },
-                    { icon: <LayoutDashboard />, label: 'Scan Visitor', color: 'emerald', action: () => setActiveTab('visitors') },
-                    { icon: <History />, label: 'Manage Logs', color: 'purple', action: () => setActiveTab('logs') },
-                    { icon: <Search />, label: 'Search Node', color: 'slate', action: () => setActiveTab('records') },
-                    { icon: <Monitor />, label: 'Kiosk Mode', color: 'amber', action: handleEnterKiosk },
-                    { icon: <Shield />, label: 'Manage Staff', color: 'orange', action: () => setActiveTab('settings') },
-                    { icon: <BarChart3 />, label: 'Reports', color: 'indigo', action: () => setActiveTab('analysis') }
-                  ].map((btn, i) => (
+                    { icon: <UserPlus />, label: 'New Entry', color: 'blue', tab: 'visitors', action: () => { setEditingVisitor(null); setShowForm(true); } },
+                    { icon: <Calendar />, label: 'Pre-Register', color: 'rose', tab: 'pre-registrations', action: () => setActiveTab('pre-registrations') },
+                    { icon: <LayoutDashboard />, label: 'Scan Visitor', color: 'emerald', tab: 'visitors', action: () => setActiveTab('visitors') },
+                    { icon: <History />, label: 'Manage Logs', color: 'purple', tab: 'logs', action: () => setActiveTab('logs') },
+                    { icon: <Search />, label: 'Search Node', color: 'slate', tab: 'records', action: () => setActiveTab('records') },
+                    { icon: <Monitor />, label: 'Kiosk Mode', color: 'amber', tab: 'dashboard', action: handleEnterKiosk },
+                    { icon: <Shield />, label: 'Manage Staff', color: 'orange', tab: 'settings', action: () => setActiveTab('settings') },
+                    { icon: <BarChart3 />, label: 'Reports', color: 'indigo', tab: 'analysis', action: () => setActiveTab('analysis') }
+                  ].filter(btn => {
+                    if (btn.tab === 'settings') return user?.role === 'ADMIN';
+                    return isTabVisible(btn.tab);
+                  }).map((btn, i) => (
                     <motion.button
                       key={i}
                       whileHover={{ scale: 1.02, y: -2 }}
@@ -4456,13 +4556,13 @@ export default function App() {
                     <div className="flex items-center gap-4 mb-10">
                        <div className="h-14 w-14 rounded-2xl bg-blue-600 flex items-center justify-center text-white text-xl font-bold shadow-lg overflow-hidden">
                          {user.photoURL ? (
-                           <img src={user.photoURL} alt={user.name} className="w-full h-full object-cover" />
+                           <img src={user.photoURL} alt={user.name || 'User'} className="w-full h-full object-cover" />
                          ) : (
-                           user.name.charAt(0).toUpperCase()
+                           (user.name || 'U').charAt(0).toUpperCase()
                          )}
                        </div>
                        <div>
-                          <h4 className="text-xl font-bold text-[#051739]">{user.name}</h4>
+                          <h4 className="text-xl font-bold text-[#051739]">{user.name || 'User'}</h4>
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{user.role} Account</p>
                        </div>
                     </div>
@@ -4532,7 +4632,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {activeTab === 'inquiries' && organization && (
+          {activeTab === 'inquiries' && organization && isTabVisible('inquiries') && (
             <motion.div
               key="inquiries"
               initial={{ opacity: 0, x: 20 }}
@@ -4543,7 +4643,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {activeTab === 'pre-registrations' && (
+          {activeTab === 'pre-registrations' && isTabVisible('pre-registrations') && (
             <motion.div
               key="pre-registrations"
               initial={{ opacity: 0, x: 20 }}
@@ -4567,7 +4667,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {activeTab === 'visitors' && (
+          {activeTab === 'visitors' && isTabVisible('visitors') && (
             <motion.div
               key="visitors"
               initial={{ opacity: 0, x: 20 }}
@@ -4642,7 +4742,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {activeTab === 'records' && (
+          {activeTab === 'records' && isTabVisible('records') && (
             <motion.div
               key="records"
               initial={{ opacity: 0, x: 20 }}
@@ -4736,7 +4836,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {activeTab === 'profile' && (
+          {activeTab === 'profile' && isTabVisible('profile') && (
             <motion.div
               key="profile"
               initial={{ opacity: 0, y: 10 }}
@@ -4772,7 +4872,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {activeTab === 'analysis' && user?.role === 'ADMIN' && (
+          {activeTab === 'analysis' && (user.role === 'ADMIN' || isSuperAdmin) && isTabVisible('analysis') && (
             <motion.div
               key="analysis"
               initial={{ opacity: 0, y: 10 }}
@@ -5050,10 +5150,10 @@ export default function App() {
                         <div key={i} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
                           <div className="flex items-center gap-3">
                             <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-bold">
-                              {v.name.charAt(0)}
+                              {(v.name || 'V').charAt(0)}
                             </div>
                             <div>
-                              <p className="font-bold text-gray-900">{v.name}</p>
+                              <p className="font-bold text-gray-900">{v.name || 'Unknown'}</p>
                               <p className="text-xs text-gray-500">{v.phone}</p>
                             </div>
                           </div>
@@ -5094,10 +5194,15 @@ export default function App() {
                           <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-semibold text-sm ${
                             visitor.status === 'INSIDE' ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-50 text-gray-400'
                           }`}>
-                            {visitor.name.charAt(0)}
+                            {visitor.name?.charAt(0) || 'V'}
                           </div>
                           <div>
-                            <p className="text-sm font-semibold text-gray-900">{visitor.name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-semibold text-gray-900">{visitor.name || visitor.visitorName}</p>
+                              {visitor.isEmergency && (
+                                <span className="px-1.5 py-0.5 bg-red-600 text-white text-[8px] font-black uppercase rounded-md shadow-sm shadow-red-200 animate-pulse">Emergency</span>
+                              )}
+                            </div>
                             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
                               {visitor.category} • {visitor.checkInTime}
                               {visitor.dob && <span className="text-brand-blue ml-2">DOB: {visitor.dob}</span>}
@@ -5126,7 +5231,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {activeTab === 'birthdays' && (
+          {activeTab === 'birthdays' && isTabVisible('birthdays') && (
             <BirthdayTab 
               organizationId={organization?.id || ''}
               visitors={visitors} 
@@ -5136,7 +5241,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'reviews' && organization && (
+          {activeTab === 'reviews' && organization && isTabVisible('reviews') && (
             <motion.div
               key="reviews"
               initial={{ opacity: 0, y: 10 }}
@@ -5147,7 +5252,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {activeTab === 'logs' && organization && (
+          {activeTab === 'logs' && organization && isTabVisible('logs') && (
             <motion.div
               key="logs"
               initial={{ opacity: 0, y: 10 }}
@@ -5158,7 +5263,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {activeTab === 'donations' && user.role === 'ADMIN' && (
+          {activeTab === 'donations' && (user.role === 'ADMIN' || isSuperAdmin) && isTabVisible('donations') && (
             <motion.div
               key="donations"
               initial={{ opacity: 0, y: 10 }}
@@ -5685,7 +5790,7 @@ export default function App() {
                           </button>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                          {['Home', 'Entry', 'Records', 'Analysis', 'Birthday', 'Reviews', 'Logs', 'Profile', 'Donations', 'Pre-Reg', 'Support'].map((tabName) => (
+                          {['Home', 'Entry', 'Inquiries', 'Records', 'Analysis', 'Birthday', 'Reviews', 'Logs', 'Profile', 'Donations', 'Pre-Reg', 'Support'].map((tabName) => (
                             <label key={tabName} className={`flex items-center gap-4 p-5 rounded-2xl border-2 transition-all cursor-pointer group ${organization?.navigationVisibility?.[tabName] !== false ? 'bg-white border-brand-blue shadow-sm shadow-brand-blue/5' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
                               <input 
                                 type="checkbox"
@@ -5944,9 +6049,13 @@ export default function App() {
         {showEmergencyForm && (
           <EmergencyForm
             onClose={() => setShowEmergencyForm(false)}
-            onSave={saveVisitor}
+            onSave={handleEmergencyEntry}
             existingVisitors={visitors}
             isSaving={isSaving}
+            customPurposes={organization?.visitPurposes}
+            customTypes={organization?.visitorCategories}
+            organizationId={organization?.id}
+            onUpdateOrganization={handleUpdateOrganization}
           />
         )}
         {showForm && (

@@ -253,7 +253,7 @@ export default function ProfileTab({
                 {formData.photoURL ? (
                   <img src={formData.photoURL} alt={formData.name} className="w-full h-full object-cover" />
                 ) : (
-                  formData.name.charAt(0).toUpperCase()
+                  (formData.name || 'U').charAt(0).toUpperCase()
                 )}
                 <div 
                   onClick={() => {

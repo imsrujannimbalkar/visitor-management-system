@@ -1,22 +1,27 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, User, Phone, Search, AlertTriangle, CheckCircle2, ArrowRight, FileText, Tag, PenTool, ChevronDown, MessageCircle } from 'lucide-react';
+import { X, User, Phone, Search, AlertTriangle, CheckCircle2, ArrowRight, FileText, Tag, PenTool, ChevronDown, MessageCircle, Plus, Settings } from 'lucide-react';
 import { Visitor, PurposeType, VisitorType } from '../types';
 import VoiceInput from './VoiceInput';
+import Swal from 'sweetalert2';
 
 interface EmergencyFormProps {
   onClose: () => void;
   onSave: (visitor: any) => void;
   existingVisitors?: Visitor[];
   isSaving?: boolean;
+  customPurposes?: string[];
+  customTypes?: string[];
+  organizationId?: string;
+  onUpdateOrganization?: (data: any) => Promise<void>;
 }
 
-const PURPOSES: PurposeType[] = [
+const DEFAULT_PURPOSES: PurposeType[] = [
   'Meeting', 'Donation', 'Volunteering', 'Inquiry', 'Event', 'Interview', 
   'Student Visit', 'Service Visit', 'Delivery', 'Official Visit', 'Company Visit', 'Other'
 ];
 
-const TYPES: VisitorType[] = [
+const DEFAULT_TYPES: VisitorType[] = [
   'Donor', 'Volunteer', 'Beneficiary', 'Partner', 'Vendor', 'Guest', 'Staff', 'Student', 'Organization'
 ];
 
@@ -29,11 +34,18 @@ interface UnifiedDropdownProps {
   placeholder: string;
   required?: boolean;
   supportVoice?: boolean;
+  onAddOption?: (newOpt: string) => void;
+  onRemoveOption?: (opt: string) => void;
 }
 
-function UnifiedDropdown({ label, icon, value, options, onChange, placeholder, required, supportVoice }: UnifiedDropdownProps) {
+function UnifiedDropdown({ label, icon, value, options, onChange, placeholder, required, supportVoice, onAddOption, onRemoveOption }: UnifiedDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const filteredOptions = options.filter(opt => 
+    opt.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -79,39 +91,117 @@ function UnifiedDropdown({ label, icon, value, options, onChange, placeholder, r
           </div>
         )}
 
-        {supportVoice && (
-          <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-slate-500 group-focus-within:text-red-500 transition-colors">
-            {/* Icon is now handled by VoiceInput component */}
-          </div>
-        )}
-        
         <AnimatePresence>
           {isOpen && (
             <motion.div
               initial={{ opacity: 0, y: 10, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.95 }}
-              className="absolute z-50 w-full mt-2 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto custom-scrollbar"
+              className="absolute z-50 w-full mt-2 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden max-h-80 overflow-y-auto custom-scrollbar"
             >
+              <div className="p-3 border-b border-white/5 sticky top-0 bg-slate-900/90 backdrop-blur-md">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Search options..."
+                    className="w-full pl-9 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-xs font-bold text-white outline-none focus:border-red-500/30 transition-all"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+              </div>
               <div className="p-2">
-                {options.map((opt) => (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={() => {
-                      onChange(opt);
-                      setIsOpen(false);
-                    }}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-between ${
-                      value === opt 
-                        ? 'bg-red-600 text-white' 
-                        : 'text-slate-300 hover:bg-white/5 hover:text-red-400'
-                    }`}
-                  >
-                    {opt}
-                    {value === opt && <CheckCircle2 className="h-4 w-4" />}
-                  </button>
-                ))}
+                <div className="flex gap-2 mb-2 p-1 bg-white/5 rounded-xl border border-white/10">
+                  {onAddOption && (
+                    <button
+                      type="button"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        const { value: newOpt } = await Swal.fire({
+                          title: `New ${label}`,
+                          input: 'text',
+                          inputPlaceholder: `Enter new ${label.toLowerCase()}...`,
+                          showCancelButton: true,
+                          confirmButtonColor: '#dc2626',
+                          inputValidator: (value) => !value && 'Entry cannot be empty'
+                        });
+                        if (newOpt) {
+                          onAddOption(newOpt);
+                          onChange(newOpt);
+                          setIsOpen(false);
+                        }
+                      }}
+                      className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-white/5 border border-white/10 rounded-lg text-[9px] font-black text-red-400 uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all shadow-sm"
+                    >
+                      <Plus className="h-3 w-3" />
+                      Add New
+                    </button>
+                  )}
+                  {onRemoveOption && (
+                    <button
+                      type="button"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        const { value: selectedOpt } = await Swal.fire({
+                          title: `Delete ${label}`,
+                          input: 'select',
+                          inputOptions: Object.fromEntries(options.map(o => [o, o])),
+                          inputPlaceholder: 'Select option to remove',
+                          showCancelButton: true,
+                          confirmButtonColor: '#475569',
+                          cancelButtonColor: '#dc2626',
+                          confirmButtonText: 'Delete selected',
+                          inputValidator: (value) => !value && 'Please select an option'
+                        });
+                        if (selectedOpt) {
+                          onRemoveOption(selectedOpt);
+                          if (value === selectedOpt) onChange('');
+                        }
+                      }}
+                      className="p-3 bg-white/5 border border-white/10 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700 transition-all"
+                      title="Manage List"
+                    >
+                      <Settings className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+                {filteredOptions.length > 0 ? (
+                  filteredOptions.map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => {
+                        onChange(opt);
+                        setIsOpen(false);
+                        setSearchTerm('');
+                      }}
+                      className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-between group/opt ${
+                        value === opt 
+                          ? 'bg-red-600 text-white' 
+                          : 'text-slate-300 hover:bg-white/5 hover:text-red-400'
+                      }`}
+                    >
+                      {opt}
+                      {value === opt && <CheckCircle2 className="h-4 w-4" />}
+                    </button>
+                  ))
+                ) : (
+                  <div className="px-4 py-8 text-center">
+                    <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">No matching options</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onChange(searchTerm);
+                        setIsOpen(false);
+                      }}
+                      className="mt-4 px-4 py-2 bg-red-600/10 text-red-500 border border-red-500/20 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all w-full"
+                    >
+                      Use "{searchTerm}" anyway
+                    </button>
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
@@ -121,7 +211,15 @@ function UnifiedDropdown({ label, icon, value, options, onChange, placeholder, r
   );
 }
 
-export default function EmergencyForm({ onClose, onSave, isSaving = false }: EmergencyFormProps) {
+export default function EmergencyForm({ 
+  onClose, 
+  onSave, 
+  isSaving = false,
+  customPurposes,
+  customTypes,
+  organizationId,
+  onUpdateOrganization
+}: EmergencyFormProps) {
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -139,6 +237,35 @@ export default function EmergencyForm({ onClose, onSave, isSaving = false }: Eme
     isEmergency: true,
     entryMethod: 'Emergency Mode'
   });
+
+  const purposes = customPurposes && customPurposes.length > 0 ? customPurposes : DEFAULT_PURPOSES;
+  const types = customTypes && customTypes.length > 0 ? customTypes : DEFAULT_TYPES;
+
+  const handleAddPurpose = async (newP: string) => {
+    if (!onUpdateOrganization || !organizationId) return;
+    const current = customPurposes || [...DEFAULT_PURPOSES];
+    if (current.includes(newP)) return;
+    await onUpdateOrganization({ visitPurposes: [...current, newP] });
+  };
+
+  const handleRemovePurpose = async (p: string) => {
+    if (!onUpdateOrganization || !organizationId) return;
+    const current = customPurposes || [...DEFAULT_PURPOSES];
+    await onUpdateOrganization({ visitPurposes: current.filter(x => x !== p) });
+  };
+
+  const handleAddType = async (newT: string) => {
+    if (!onUpdateOrganization || !organizationId) return;
+    const current = customTypes || [...DEFAULT_TYPES];
+    if (current.includes(newT)) return;
+    await onUpdateOrganization({ visitorCategories: [...current, newT] });
+  };
+
+  const handleRemoveType = async (t: string) => {
+    if (!onUpdateOrganization || !organizationId) return;
+    const current = customTypes || [...DEFAULT_TYPES];
+    await onUpdateOrganization({ visitorCategories: current.filter(x => x !== t) });
+  };
 
   useEffect(() => {
     const dateStr = formData.date.replace(/-/g, '');
@@ -320,10 +447,10 @@ export default function EmergencyForm({ onClose, onSave, isSaving = false }: Eme
           
           <h2 className="text-6xl sm:text-7xl font-black text-white tracking-tighter mb-4 flex flex-col sm:flex-row items-center justify-center gap-4">
             <span className="bg-clip-text text-transparent bg-gradient-to-b from-white to-white/50">EMERGENCY</span> 
-            <span className="px-6 py-2 bg-red-600 rounded-3xl shadow-[0_0_60px_rgba(220,38,38,0.4)] rotate-[-2deg]">MODE</span>
+            <span className="px-6 py-2 bg-red-600 rounded-3xl shadow-[0_0_60px_rgba(220,38,38,0.6)] rotate-[-2deg] border-4 border-white/20 animate-pulse">PROTOCOL</span>
           </h2>
-          <p className="text-slate-500 font-bold text-sm sm:text-base max-w-md mx-auto leading-relaxed uppercase tracking-widest opacity-80">
-            Intelligent Monitor Bypass Protocol
+          <p className="text-red-500/60 font-black text-[10px] max-w-md mx-auto leading-relaxed uppercase tracking-[0.4em] opacity-80">
+            Intelligent Monitor Bypass Protocol v2.4
           </p>
         </div>
 
@@ -426,11 +553,13 @@ export default function EmergencyForm({ onClose, onSave, isSaving = false }: Eme
                     label="Authorized Mission"
                     icon={<Search className="h-6 w-6" />}
                     value={formData.purpose}
-                    options={PURPOSES}
+                    options={purposes}
                     onChange={(val) => setFormData({ ...formData, purpose: val })}
                     placeholder="Select Mission Purpose"
                     required
                     supportVoice
+                    onAddOption={handleAddPurpose}
+                    onRemoveOption={handleRemovePurpose}
                   />
                 </div>
 
@@ -460,10 +589,12 @@ export default function EmergencyForm({ onClose, onSave, isSaving = false }: Eme
                     label="Identity Class"
                     icon={<Tag className="h-6 w-6" />}
                     value={formData.visitorType}
-                    options={TYPES}
+                    options={types}
                     onChange={(val) => setFormData({ ...formData, visitorType: val })}
                     placeholder="Classify Identity"
                     required
+                    onAddOption={handleAddType}
+                    onRemoveOption={handleRemoveType}
                   />
 
                   <div className="space-y-3">

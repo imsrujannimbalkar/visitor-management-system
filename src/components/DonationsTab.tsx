@@ -514,7 +514,7 @@ export default function DonationsTab({
             <div class="relative z-10 flex items-center justify-between">
               <div class="flex items-center gap-6">
                 <div class="w-16 h-16 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20 shadow-inner">
-                  <span class="text-white font-black text-3xl">${donor.profile.name.charAt(0).toUpperCase()}</span>
+                  <span class="text-white font-black text-3xl">${(donor.profile.name || 'D').charAt(0).toUpperCase()}</span>
                 </div>
                 <div>
                   <div class="flex items-center gap-2 mb-1">
@@ -1276,7 +1276,7 @@ export default function DonationsTab({
                     <td className="px-8 py-7">
                       <div className="flex items-center gap-5">
                         <div className="h-14 w-14 bg-white border border-slate-100 rounded-2xl flex items-center justify-center text-ngo-accent font-display font-black text-xl shadow-sm group-hover:scale-105 transition-all">
-                          {donor.profile.name.charAt(0)}
+                          {(donor.profile.name || 'D').charAt(0)}
                         </div>
                         <div>
                           <button 
@@ -1378,7 +1378,7 @@ export default function DonationsTab({
                 <div className="absolute top-0 right-0 w-64 h-64 bg-brand-blue/5 rounded-full -mr-32 -mt-32 blur-[80px]" />
                 <div className="flex items-center gap-4 sm:gap-8 relative z-10">
                   <div className="h-16 w-16 sm:h-24 sm:w-24 bg-gradient-to-br from-rose-500 to-rose-600 rounded-2xl sm:rounded-[2rem] flex items-center justify-center text-white font-black text-2xl sm:text-4xl shadow-2xl shadow-rose-200 border-4 border-white/50">
-                    {selectedDonor.profile.name.charAt(0)}
+                    {(selectedDonor.profile.name || 'D').charAt(0)}
                   </div>
                   <div>
                     <div className="flex flex-wrap items-center gap-3 mb-1 sm:mb-2 text-slate-500 font-bold">

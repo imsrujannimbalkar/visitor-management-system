@@ -216,7 +216,7 @@ export interface Notification {
   organizationId: string;
   title: string;
   message: string;
-  type: 'REVIEW' | 'WAITING' | 'BIRTHDAY' | 'SYSTEM' | 'PRE_REG' | 'DONATION' | 'OCCASION' | 'KIOSK_ASSISTANCE' | 'FOLLOW_UP';
+  type: 'REVIEW' | 'WAITING' | 'BIRTHDAY' | 'SYSTEM' | 'PRE_REG' | 'DONATION' | 'OCCASION' | 'KIOSK_ASSISTANCE' | 'KIOSK_BROADCAST' | 'FOLLOW_UP';
   read: boolean;
   timestamp: string;
   relatedId?: string; // visitorId or reviewId

@@ -277,6 +277,21 @@ export default function VisitorForm({
     }
   }, [initialData]);
 
+  const lt = {
+    formIncomplete: { EN: 'Form Incomplete', HI: 'फॉर्म अधूरा है' },
+    alreadyInside: { EN: 'This visitor is already checked in and currently inside.', HI: 'यह आगंतुक पहले से ही चेक-इन है और वर्तमान में अंदर है।' },
+    enterName: { EN: "Please enter the visitor's name.", HI: "कृपया आगंतुक का नाम दर्ज करें।" },
+    enterPhone: { EN: "Please enter the visitor's phone number.", HI: "कृपया आगंतुक का फोन नंबर दर्ज करें।" },
+    selectPurpose: { EN: 'Please select a purpose of visit.', HI: 'कृपया भेंट का उद्देश्य चुनें।' },
+    selectCategory: { EN: 'Please select a visitor type.', HI: 'कृपया आगंतुक प्रकार चुनें।' },
+    provideSignature: { EN: 'Please provide your signature.', HI: 'कृपया अपने हस्ताक्षर प्रदान करें।' },
+    saveError: { EN: 'An error occurred while saving. Please try again.', HI: 'सहेजते समय एक त्रुटि हुई। कृपया पुन: प्रयास करें।' },
+    welcomeBack: { EN: 'Welcome Back!', HI: 'वापसी पर स्वागत है!' },
+    foundRecord: { EN: (name: string) => `Found existing record for ${name}. Details auto-filled.`, HI: (name: string) => `${name} के लिए मौजूदा रिकॉर्ड मिला। विवरण स्वतः भर गए।` },
+    newEntry: { EN: 'New Visitor Entry', HI: 'नया आगंतुक प्रवेश' },
+    editRecord: { EN: 'Edit Record', HI: 'रिकॉर्ड अपडेट करें' },
+  };
+
   // Returning visitor detection and duplicate check
   useEffect(() => {
     const cleanPhone = (formData.phone || '').replace(/\D/g, '');
@@ -309,17 +324,17 @@ export default function VisitorForm({
         }));
         setIsAutoFilled(true);
 
-        showToast(
-          t(`Found existing record for ${lastVisit.name}. Details auto-filled.`, `${lastVisit.name} के लिए मौजूदा रिकॉर्ड मिला। विवरण स्वतः भर गए।`),
-          'info'
-        );
+        const msg = isKiosk && lang === 'HI' 
+          ? lt.foundRecord.HI(lastVisit.name)
+          : lt.foundRecord.EN(lastVisit.name);
+        showToast(msg, 'info');
       }
     } else if (cleanPhone.length < 10) {
       setReturningVisitor(null);
       setIsAutoFilled(false);
       setIsAlreadyInside(false);
     }
-  }, [formData.phone, existingVisitors, initialData, isAutoFilled]);
+  }, [formData.phone, existingVisitors, initialData, isAutoFilled, lang, isKiosk]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -336,7 +351,7 @@ export default function VisitorForm({
 
     const showAlert = (message: string) => {
       Swal.fire({
-        title: 'Form Incomplete',
+        title: isKiosk && lang === 'HI' ? lt.formIncomplete.HI : lt.formIncomplete.EN,
         text: message,
         icon: 'warning',
         confirmButtonText: 'OK',
@@ -355,30 +370,30 @@ export default function VisitorForm({
     };
 
     if (isAlreadyInside) {
-      showAlert('This visitor is already checked in and currently inside.');
+      showAlert(isKiosk && lang === 'HI' ? lt.alreadyInside.HI : lt.alreadyInside.EN);
       return;
     }
     
     if (newErrors.name) {
-      showAlert("Please enter the visitor's name.");
+      showAlert(isKiosk && lang === 'HI' ? lt.enterName.HI : lt.enterName.EN);
       return;
     }
 
     if (newErrors.phone) {
-      showAlert("Please enter the visitor's phone number.");
+      showAlert(isKiosk && lang === 'HI' ? lt.enterPhone.HI : lt.enterPhone.EN);
       return;
     }
     
     if (newErrors.purpose) {
-      showAlert('Please select a purpose of visit.');
+      showAlert(isKiosk && lang === 'HI' ? lt.selectPurpose.HI : lt.selectPurpose.EN);
       return;
     }
     if (newErrors.category) {
-      showAlert('Please select a visitor type.');
+      showAlert(isKiosk && lang === 'HI' ? lt.selectCategory.HI : lt.selectCategory.EN);
       return;
     }
     if (newErrors.signature) {
-      showAlert('Please provide your signature.');
+      showAlert(isKiosk && lang === 'HI' ? lt.provideSignature.HI : lt.provideSignature.EN);
       return;
     }
 
@@ -392,7 +407,7 @@ export default function VisitorForm({
       await onSave(submissionData);
     } catch (error) {
       console.error("Error saving visitor:", error);
-      showToast('An error occurred while saving. Please try again.', 'error');
+      showToast(isKiosk && lang === 'HI' ? lt.saveError.HI : lt.saveError.EN, 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -418,9 +433,11 @@ export default function VisitorForm({
             </div>
             <div>
               <h3 className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">
-                {initialData ? 'Edit Record' : 'New Visitor Entry'}
+                {initialData 
+                  ? (isKiosk && lang === 'HI' ? lt.editRecord.HI : lt.editRecord.EN) 
+                  : (isKiosk && lang === 'HI' ? lt.newEntry.HI : lt.newEntry.EN)}
               </h3>
-              <p className="text-[10px] sm:text-xs text-gray-400 font-bold uppercase tracking-widest">{organizationName} Visitor Management</p>
+              <p className="text-[10px] sm:text-xs text-gray-400 font-bold uppercase tracking-widest">{isKiosk && lang === 'HI' ? `${organizationName} आगंतुक प्रबंधन` : `${organizationName} Visitor Management`}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -428,8 +445,8 @@ export default function VisitorForm({
               <a
                 onClick={(e) => {
                   e.preventDefault();
-                  const visitorName = formData.name || 'Visitor';
-                  const visitDate = new Date(formData.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                  const visitorName = formData.name || (isKiosk && lang === 'HI' ? 'आगंतुक' : 'Visitor');
+                  const visitDate = new Date(formData.date).toLocaleDateString(isKiosk && lang === 'HI' ? 'hi-IN' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
                   const passUrl = `${window.location.origin}/?passId=${formData.visitorId}&orgId=${organizationId || ''}`;
                   
                   let message = '';
@@ -453,14 +470,14 @@ export default function VisitorForm({
                   if (!win) {
                     window.location.href = url;
                   }
-                  showToast('WhatsApp message generated', 'success');
+                  showToast(isKiosk && lang === 'HI' ? 'व्हाट्सएप संदेश जनरेट किया गया' : 'WhatsApp message generated', 'success');
                 }}
                 href="#"
                 className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-xl transition-all active:scale-90 flex items-center gap-2"
-                title="Send WhatsApp Message"
+                title={isKiosk && lang === 'HI' ? "व्हाट्सएप संदेश भेजें" : "Send WhatsApp Message"}
               >
                 <MessageCircle className="h-5 w-5" />
-                <span className="hidden sm:inline text-xs font-bold uppercase tracking-widest">WhatsApp</span>
+                <span className="hidden sm:inline text-xs font-bold uppercase tracking-widest">{isKiosk && lang === 'HI' ? 'व्हाट्सएप' : 'WhatsApp'}</span>
               </a>
             )}
             {!isKiosk && (
@@ -489,9 +506,11 @@ export default function VisitorForm({
                     <AlertCircle className="h-6 w-6 text-white" />
                   </div>
                   <div>
-                    <p className="text-lg font-black text-rose-900 leading-tight">Already Checked In</p>
+                    <p className="text-lg font-black text-rose-900 leading-tight">{isKiosk && lang === 'HI' ? 'पहले से चेक-इन' : 'Already Checked In'}</p>
                     <p className="text-sm text-rose-700 font-bold opacity-80 mt-1">
-                      This visitor is currently marked as "INSIDE". Please check them out before creating a new entry.
+                      {isKiosk && lang === 'HI' 
+                        ? 'यह आगंतुक वर्तमान में "अंदर" के रूप में चिह्नित है। कृपया नई प्रविष्टि बनाने से पहले उन्हें चेक आउट करें।'
+                        : 'This visitor is currently marked as "INSIDE". Please check them out before creating a new entry.'}
                     </p>
                   </div>
                 </div>
