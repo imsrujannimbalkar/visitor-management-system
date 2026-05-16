@@ -30,13 +30,18 @@ service cloud.firestore {
     function belongsToOrg(orgId) {
       return isSignedIn() && 
         (exists(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid)) ||
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId);
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId));
     }
 
     function isAdminOfOrg(orgId) {
       return belongsToOrg(orgId) && 
-        (get(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid)).data.role == 'ADMIN' ||
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN');
+        ((exists(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid)) && get(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid)).data.role == 'ADMIN') ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN'));
+    }
+
+    function isOrgCreator(orgId, userId) {
+      return exists(/databases/$(database)/documents/organizations/$(orgId)) && 
+             get(/databases/$(database)/documents/organizations/$(orgId)).data.createdBy == userId;
     }
 
     function incoming() {
@@ -106,16 +111,17 @@ service cloud.firestore {
 
     // User Registry (Global Lookup)
     match /users/{uid} {
-      allow get: if isUser(uid);
+      allow get: if isUser(uid) || (isSignedIn() && existing().organizationId != null && belongsToOrg(existing().organizationId));
       allow list: if false; // No directory scraping
       allow create: if isUser(uid) && 
                       incoming().uid == uid &&
                       incoming().keys().hasAll(['uid', 'email', 'role']) &&
                       incoming().role in ['ADMIN', 'STAFF'];
-      allow update: if isUser(uid) && 
+      allow update: if (isUser(uid) || (isSignedIn() && existing().organizationId != null && isAdminOfOrg(existing().organizationId))) && 
                       incoming().uid == existing().uid &&
                       (incoming().organizationId == existing().organizationId || existing().organizationId == null) &&
-                      (incoming().role == existing().role || existing().role == null) &&
+                      (isUser(uid) ? (incoming().role == existing().role || existing().role == null) : (isAdminOfOrg(existing().organizationId))) &&
+                      (!incoming().diff(existing()).affectedKeys().hasAny(['role']) || !isOrgCreator(existing().organizationId, uid)) &&
                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'lastLogin', 'photoURL', 'preferences', 'organizationId', 'role']);
     }
 
@@ -134,8 +140,9 @@ service cloud.firestore {
         allow read: if belongsToOrg(orgId) || isUser(userId);
         allow create: if isAdminOfOrg(orgId) || 
                        (isUser(userId) && get(/databases/$(database)/documents/organizations/$(orgId)).data.createdBy == request.auth.uid); 
-        allow update: if isAdminOfOrg(orgId) || (isUser(userId) && belongsToOrg(orgId) && incoming().role == existing().role);
-        allow delete: if isAdminOfOrg(orgId) && userId != request.auth.uid;
+        allow update: if (isAdminOfOrg(orgId) || (isUser(userId) && belongsToOrg(orgId) && incoming().role == existing().role)) &&
+                       (!incoming().diff(existing()).affectedKeys().hasAny(['role']) || !isOrgCreator(orgId, userId));
+        allow delete: if isAdminOfOrg(orgId) && userId != request.auth.uid && !isOrgCreator(orgId, userId);
       }
 
       match /visitors/{phone} {

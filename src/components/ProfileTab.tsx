@@ -449,24 +449,26 @@ export default function ProfileTab({
            </div>
 
            {/* Premium Google Integrations Section */}
-           <GoogleIntegration 
-              userEmail={user?.email}
-              googleStatus={googleStatus}
-              availableSheets={availableSheets}
-              availableCalendars={availableCalendars}
-              isFetchingSheets={isFetchingSheets}
-              isFetchingCalendars={isFetchingCalendars}
-              isSyncingGoogle={isSyncingGoogle}
-              onConnectGoogle={onConnectGoogle}
-              onDisconnectGoogle={onDisconnectGoogle}
-              onSelectSheet={onSelectSheet}
-              onCreateSheet={onCreateSheet}
-              onSelectCalendar={onSelectCalendar}
-              onCreateCalendar={onCreateCalendar}
-              onSyncNow={onSyncNow}
-              onRefreshLists={onRefreshLists}
-              autoSyncEnabled={organization?.autoSyncEnabled !== false}
-            />
+           {user.role === 'ADMIN' && (
+             <GoogleIntegration 
+                userEmail={user?.email}
+                googleStatus={googleStatus}
+                availableSheets={availableSheets}
+                availableCalendars={availableCalendars}
+                isFetchingSheets={isFetchingSheets}
+                isFetchingCalendars={isFetchingCalendars}
+                isSyncingGoogle={isSyncingGoogle}
+                onConnectGoogle={onConnectGoogle}
+                onDisconnectGoogle={onDisconnectGoogle}
+                onSelectSheet={onSelectSheet}
+                onCreateSheet={onCreateSheet}
+                onSelectCalendar={onSelectCalendar}
+                onCreateCalendar={onCreateCalendar}
+                onSyncNow={onSyncNow}
+                onRefreshLists={onRefreshLists}
+                autoSyncEnabled={organization?.autoSyncEnabled !== false}
+              />
+           )}
           </div>
 
           <div className="space-y-8">
@@ -536,111 +538,113 @@ export default function ProfileTab({
                 </a>
               </div>
            </div>
-            {/* Data Management Card */}
-            <div className="bg-white rounded-[3rem] p-12 border border-slate-100 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.05)]">
-              <div className="flex items-center gap-4 mb-10">
-                 <div className="h-10 w-10 bg-green-50 rounded-xl flex items-center justify-center text-green-600">
-                    <Download size={20} />
-                 </div>
-                 <h3 className="text-2xl font-black text-[#051739] italic tracking-tight">System Backups</h3>
-              </div>
-              
-              <div className="space-y-6">
-                <div className="flex gap-4">
-                  <button
-                    onClick={async () => {
-                      await onCreateBackup();
-                      loadBackups();
-                    }}
-                    className="flex-1 py-5 bg-[#0F9D58] text-white rounded-3xl font-black hover:bg-[#0B8043] transition-all active:scale-95 flex items-center justify-center gap-3 shadow-sm border border-[#0F9D58]"
-                  >
-                    <RefreshCw size={20} />
-                    Create Backup
-                  </button>
-                  <button
-                    onClick={loadBackups}
-                    disabled={isFetchingBackups}
-                    className="px-6 py-5 bg-slate-100 text-slate-600 rounded-3xl font-bold hover:bg-slate-200 transition-all flex items-center gap-2 disabled:opacity-50"
-                  >
-                    {isFetchingBackups ? <Loader2 size={20} className="animate-spin" /> : <RefreshCw size={20} />}
-                  </button>
+            {/* Data Management Card - Admin Only */}
+            {user.role === 'ADMIN' && (
+              <div className="bg-white rounded-[3rem] p-12 border border-slate-100 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.05)]">
+                <div className="flex items-center gap-4 mb-10">
+                   <div className="h-10 w-10 bg-green-50 rounded-xl flex items-center justify-center text-green-600">
+                      <Download size={20} />
+                   </div>
+                   <h3 className="text-2xl font-black text-[#051739] italic tracking-tight">System Backups</h3>
                 </div>
-
-                <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                  {backups.length === 0 ? (
-                    <div className="p-8 text-center bg-slate-50 rounded-[2rem] border border-dashed border-slate-200">
-                      <p className="text-sm font-medium text-slate-400">No timestamped backups detected on this node.</p>
-                    </div>
-                  ) : (
-                    backups.map((backup) => (
-                      <div key={backup.id} className="p-5 bg-slate-50/50 hover:bg-slate-100/50 rounded-2xl border border-slate-100 flex items-center justify-between transition-all group">
-                        <div className="flex items-center gap-4">
-                          <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-slate-400 group-hover:text-blue-600 shadow-sm transition-colors">
-                            <Clock size={18} />
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold text-slate-900 tracking-tight">
-                              {new Date(backup.timestamp).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                            </p>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                              {backup.metadata?.visitsCount || 0} Records • {((backup.metadata?.size || 0) / 1024).toFixed(1)} KB
-                            </p>
-                          </div>
-                        </div>
-                        <button 
-                          onClick={() => downloadBackup(backup)}
-                          className="p-3 bg-white hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-xl shadow-sm border border-slate-100 transition-all"
-                          title="Download Snapshot"
-                        >
-                          <Download size={16} />
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Restore Section - Advanced */}
-              {onRestoreBackup && (
-                <div className="mt-8 pt-8 border-t border-slate-100">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-[#051739]/30 mb-4 px-2">Disaster Recovery (Advanced)</p>
-                  <label className="flex items-center justify-between p-6 bg-slate-50 rounded-2xl cursor-pointer hover:bg-slate-100 transition-all border-2 border-dashed border-slate-200 group">
-                    <div className="flex items-center gap-4">
-                      <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-slate-500 shadow-sm">
-                        <Save size={18} />
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-sm font-black text-slate-900 group-hover:text-indigo-600 transition-colors">Emergency Restore</span>
-                        <span className="text-[10px] font-medium text-slate-400">Upload JSON backup to overwrite local state</span>
-                      </div>
-                    </div>
-                    <input 
-                      type="file" 
-                      accept=".json" 
-                      className="hidden" 
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = async (event) => {
-                            try {
-                              const data = JSON.parse(event.target?.result as string);
-                              await onRestoreBackup(data);
-                            } catch (err) {
-                              Swal.fire('Parsing Failed', 'Invalid JSON backup file.', 'error');
-                            }
-                          };
-                          reader.readAsText(file);
-                        }
+                
+                <div className="space-y-6">
+                  <div className="flex gap-4">
+                    <button
+                      onClick={async () => {
+                        await onCreateBackup();
+                        loadBackups();
                       }}
-                    />
-                    <div className="px-4 py-2 bg-white text-[10px] font-black uppercase tracking-widest text-slate-600 rounded-full border border-slate-200 shadow-sm">
-                      Select File
-                    </div>
-                  </label>
+                      className="flex-1 py-5 bg-[#0F9D58] text-white rounded-3xl font-black hover:bg-[#0B8043] transition-all active:scale-95 flex items-center justify-center gap-3 shadow-sm border border-[#0F9D58]"
+                    >
+                      <RefreshCw size={20} />
+                      Create Backup
+                    </button>
+                    <button
+                      onClick={loadBackups}
+                      disabled={isFetchingBackups}
+                      className="px-6 py-5 bg-slate-100 text-slate-600 rounded-3xl font-bold hover:bg-slate-200 transition-all flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {isFetchingBackups ? <Loader2 size={20} className="animate-spin" /> : <RefreshCw size={20} />}
+                    </button>
+                  </div>
+
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                    {backups.length === 0 ? (
+                      <div className="p-8 text-center bg-slate-50 rounded-[2rem] border border-dashed border-slate-200">
+                        <p className="text-sm font-medium text-slate-400">No timestamped backups detected on this node.</p>
+                      </div>
+                    ) : (
+                      backups.map((backup) => (
+                        <div key={backup.id} className="p-5 bg-slate-50/50 hover:bg-slate-100/50 rounded-2xl border border-slate-100 flex items-center justify-between transition-all group">
+                          <div className="flex items-center gap-4">
+                            <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-slate-400 group-hover:text-blue-600 shadow-sm transition-colors">
+                              <Clock size={18} />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-slate-900 tracking-tight">
+                                {new Date(backup.timestamp).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                {backup.metadata?.visitsCount || 0} Records • {((backup.metadata?.size || 0) / 1024).toFixed(1)} KB
+                              </p>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={() => downloadBackup(backup)}
+                            className="p-3 bg-white hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-xl shadow-sm border border-slate-100 transition-all"
+                            title="Download Snapshot"
+                          >
+                            <Download size={16} />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
+
+                {/* Restore Section - Advanced */}
+                {onRestoreBackup && (
+                  <div className="mt-8 pt-8 border-t border-slate-100">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-[#051739]/30 mb-4 px-2">Disaster Recovery (Advanced)</p>
+                    <label className="flex items-center justify-between p-6 bg-slate-50 rounded-2xl cursor-pointer hover:bg-slate-100 transition-all border-2 border-dashed border-slate-200 group">
+                      <div className="flex items-center gap-4">
+                        <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-slate-500 shadow-sm">
+                          <Save size={18} />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-black text-slate-900 group-hover:text-indigo-600 transition-colors">Emergency Restore</span>
+                          <span className="text-[10px] font-medium text-slate-400">Upload JSON backup to overwrite local state</span>
+                        </div>
+                      </div>
+                      <input 
+                        type="file" 
+                        accept=".json" 
+                        className="hidden" 
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = async (event) => {
+                              try {
+                                const data = JSON.parse(event.target?.result as string);
+                                await onRestoreBackup(data);
+                              } catch (err) {
+                                Swal.fire('Parsing Failed', 'Invalid JSON backup file.', 'error');
+                              }
+                            };
+                            reader.readAsText(file);
+                          }
+                        }}
+                      />
+                      <div className="px-4 py-2 bg-white text-[10px] font-black uppercase tracking-widest text-slate-600 rounded-full border border-slate-200 shadow-sm">
+                        Select File
+                      </div>
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
         </div>
       </div>
     </div>

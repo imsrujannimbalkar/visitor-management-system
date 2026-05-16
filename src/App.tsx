@@ -729,7 +729,7 @@ export default function App() {
   };
 
   const isTabVisible = (tab: string) => {
-        if (tab === 'legal') return true;
+    if (tab === 'legal' || tab === 'profile') return true;
     if (user?.role === 'ADMIN' || isSuperAdmin) {
       if (tab === 'donations') return user?.role === 'ADMIN' || isSuperAdmin;
       return true;
@@ -2196,6 +2196,11 @@ export default function App() {
   const handleToggleUserRole = async (targetUser: User) => {
     if (targetUser.uid === auth.currentUser?.uid) {
       addToast('You cannot change your own role', 'error');
+      return;
+    }
+
+    if (targetUser.uid === organization?.createdBy) {
+      addToast('Cannot modify the organization creator\'s role', 'error');
       return;
     }
 
@@ -5617,18 +5622,18 @@ export default function App() {
                             <td className="px-8 py-6 text-right">
                               <div className="flex items-center justify-end gap-2">
                                 <button
-                                  disabled={m.uid === user?.uid}
+                                  disabled={m.uid === user?.uid || m.uid === organization?.createdBy}
                                   onClick={() => handleToggleUserRole(m)}
                                   className="p-2.5 text-slate-400 hover:text-brand-blue hover:bg-white rounded-lg transition-all disabled:opacity-30 border border-transparent hover:border-slate-100"
-                                  title="Change Permission Level"
+                                  title={m.uid === organization?.createdBy ? "Organization Creator Role Immutable" : "Change Permission Level"}
                                 >
                                   <Shield className="h-4 w-4" />
                                 </button>
                                 <button
-                                  disabled={m.uid === user?.uid}
+                                  disabled={m.uid === user?.uid || m.uid === organization?.createdBy}
                                   onClick={() => handleRemoveMember(m)}
                                   className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-white rounded-lg transition-all disabled:opacity-30 border border-transparent hover:border-slate-100"
-                                  title="Revoke Access"
+                                  title={m.uid === organization?.createdBy ? "Cannot Remove Organization Creator" : "Revoke Access"}
                                 >
                                   <X className="h-4 w-4" />
                                 </button>
