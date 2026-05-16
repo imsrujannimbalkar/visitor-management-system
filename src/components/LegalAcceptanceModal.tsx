@@ -3,12 +3,13 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ShieldCheck, ArrowRight, Lock, Eye, ScrollText, X, ArrowLeft } from 'lucide-react';
 import { PrivacyPolicy, TermsOfService } from './LegalPages';
 
-interface TermsAcceptanceModalProps {
+interface LegalAcceptanceModalProps {
   onAccept: () => void;
+  onClose: () => void;
   organizationName?: string;
 }
 
-export default function TermsAcceptanceModal({ onAccept, organizationName }: TermsAcceptanceModalProps) {
+export default function LegalAcceptanceModal({ onAccept, onClose, organizationName }: LegalAcceptanceModalProps) {
   const [view, setView] = useState<'decision' | 'privacy' | 'terms'>('decision');
 
   return (
@@ -22,7 +23,15 @@ export default function TermsAcceptanceModal({ onAccept, organizationName }: Ter
         animate={{ scale: 1, y: 0 }}
         className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] sm:rounded-[3rem] shadow-2xl overflow-hidden border border-white/20 flex flex-col max-h-[85vh] sm:max-h-[90vh]"
       >
-        <div className="flex-1 min-h-0 relative">
+        <div className="flex-1 min-h-0 relative flex flex-col">
+          {/* Close Button */}
+          <button 
+            onClick={onClose}
+            className="absolute top-6 right-6 z-50 p-3 text-slate-400 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-slate-800 rounded-2xl transition-all active:scale-95 cursor-pointer shadow-sm border border-black/5"
+          >
+            <X className="h-5 w-5" />
+          </button>
+
           <AnimatePresence mode="wait">
             {view === 'decision' ? (
               <motion.div 
@@ -32,16 +41,16 @@ export default function TermsAcceptanceModal({ onAccept, organizationName }: Ter
                 exit={{ opacity: 0, x: 20 }}
                 className="absolute inset-0 flex flex-col"
               >
-                <div className="p-8 sm:p-12 overflow-y-auto custom-scrollbar flex-1">
+                <div className="pt-16 px-8 pb-8 sm:pt-20 sm:px-12 sm:pb-12 overflow-y-auto custom-scrollbar flex-1 min-h-0">
                 <div className="flex flex-col items-center text-center space-y-6 mb-10">
                   <div className="w-20 h-20 bg-brand-blue/10 text-brand-blue rounded-3xl flex items-center justify-center shadow-inner">
                     <ShieldCheck className="h-10 w-10" />
                   </div>
                   <div className="space-y-2">
                     <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase italic text-center">
-                      Protocol <span className="text-brand-blue not-italic">Acknowledgment</span>
+                      Legal <span className="text-brand-blue not-italic">Agreement</span>
                     </h2>
-                    <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.4em]">Security Deployment Required</p>
+                    <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.4em]">Review & Acceptance Required</p>
                   </div>
                 </div>
 
@@ -108,7 +117,7 @@ export default function TermsAcceptanceModal({ onAccept, organizationName }: Ter
                   onClick={onAccept}
                   className="w-full py-6 bg-brand-blue text-white font-black rounded-2xl hover:bg-blue-600 transition-all shadow-xl shadow-blue-500/20 active:scale-95 flex items-center justify-center gap-3 uppercase tracking-widest text-[11px]"
                 >
-                  I Accept Protocol Conditions
+                  I Accept Legal Conditions
                   <ArrowRight className="h-4 w-4" />
                 </button>
               </div>
@@ -119,7 +128,7 @@ export default function TermsAcceptanceModal({ onAccept, organizationName }: Ter
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              className="absolute inset-0 flex flex-col bg-white dark:bg-slate-900"
+              className="absolute inset-0 flex flex-col bg-white dark:bg-slate-900 z-10"
             >
               <div className="p-8 border-b border-slate-50 dark:border-white/5 flex items-center justify-between shrink-0">
                 <button 
@@ -131,11 +140,11 @@ export default function TermsAcceptanceModal({ onAccept, organizationName }: Ter
                 </button>
                 <div className="text-right">
                   <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight italic">
-                    {view === 'privacy' ? 'Privacy' : 'Terms'} <span className="text-brand-blue not-italic">Protocol</span>
+                    {view === 'privacy' ? 'Privacy' : 'Terms'} <span className="text-brand-blue not-italic">Agreement</span>
                   </h3>
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto p-8 sm:p-10 custom-scrollbar">
+              <div className="flex-1 overflow-y-auto p-8 sm:p-10 custom-scrollbar min-h-0">
                 {view === 'privacy' ? (
                   <PrivacyPolicy organizationName={organizationName} />
                 ) : (

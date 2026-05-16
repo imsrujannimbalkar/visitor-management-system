@@ -104,7 +104,7 @@ import PreRegistrationForm from './components/PreRegistrationForm';
 import PreRegistrationTab from './components/PreRegistrationTab';
 import KioskPreRegLookup from './components/KioskPreRegLookup';
 import InquiryTracker from './components/InquiryTracker';
-import TermsAcceptanceModal from './components/TermsAcceptanceModal';
+import LegalAcceptanceModal from './components/LegalAcceptanceModal';
 import { geminiService } from './services/geminiService';
 import { Visitor, User, VisitorStatus, UserRole, Organization, Notification, Profile, Visit, Donation, DonationAuditEntry, PreRegistration, Inquiry } from './types';
 import { useToast } from './components/Toast';
@@ -6194,13 +6194,14 @@ export default function App() {
           />
         )}
         {showTermsAcceptance && (
-          <TermsAcceptanceModal
+          <LegalAcceptanceModal
             organizationName={organization?.name}
             onAccept={() => {
               localStorage.setItem('vms_terms_accepted', 'true');
               setShowTermsAcceptance(false);
-              addToast('Welcome to the workspace. Protocols are active.', 'success');
+              addToast('Welcome to the workspace. Legal conditions accepted.', 'success');
             }}
+            onClose={() => setShowTermsAcceptance(false)}
           />
         )}
         {showPassForVisitor && (
