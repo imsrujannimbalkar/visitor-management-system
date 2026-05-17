@@ -126,6 +126,7 @@ import {
   orderBy, 
   setDoc, 
   updateDoc,
+  deleteField,
   addDoc,
   deleteDoc,
   getDocs,
@@ -730,8 +731,7 @@ export default function App() {
 
   const isTabVisible = (tab: string) => {
     if (tab === 'legal' || tab === 'profile') return true;
-    if (user?.role === 'ADMIN' || isSuperAdmin) {
-      if (tab === 'donations') return user?.role === 'ADMIN' || isSuperAdmin;
+    if (user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN' || isSuperAdmin) {
       return true;
     }
     if (!organization?.navigationVisibility) return true;
@@ -1629,7 +1629,7 @@ export default function App() {
               unsubscribeOrg = onSnapshot(doc(db, 'organizations', orgId), (orgSnap) => {
                 if (orgSnap.exists()) {
                   const orgData = orgSnap.data() as Organization;
-                  setOrganization(orgData);
+                  setOrganization({ id: orgSnap.id, ...orgData });
                   document.title = `${orgData.name} - VMS`;
                 }
                 checkReady(true);
@@ -1645,11 +1645,13 @@ export default function App() {
                 if (nestedSnap.exists()) {
                   const data = nestedSnap.data() as User;
                   setUser({ 
+                    uid: nestedSnap.id,
                     ...data, 
                     preferences: { ...defaultPrefs, ...data.preferences } 
                   });
                 } else {
                   setUser({ 
+                    uid: firebaseUser.uid,
                     ...registryData, 
                     preferences: { ...defaultPrefs, ...registryData.preferences } 
                   });
@@ -1710,7 +1712,7 @@ export default function App() {
     const unsubscribe = onSnapshot(doc(db, 'organizations', orgId), async (orgSnap) => {
         if (orgSnap.exists()) {
             const orgData = orgSnap.data() as Organization;
-            setOrganization(orgData);
+            setOrganization({ id: orgSnap.id, ...orgData });
             
             if (orgData.kioskPin !== undefined) {
               setKioskPin(orgData.kioskPin);
@@ -1818,13 +1820,17 @@ export default function App() {
   // Real-time Organization Users & Invitations Listener (Hierarchical - Based on user?.organizationId)
   useEffect(() => {
     const orgId = user?.organizationId;
-    if (!orgId || (user?.role !== 'ADMIN' && !isSuperAdmin)) return;
+    if (!orgId || (user?.role !== 'ADMIN' && user?.role !== 'MASTER_ADMIN' && !isSuperAdmin)) return;
 
     // Listen to Users within Org
     const usersRef = collection(db, 'organizations', orgId, 'users');
     const unsubscribeUsers = onSnapshot(usersRef, (snapshot) => {
       const data = snapshot.docs
-        .map(doc => ({ ...doc.data() } as User))
+        .map(doc => ({ 
+          uid: doc.id,
+          organizationId: orgId,
+          ...doc.data() 
+        } as User))
         .filter(u => !u.deleted);
       setOrgUsers(data);
     }, (error) => handleFirestoreError(error, OperationType.LIST, `organizations/${orgId}/users`));
@@ -2015,6 +2021,97 @@ export default function App() {
   }, [user?.organizationId, organization?.id, user?.role]);
 
 
+  // Check for Access Revocation Notification
+  useEffect(() => {
+    if (!isAuthReady || !user) return;
+    
+    const checkRevocationAndInvites = async () => {
+      // 1. Check for Revocation
+      if (user.revokedFrom && !user.organizationId) {
+        console.log('Revocation detected for user:', user.uid);
+        const hasShown = sessionStorage.getItem(`revoked_shown_${user.uid}`);
+        if (!hasShown) {
+          sessionStorage.setItem(`revoked_shown_${user.uid}`, 'true');
+          await Swal.fire({
+            title: 'Access Revoked',
+            html: `<div class="space-y-4">
+              <div class="h-20 w-20 bg-rose-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border border-rose-100">
+                 <div class="relative">
+                    <svg class="h-10 w-10 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                 </div>
+              </div>
+              <div class="space-y-2">
+                <h4 class="text-slate-900 font-bold text-lg leading-tight tracking-tight">Organization Access Removed</h4>
+                <p class="text-slate-500 text-sm font-medium leading-relaxed">Your professional credentials for <span class="text-indigo-600 font-bold px-1">${user.revokedFrom}</span> have been deactivated by the administrative authority.</p>
+              </div>
+              <div class="pt-6 border-t border-slate-100">
+                <p class="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] leading-relaxed">Contact the organization owner or primary administrator for restoration requests.</p>
+              </div>
+            </div>`,
+            showConfirmButton: true,
+            confirmButtonText: 'Acknowledge',
+            confirmButtonColor: '#0f172a',
+            customClass: {
+              container: 'z-[100000]',
+              popup: 'rounded-[3rem] p-12 border-none shadow-2xl',
+              confirmButton: 'rounded-2xl px-10 py-5 w-full uppercase font-black italic tracking-widest text-xs'
+            },
+            allowOutsideClick: false,
+            allowEscapeKey: false
+          });
+          
+          try {
+            await updateDoc(doc(db, 'users', user.uid), {
+              revokedFrom: deleteField(),
+              revokedAt: deleteField()
+            });
+          } catch (e) { console.error("Cleanup failed:", e); }
+        }
+      }
+
+      // 2. Background Invite Check for users with no org
+      if (!user.organizationId && user.email) {
+        console.log('Performing background invite check for:', user.email);
+        const normalizedEmail = user.email.toLowerCase().trim();
+        const inviteRef = doc(db, 'invitations', normalizedEmail);
+        const inviteSnap = await getDoc(inviteRef);
+
+        if (inviteSnap.exists()) {
+          const inviteData = inviteSnap.data();
+          const orgId = inviteData.organizationId;
+          const role = inviteData.role || 'STAFF';
+
+          await Swal.fire({
+            title: 'New Invitation Found',
+            text: `You have been added to a new organization. Refreshing your workspace...`,
+            icon: 'success',
+            timer: 2000,
+            showConfirmButton: false,
+            customClass: { popup: 'rounded-3xl' }
+          });
+
+          // Sync locally and globally
+          await updateDoc(doc(db, 'users', user.uid), {
+            organizationId: orgId,
+            role: role
+          });
+
+          // Cleanup
+          try {
+            await deleteDoc(inviteRef);
+            if (orgId) {
+              await deleteDoc(doc(db, 'organizations', orgId, 'invitations', normalizedEmail));
+            }
+          } catch (e) { console.warn('Invite cleanup failed', e); }
+        }
+      }
+    };
+    
+    checkRevocationAndInvites();
+  }, [user?.uid, user?.revokedFrom, user?.organizationId, isAuthReady, user?.email]);
+
   // Screen Saver Logic
   useEffect(() => {
     if (!isKioskMode) return;
@@ -2108,13 +2205,24 @@ export default function App() {
   };
 
   const handleRemoveMember = async (targetUser: User) => {
-    if (targetUser.uid === auth.currentUser?.uid) {
-      addToast('You cannot remove yourself from the organization', 'error');
+    const currentUserId = auth.currentUser?.uid;
+    if (targetUser.uid === currentUserId) {
+      addToast('Security Restriction: You cannot remove your own access identifier', 'error');
       return;
     }
 
-    if (targetUser.uid === organization?.createdBy) {
-      addToast('Cannot remove the organization creator', 'error');
+    const isTargetCreator = organization?.createdBy === targetUser.uid;
+    const isViewerCreator = organization?.createdBy === currentUserId;
+    const isTargetMaster = targetUser.role === 'MASTER_ADMIN';
+    const isViewerMaster = user?.role === 'MASTER_ADMIN' || isViewerCreator;
+
+    if (isTargetCreator || isTargetMaster) {
+      addToast('Immutable Authority: The Primary Authority cannot be removed', 'error');
+      return;
+    }
+
+    if (!isViewerMaster && targetUser.role === 'ADMIN') {
+      addToast('Access Denied: Administrative accounts can only be revoked by the Primary Authority', 'error');
       return;
     }
 
@@ -2141,7 +2249,9 @@ export default function App() {
         try {
           await updateDoc(doc(db, 'users', targetUser.uid), {
             organizationId: null,
-            role: 'STAFF'
+            role: 'STAFF',
+            revokedFrom: organization?.name || 'an organization',
+            revokedAt: new Date().toISOString()
           });
         } catch (e) {
           console.log('User root doc might not exist yet (invited but not logged in), skipping global update');
@@ -2181,12 +2291,15 @@ export default function App() {
 
     if (isConfirmed) {
       try {
+        const orgId = user?.organizationId;
+        if (!orgId) throw new Error('Organization context not found');
+
         await updateDoc(doc(db, 'invitations', email), {
           deleted: true,
           deletedAt: new Date().toISOString(),
           deletedBy: user?.uid
         });
-        await updateDoc(doc(db, 'organizations', user.organizationId, 'invitations', email), {
+        await updateDoc(doc(db, 'organizations', orgId, 'invitations', email), {
           deleted: true,
           deletedAt: new Date().toISOString(),
           deletedBy: user?.uid
@@ -2199,43 +2312,87 @@ export default function App() {
   };
 
   const handleToggleUserRole = async (targetUser: User) => {
-    if (targetUser.uid === auth.currentUser?.uid) {
-      addToast('You cannot change your own role', 'error');
+    const currentUserId = auth.currentUser?.uid;
+    if (targetUser.uid === currentUserId) {
+      addToast('Security Restriction: You cannot modify your own Authorization Level', 'error');
       return;
     }
 
-    if (targetUser.uid === organization?.createdBy) {
-      addToast('Cannot modify the organization creator\'s role', 'error');
+    const isTargetCreator = organization?.createdBy === targetUser.uid;
+    const isViewerCreator = organization?.createdBy === currentUserId;
+    const isTargetMaster = targetUser.role === 'MASTER_ADMIN';
+    const isViewerMaster = user?.role === 'MASTER_ADMIN' || isViewerCreator;
+
+    // 1. Immutable Authority Check
+    if (isTargetCreator || isTargetMaster) {
+      addToast('Cannot modify roles for the Primary Authority (Master Admin)', 'error');
       return;
     }
 
-    const newRole: UserRole = targetUser.role === 'ADMIN' ? 'STAFF' : 'ADMIN';
-    const { isConfirmed } = await Swal.fire({
-      title: 'Modify Permissions?',
-      text: `Update ${targetUser.name}'s system access level to ${newRole}?`,
-      icon: 'question',
+    // 2. Hierarchy Check: Only the Primary Authority (Creator/Master) can manage other Admins
+    if (!isViewerMaster && targetUser.role === 'ADMIN') {
+      addToast('Access Denied: Only the Primary Authority can manage Administrative permissions', 'error');
+      return;
+    }
+
+    const { value: newRole } = await Swal.fire({
+      title: 'Modify Permissions',
+      text: `Select system access level for ${targetUser.name}`,
+      input: 'select',
+      inputOptions: {
+        'STAFF': 'Staff (Restricted access to entries)',
+        'ADMIN': 'Admin (Full operational control)'
+      },
+      inputValue: targetUser.role === 'ADMIN' ? 'ADMIN' : 'STAFF',
       showCancelButton: true,
       confirmButtonColor: '#2563EB',
       cancelButtonColor: '#64748b',
-      confirmButtonText: 'Update Role',
+      confirmButtonText: 'Apply Changes',
       customClass: {
         container: 'z-[10000]',
         popup: 'rounded-[1.5rem]'
+      },
+      inputValidator: (value) => {
+        if (!value) return 'A role must be selected';
       }
     });
 
-    if (isConfirmed) {
+    if (newRole) {
       try {
-        await updateDoc(doc(db, 'organizations', user.organizationId!, 'users', targetUser.uid), {
-          role: newRole
+        const orgId = user?.organizationId || targetUser.organizationId || organization?.id;
+        if (!orgId) {
+          console.error('Role Update Failed: Org Context Missing', { userOrgId: user?.organizationId, targetUserOrgId: targetUser.organizationId, stateOrgId: organization?.id });
+          throw new Error('Organization context not resolved. Please refresh and try again.');
+        }
+
+        addToast('Updating security matrix...', 'info');
+
+        // 1. Update Subcollection record
+        const nestedUserRef = doc(db, 'organizations', orgId, 'users', targetUser.uid);
+        await updateDoc(nestedUserRef, {
+          role: newRole,
+          updatedAt: new Date().toISOString()
         });
-        // Also update registry for discovery
-        await updateDoc(doc(db, 'users', targetUser.uid), {
-          role: newRole
-        });
+
+        // 2. Update Global Registry record
+        try {
+          const globalUserRef = doc(db, 'users', targetUser.uid);
+          await updateDoc(globalUserRef, {
+            role: newRole,
+            updatedAt: new Date().toISOString()
+          });
+        } catch (e) {
+          console.warn('Global registry update sync failed - subcollection remains source of truth');
+        }
+
+        await logActivity('ROLE_CHANGE', `Permissions updated for ${targetUser.name}: Now ${newRole}`);
         addToast(`Permissions updated: ${targetUser.name} is now a ${newRole}`, 'success');
       } catch (error: any) {
-        addToast(error.message, 'error');
+        console.error('Role Update Execution Error:', error);
+        const detailedError = error.code === 'permission-denied' 
+          ? 'Security Policy Restriction: You do not have sufficient authority to modify this role.'
+          : error.message;
+        addToast(detailedError, 'error');
       }
     }
   };
@@ -4115,6 +4272,21 @@ export default function App() {
         </div>
       ) : (
         <div className={`min-h-screen bg-slate-50/50 font-sans text-ngo-primary flex flex-col overflow-x-hidden relative pb-20 lg:pb-0 transition-all duration-700 ${showEmergencyForm ? 'ring-[16px] ring-inset ring-red-600/30' : ''}`}>
+          {/* Role Status Banners */}
+          {user.role === 'MASTER_ADMIN' || user.uid === organization?.createdBy ? (
+            <div className="bg-amber-500 px-8 py-2.5 flex items-center justify-center gap-3 text-white overflow-hidden relative">
+              <div className="absolute inset-0 bg-white/10 animate-[pulse_3s_infinite]" />
+              <Shield className="h-4 w-4 fill-white relative z-10" />
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] relative z-10">Master Admin Privileges • Organization Authority Secured</span>
+            </div>
+          ) : user.role === 'STAFF' ? (
+            <div className="bg-indigo-600 px-8 py-2.5 flex items-center justify-center gap-3 text-white overflow-hidden relative">
+              <div className="absolute inset-0 bg-indigo-500/20 animate-pulse" />
+              <Shield className="h-4 w-4 relative z-10" />
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] relative z-10">Staff Interface Activated • Sensor Monitoring Mode</span>
+            </div>
+          ) : null}
+
           {/* Emergency Alert Banner */}
           <AnimatePresence>
             {showEmergencyForm && (
@@ -4236,7 +4408,7 @@ export default function App() {
                   label="Records"
                 />
               )}
-              {isTabVisible('analysis') && (user.role === 'ADMIN' || isSuperAdmin) && (
+              {isTabVisible('analysis') && (user.role === 'ADMIN' || user.role === 'MASTER_ADMIN' || isSuperAdmin) && (
                 <NavButton 
                   active={activeTab === 'analysis'} 
                   onClick={() => setActiveTab('analysis')}
@@ -4244,7 +4416,7 @@ export default function App() {
                   label="Analytics"
                 />
               )}
-              {isTabVisible('donations') && (user.role === 'ADMIN' || isSuperAdmin) && (
+              {isTabVisible('donations') && (user.role === 'ADMIN' || user.role === 'MASTER_ADMIN' || isSuperAdmin) && (
                 <NavButton 
                   active={activeTab === 'donations'} 
                   onClick={() => setActiveTab('donations')}
@@ -4268,7 +4440,7 @@ export default function App() {
                   label="Reviews"
                 />
               )}
-              {isTabVisible('logs') && (user.role === 'ADMIN') && (
+              {isTabVisible('logs') && (user.role === 'ADMIN' || user.role === 'MASTER_ADMIN' || isSuperAdmin) && (
                 <NavButton 
                   active={activeTab === 'logs'} 
                   onClick={() => setActiveTab('logs')}
@@ -4276,7 +4448,7 @@ export default function App() {
                   label="Logs"
                 />
               )}
-              {user.role === 'ADMIN' && (
+              { (user.role === 'ADMIN' || user.role === 'MASTER_ADMIN' || isSuperAdmin) && (
                 <NavButton 
                   active={activeTab === 'settings'} 
                   onClick={() => setActiveTab('settings')}
@@ -4373,12 +4545,14 @@ export default function App() {
         {isTabVisible('inquiries') && <MobileNavBtn active={activeTab === 'inquiries'} onClick={() => setActiveTab('inquiries')} icon={<PhoneCall />} label="Inquiries" />}
         {isTabVisible('pre-registrations') && <MobileNavBtn active={activeTab === 'pre-registrations'} onClick={() => setActiveTab('pre-registrations')} icon={<Calendar />} label="Pre-Reg" />}
         {isTabVisible('records') && <MobileNavBtn active={activeTab === 'records'} onClick={() => setActiveTab('records')} icon={<ClipboardList />} label="Records" />}
-        {isTabVisible('analysis') && (user.role === 'ADMIN') && <MobileNavBtn active={activeTab === 'analysis'} onClick={() => setActiveTab('analysis')} icon={<BarChart3 />} label="Analytics" />}
-        {isTabVisible('donations') && (user.role === 'ADMIN') && <MobileNavBtn active={activeTab === 'donations'} onClick={() => setActiveTab('donations')} icon={<Heart />} label="Donations" />}
+        {isTabVisible('analysis') && (user.role === 'ADMIN' || user.role === 'MASTER_ADMIN' || isSuperAdmin) && <MobileNavBtn active={activeTab === 'analysis'} onClick={() => setActiveTab('analysis')} icon={<BarChart3 />} label="Analytics" />}
+        {isTabVisible('donations') && (user.role === 'ADMIN' || user.role === 'MASTER_ADMIN' || isSuperAdmin) && <MobileNavBtn active={activeTab === 'donations'} onClick={() => setActiveTab('donations')} icon={<Heart />} label="Donations" />}
         {isTabVisible('birthdays') && <MobileNavBtn active={activeTab === 'birthdays'} onClick={() => setActiveTab('birthdays')} icon={<Gift />} label="Birthdays" />}
         {isTabVisible('reviews') && <MobileNavBtn active={activeTab === 'reviews'} onClick={() => setActiveTab('reviews')} icon={<Star />} label="Reviews" />}
-        {isTabVisible('logs') && (user.role === 'ADMIN') && <MobileNavBtn active={activeTab === 'logs'} onClick={() => setActiveTab('logs')} icon={<History />} label="Logs" />}
-        {user.role === 'ADMIN' && <MobileNavBtn active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={<Shield />} label="Security" />}
+        {isTabVisible('logs') && (user.role === 'ADMIN' || user.role === 'MASTER_ADMIN' || isSuperAdmin) && <MobileNavBtn active={activeTab === 'logs'} onClick={() => setActiveTab('logs')} icon={<History />} label="Logs" />}
+        {user.role === 'ADMIN' || user.role === 'MASTER_ADMIN' || isSuperAdmin ? (
+          <MobileNavBtn active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={<Shield />} label="Security" />
+        ) : null}
         {isTabVisible('legal') && <MobileNavBtn active={activeTab === 'legal'} onClick={() => { setLegalSubView('support'); setActiveTab('legal'); }} icon={<HelpCircle />} label="Support" />}
         {isTabVisible('profile') && <MobileNavBtn active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} icon={<UserIcon />} label="Profile" />}
     </div>
@@ -4572,19 +4746,19 @@ export default function App() {
                 </div>
 
                 <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4">
-                  {[
-                    { icon: <UserPlus />, label: 'New Entry', color: 'blue', tab: 'visitors', action: () => { setEditingVisitor(null); setShowForm(true); } },
-                    { icon: <Calendar />, label: 'Pre-Register', color: 'rose', tab: 'pre-registrations', action: () => setActiveTab('pre-registrations') },
-                    { icon: <LayoutDashboard />, label: 'Scan Visitor', color: 'emerald', tab: 'visitors', action: () => setActiveTab('visitors') },
-                    { icon: <History />, label: 'Manage Logs', color: 'purple', tab: 'logs', action: () => setActiveTab('logs') },
-                    { icon: <Search />, label: 'Search Node', color: 'slate', tab: 'records', action: () => setActiveTab('records') },
-                    { icon: <Monitor />, label: 'Kiosk Mode', color: 'amber', tab: 'dashboard', action: handleEnterKiosk },
-                    { icon: <Shield />, label: 'Manage Staff', color: 'orange', tab: 'settings', action: () => setActiveTab('settings') },
-                    { icon: <BarChart3 />, label: 'Reports', color: 'indigo', tab: 'analysis', action: () => setActiveTab('analysis') }
-                  ].filter(btn => {
-                    if (btn.tab === 'settings') return user?.role === 'ADMIN';
-                    return isTabVisible(btn.tab);
-                  }).map((btn, i) => (
+                    {[
+                      { icon: <UserPlus />, label: 'New Entry', color: 'blue', tab: 'visitors', action: () => { setEditingVisitor(null); setShowForm(true); } },
+                      { icon: <Calendar />, label: 'Pre-Register', color: 'rose', tab: 'pre-registrations', action: () => setActiveTab('pre-registrations') },
+                      { icon: <LayoutDashboard />, label: 'Scan Visitor', color: 'emerald', tab: 'visitors', action: () => setActiveTab('visitors') },
+                      { icon: <History />, label: 'Manage Logs', color: 'purple', tab: 'logs', action: () => setActiveTab('logs') },
+                      { icon: <Search />, label: 'Search Node', color: 'slate', tab: 'records', action: () => setActiveTab('records') },
+                      { icon: <Monitor />, label: 'Kiosk Mode', color: 'amber', tab: 'dashboard', action: handleEnterKiosk },
+                      { icon: <Shield />, label: 'Manage Staff', color: 'orange', tab: 'settings', action: () => setActiveTab('settings') },
+                      { icon: <BarChart3 />, label: 'Reports', color: 'indigo', tab: 'analysis', action: () => setActiveTab('analysis') }
+                    ].filter(btn => {
+                      if (btn.tab === 'settings') return user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN' || isSuperAdmin;
+                      return isTabVisible(btn.tab);
+                    }).map((btn, i) => (
                     <motion.button
                       key={i}
                       whileHover={{ scale: 1.02, y: -2 }}
@@ -4988,7 +5162,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {activeTab === 'analysis' && (user.role === 'ADMIN' || isSuperAdmin) && isTabVisible('analysis') && (
+          {activeTab === 'analysis' && (user.role === 'ADMIN' || user.role === 'MASTER_ADMIN' || isSuperAdmin) && isTabVisible('analysis') && (
             <motion.div
               key="analysis"
               initial={{ opacity: 0, y: 10 }}
@@ -5368,7 +5542,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {activeTab === 'logs' && organization && isTabVisible('logs') && (
+          {activeTab === 'logs' && organization && (user.role === 'ADMIN' || user.role === 'MASTER_ADMIN' || isSuperAdmin) && isTabVisible('logs') && (
             <motion.div
               key="logs"
               initial={{ opacity: 0, y: 10 }}
@@ -5379,7 +5553,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {activeTab === 'donations' && (user.role === 'ADMIN' || isSuperAdmin) && isTabVisible('donations') && (
+          {activeTab === 'donations' && (user.role === 'ADMIN' || user.role === 'MASTER_ADMIN' || isSuperAdmin) && isTabVisible('donations') && (
             <motion.div
               key="donations"
               initial={{ opacity: 0, y: 10 }}
@@ -5534,7 +5708,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {activeTab === 'users' && user?.role === 'ADMIN' && (
+          {activeTab === 'users' && (user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN') && (
             <motion.div
               key="users"
               initial={{ opacity: 0, x: 20 }}
@@ -5542,50 +5716,57 @@ export default function App() {
               exit={{ opacity: 0, x: -20 }}
               className="space-y-8"
             >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                <div className="flex items-center gap-6">
-                  <motion.button 
-                    whileHover={{ x: -4 }}
-                    onClick={() => setActiveTab('settings')}
-                    className="p-3 bg-white border border-slate-200 rounded-2xl hover:bg-brand-blue hover:text-white transition-all shadow-sm group"
-                  >
-                    <ChevronLeft className="h-5 w-5" />
-                  </motion.button>
-                  <HeaderTitle 
-                    title="Access Control" 
-                    subtitle="Manage authorized staff, roles and system permissions" 
-                  />
+              {!organization ? (
+                <div className="bg-white rounded-[2.5rem] p-20 flex flex-col items-center justify-center border border-slate-100 shadow-sm">
+                  <Loader2 className="h-10 w-10 animate-spin text-brand-blue mb-4" />
+                  <p className="text-slate-500 font-bold tracking-tight uppercase text-[10px]">Resolving Authorization Matrix...</p>
                 </div>
-                <button
-                  onClick={handleInviteUser}
-                  className="px-8 py-4 bg-brand-blue text-white font-bold rounded-2xl shadow-xl shadow-blue-500/10 hover:bg-blue-700 transition-all flex items-center gap-3 active:scale-95 self-start sm:self-center"
-                >
-                  <UserPlus className="h-5 w-5" />
-                  Add Member Access
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 gap-8">
-                {/* Active Members */}
-                <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
-                  <div className="px-8 py-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white">
-                    <div className="flex items-center gap-4">
-                      <h3 className="text-sm font-bold text-slate-900">Active Workspace Members</h3>
-                      <span className="px-3 py-1 bg-blue-50 text-brand-blue rounded-lg text-[10px] font-bold tracking-widest uppercase">
-                        {orgUsers.filter(u => u.name?.toLowerCase().includes(userSearchQuery.toLowerCase()) || u.email?.toLowerCase().includes(userSearchQuery.toLowerCase())).length} Members
-                      </span>
-                    </div>
-                    <div className="relative w-full md:w-64">
-                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                      <input 
-                        type="text" 
-                        placeholder="Search members..."
-                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-transparent rounded-xl focus:bg-white focus:border-brand-blue/30 transition-all outline-none text-xs font-bold"
-                        value={userSearchQuery}
-                        onChange={(e) => setUserSearchQuery(e.target.value)}
+              ) : (
+                <>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                    <div className="flex items-center gap-6">
+                      <motion.button 
+                        whileHover={{ x: -4 }}
+                        onClick={() => setActiveTab('settings')}
+                        className="p-3 bg-white border border-slate-200 rounded-2xl hover:bg-brand-blue hover:text-white transition-all shadow-sm group"
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </motion.button>
+                      <HeaderTitle 
+                        title="Access Control" 
+                        subtitle="Manage authorized staff, roles and system permissions" 
                       />
                     </div>
+                    <button
+                      onClick={handleInviteUser}
+                      className="px-8 py-4 bg-brand-blue text-white font-bold rounded-2xl shadow-xl shadow-blue-500/10 hover:bg-blue-700 transition-all flex items-center gap-3 active:scale-95 self-start sm:self-center"
+                    >
+                      <UserPlus className="h-5 w-5" />
+                      Add Member Access
+                    </button>
                   </div>
+
+                  <div className="grid grid-cols-1 gap-8">
+                    {/* Active Members */}
+                    <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+                      <div className="px-8 py-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white">
+                        <div className="flex items-center gap-4">
+                          <h3 className="text-sm font-bold text-slate-900">Active Workspace Members</h3>
+                          <span className="px-3 py-1 bg-blue-50 text-brand-blue rounded-lg text-[10px] font-bold tracking-widest uppercase">
+                            {orgUsers.filter(u => u.name?.toLowerCase().includes(userSearchQuery.toLowerCase()) || u.email?.toLowerCase().includes(userSearchQuery.toLowerCase())).length} Members
+                          </span>
+                        </div>
+                        <div className="relative w-full md:w-64">
+                          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                          <input 
+                            type="text" 
+                            placeholder="Search members..."
+                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-transparent rounded-xl focus:bg-white focus:border-brand-blue/30 transition-all outline-none text-xs font-bold"
+                            value={userSearchQuery}
+                            onChange={(e) => setUserSearchQuery(e.target.value)}
+                          />
+                        </div>
+                      </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                       <thead>
@@ -5599,26 +5780,34 @@ export default function App() {
                       <tbody>
                         {[...orgUsers]
                           .filter(u => u.name?.toLowerCase().includes(userSearchQuery.toLowerCase()) || u.email?.toLowerCase().includes(userSearchQuery.toLowerCase()))
-                          .sort((a,b) => (b.role === 'ADMIN' ? 1 : -1)).map((m) => (
+                          .sort((a,b) => (['ADMIN', 'MASTER_ADMIN'].includes(b.role) ? 1 : -1)).map((m) => (
                           <tr key={m.uid} className="group border-b border-slate-50 last:border-0 hover:bg-blue-50/30 transition-all duration-300">
                             <td className="px-8 py-6">
                               <div className="flex items-center gap-4">
                                 <div className="h-10 w-10 bg-slate-100 rounded-xl flex items-center justify-center font-bold text-brand-blue border border-slate-200 transition-all duration-300">
                                   {m.name?.charAt(0) || '?'}
                                 </div>
-                                <div>
-                                  <p className="font-bold tracking-tight text-slate-900">{m.name}</p>
+                                <div className="flex flex-col">
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-bold tracking-tight text-slate-900">{m.name}</p>
+                                    {m.uid === organization?.createdBy && (
+                                      <span className="px-2 py-0.5 bg-amber-50 text-amber-600 rounded-md text-[8px] font-black uppercase tracking-tighter border border-amber-100 flex items-center gap-1 shadow-sm">
+                                        <Shield className="h-2 w-2 fill-current" />
+                                        Master Admin
+                                      </span>
+                                    )}
+                                  </div>
                                   <p className="text-[10px] font-bold font-mono text-slate-400 uppercase tracking-widest">{m.email}</p>
                                 </div>
                               </div>
                             </td>
                             <td className="px-8 py-6 text-center">
                               <span className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-colors ${
-                                m.role === 'ADMIN' 
+                                (m.uid === organization?.createdBy || ['ADMIN', 'MASTER_ADMIN'].includes(m.role))
                                   ? 'bg-blue-50 text-brand-blue border border-blue-100' 
                                   : 'bg-slate-50 text-slate-400 border border-slate-100'
                               }`}>
-                                {m.role}
+                                {m.uid === organization?.createdBy ? 'MASTER_ADMIN' : m.role}
                               </span>
                             </td>
                             <td className="px-8 py-6 text-center text-[10px] font-bold text-slate-500">
@@ -5627,18 +5816,40 @@ export default function App() {
                             <td className="px-8 py-6 text-right">
                               <div className="flex items-center justify-end gap-2">
                                 <button
-                                  disabled={m.uid === user?.uid || m.uid === organization?.createdBy}
+                                  disabled={
+                                    m.uid === user?.uid || 
+                                    m.uid === organization?.createdBy || 
+                                    m.role === 'MASTER_ADMIN' ||
+                                    !(user?.role === 'MASTER_ADMIN' || user?.uid === organization?.createdBy)
+                                  }
                                   onClick={() => handleToggleUserRole(m)}
                                   className="p-2.5 text-slate-400 hover:text-brand-blue hover:bg-white rounded-lg transition-all disabled:opacity-30 border border-transparent hover:border-slate-100"
-                                  title={m.uid === organization?.createdBy ? "Organization Creator Role Immutable" : "Change Permission Level"}
+                                  title={
+                                    m.uid === organization?.createdBy || m.role === 'MASTER_ADMIN' 
+                                      ? "Primary Authority Immutable" 
+                                      : !(user?.role === 'MASTER_ADMIN' || user?.uid === organization?.createdBy)
+                                        ? "Only Primary Authority can manage roles"
+                                        : "Change Permission Level"
+                                  }
                                 >
                                   <Shield className="h-4 w-4" />
                                 </button>
                                 <button
-                                  disabled={m.uid === user?.uid || m.uid === organization?.createdBy}
+                                  disabled={
+                                    m.uid === user?.uid || 
+                                    m.uid === organization?.createdBy || 
+                                    m.role === 'MASTER_ADMIN' ||
+                                    (!(user?.role === 'MASTER_ADMIN' || user?.uid === organization?.createdBy) && m.role === 'ADMIN')
+                                  }
                                   onClick={() => handleRemoveMember(m)}
                                   className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-white rounded-lg transition-all disabled:opacity-30 border border-transparent hover:border-slate-100"
-                                  title={m.uid === organization?.createdBy ? "Cannot Remove Organization Creator" : "Revoke Access"}
+                                  title={
+                                    m.uid === organization?.createdBy || m.role === 'MASTER_ADMIN' 
+                                      ? "Primary Authority Immutable" 
+                                      : (!(user?.role === 'MASTER_ADMIN' || user?.uid === organization?.createdBy) && m.role === 'ADMIN')
+                                        ? "Only Primary Authority can revoke Admins"
+                                        : "Revoke Access"
+                                  }
                                 >
                                   <X className="h-4 w-4" />
                                 </button>
@@ -5658,7 +5869,7 @@ export default function App() {
                       <div className="flex items-center gap-4">
                         <h3 className="text-sm font-bold text-slate-900">Authorized Access (Pending Login)</h3>
                         <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-bold tracking-widest uppercase">
-                          {orgInvitations.length} Pending
+                          {orgInvitations.filter(inv => !orgUsers.some(u => u.email?.toLowerCase() === inv.email?.toLowerCase())).length} Pending
                         </span>
                       </div>
                     </div>
@@ -5673,7 +5884,9 @@ export default function App() {
                           </tr>
                         </thead>
                         <tbody>
-                          {orgInvitations.map((inv) => (
+                          {orgInvitations
+                            .filter(inv => !orgUsers.some(u => u.email?.toLowerCase() === inv.email?.toLowerCase()))
+                            .map((inv) => (
                             <tr key={inv.email} className="group hover:bg-slate-50/50 transition-colors border-b border-slate-50 last:border-0">
                               <td className="px-8 py-6">
                                 <div className="flex items-center gap-4">
@@ -5707,11 +5920,13 @@ export default function App() {
                     </div>
                   </div>
                 )}
-              </div>
+                  </div>
+                </>
+              )}
             </motion.div>
           )}
 
-          {activeTab === 'settings' && (user.role === 'ADMIN' || isSuperAdmin) && (
+          {activeTab === 'settings' && (user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN' || isSuperAdmin) && (
             <motion.div
               key="settings"
               initial={{ opacity: 0, y: 10 }}

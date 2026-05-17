@@ -113,11 +113,12 @@ export default function OrgSetup({ onComplete }: OrgSetupProps) {
         name: userData.name,
         email: userData.email,
         organizationId: orgId,
-        role: 'ADMIN'
+        role: 'MASTER_ADMIN'
       }, { merge: true });
 
       await setDoc(userOrgRef, {
         ...userData,
+        role: 'MASTER_ADMIN',
         createdAt: serverTimestamp()
       });
 

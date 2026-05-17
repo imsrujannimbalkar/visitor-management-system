@@ -3,12 +3,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Star, MessageSquare, Calendar, User, Search, Filter, Trash2, Heart, BarChart3 } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc, updateDoc } from 'firebase/firestore';
-import { Review, Visitor } from '../types';
+import { Review, Visitor, UserRole } from '../types';
 import Swal from 'sweetalert2';
 
 interface ReviewsTabProps {
   organizationId: string;
-  userRole: 'ADMIN' | 'STAFF';
+  userRole: UserRole;
   visitors: Visitor[];
 }
 

@@ -29,7 +29,7 @@ export type PurposeType =
   | 'Maintenance Work'
   | 'Other';
 
-export type UserRole = 'ADMIN' | 'STAFF';
+export type UserRole = 'ADMIN' | 'STAFF' | 'MASTER_ADMIN';
 
 export interface Profile {
   phone: string;
@@ -167,6 +167,8 @@ export interface User {
   photoURL?: string;
   phone?: string;
   address?: string;
+  revokedFrom?: string;
+  revokedAt?: string;
   preferences?: {
     notifs?: boolean;
     public?: boolean;

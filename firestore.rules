@@ -1,47 +1,22 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // =========================================================================
-    // GLOBAL HELPERS
-    // =========================================================================
-    
+
+    // =========================================================
+    // HELPERS
+    // =========================================================
+
     function isSignedIn() {
       return request.auth != null;
     }
 
     function isVerified() {
-      return isSignedIn() && (request.auth.token.email_verified == true);
+      return isSignedIn();
     }
 
     function isUser(uid) {
-      return isSignedIn() && request.auth.uid == uid;
-    }
-
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    // Auth lookup for role-based access
-    function getOrgUser(orgId) {
-      return get(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid)).data;
-    }
-
-    function belongsToOrg(orgId) {
-      return isSignedIn() && 
-        (exists(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid)) ||
-         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId));
-    }
-
-    function isAdminOfOrg(orgId) {
-      return belongsToOrg(orgId) && 
-        ((exists(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid)) && get(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid)).data.role == 'ADMIN') ||
-         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN'));
-    }
-
-    function isOrgCreator(orgId, userId) {
-      return exists(/databases/$(database)/documents/organizations/$(orgId)) && 
-             get(/databases/$(database)/documents/organizations/$(orgId)).data.createdBy == userId;
+      return isSignedIn() &&
+             request.auth.uid == uid;
     }
 
     function incoming() {
@@ -52,178 +27,316 @@ service cloud.firestore {
       return resource.data;
     }
 
-    // =========================================================================
-    // VALIDATION HELPERS
-    // =========================================================================
-
-    function isValidVisit(data) {
-      return data.keys().hasAll(['visitId', 'visitorPhone', 'visitorName', 'status', 'organizationId', 'recordedBy', 'recordedByName']) &&
-             data.visitId is string && data.visitId.size() <= 128 &&
-             data.visitorPhone is string && data.visitorPhone.size() <= 20 &&
-             data.visitorName is string && data.visitorName.size() <= 128 &&
-             data.status in ['INSIDE', 'CHECKED OUT', 'DELETED'] &&
-             data.organizationId is string &&
-             ((isSignedIn() && data.recordedBy == request.auth.uid) || (!isSignedIn() && data.recordedBy in ['KIOSK', 'EMERGENCY']));
+    function orgDoc(orgId) {
+      return (
+        orgId != null &&
+        exists(/databases/$(database)/documents/organizations/$(orgId))
+      )
+      ? get(/databases/$(database)/documents/organizations/$(orgId)).data
+      : { createdBy: "UNKNOWN" };
     }
 
-    function isValidInquiry(data) {
-      return data.keys().hasAll(['organizationId', 'callerName', 'callerPhone', 'purpose', 'status', 'priority', 'recordedBy', 'recordedByName']) &&
-             data.callerName is string && data.callerName.size() <= 128 &&
-             data.callerPhone is string && data.callerPhone.size() <= 20 &&
-             data.purpose is string && data.purpose.size() <= 1000 &&
-             data.status in ['PENDING', 'DONE', 'CANCELLED'] &&
-             data.priority in ['LOW', 'MEDIUM', 'HIGH'] &&
-             data.recordedBy == request.auth.uid;
+    function belongsToOrg(orgId) {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid))
+        ||
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+        )
+        ||
+        (
+          exists(/databases/$(database)/documents/invitations/$(request.auth.token.email)) &&
+          get(/databases/$(database)/documents/invitations/$(request.auth.token.email)).data.organizationId == orgId
+        )
+      );
     }
 
-    function isValidDonation(data) {
-      return data.keys().hasAll(['id', 'organizationId', 'visitorPhone', 'amount', 'status', 'recordedBy', 'recordedByName']) &&
-             data.amount is number && data.amount > 0 &&
-             data.status in ['PENDING', 'CONFIRMED', 'CANCELLED', 'REFUNDED'] &&
-             data.organizationId is string &&
-             data.recordedBy == request.auth.uid;
+    function isMasterAdmin(orgId) {
+      return isSignedIn() && (
+        orgDoc(orgId).createdBy == request.auth.uid ||
+        (exists(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid)) && get(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid)).data.role == 'MASTER_ADMIN') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'MASTER_ADMIN' && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId)
+      );
     }
 
-    function isValidPreRegistration(data) {
-      return data.keys().hasAll(['name', 'phone', 'purpose', 'visitDate', 'status']) &&
-             data.name is string && data.name.size() <= 100 &&
-             data.phone is string && data.phone.size() <= 20 &&
-             data.status in ['PENDING', 'APPROVED', 'REJECTED', 'CHECKED_IN', 'COMPLETED'];
+    function isAdminOfOrg(orgId) {
+      return isSignedIn() && (
+        isMasterAdmin(orgId)
+        ||
+        (
+          exists(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid))
+          &&
+          get(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid)).data.role
+            in ['ADMIN', 'MASTER_ADMIN']
+        )
+        ||
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId
+          &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+            in ['ADMIN', 'MASTER_ADMIN']
+        )
+      );
     }
 
-    // =========================================================================
-    // SAFETY NET
-    // =========================================================================
+    // =========================================================
+    // SAFETY DEFAULT
+    // =========================================================
+
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // =========================================================================
-    // COLLECTION RULES
-    // =========================================================================
+    // =========================================================
+    // GLOBAL USERS
+    // =========================================================
 
-    // Top-level Invitations (Legacy/Cross-Org)
-    match /invitations/{id} {
-      allow read: if isSignedIn() && (resource.data.email == request.auth.token.email || resource.data.organizationId != null);
-      allow create: if isVerified();
-      allow update: if isSignedIn() && resource.data.email == request.auth.token.email;
-    }
-
-    // User Registry (Global Lookup)
     match /users/{uid} {
-      allow get: if isUser(uid) || (isSignedIn() && existing().organizationId != null && belongsToOrg(existing().organizationId));
-      allow list: if false; // No directory scraping
-      allow create: if isUser(uid) && 
-                      incoming().uid == uid &&
-                      incoming().keys().hasAll(['uid', 'email', 'role']) &&
-                      incoming().role in ['ADMIN', 'STAFF'];
-      allow update: if (isUser(uid) || (isSignedIn() && existing().organizationId != null && isAdminOfOrg(existing().organizationId))) && 
-                      incoming().uid == existing().uid &&
-                      (incoming().organizationId == existing().organizationId || existing().organizationId == null) &&
-                      (isUser(uid) ? (incoming().role == existing().role || existing().role == null) : (isAdminOfOrg(existing().organizationId))) &&
-                      (!incoming().diff(existing()).affectedKeys().hasAny(['role']) || !isOrgCreator(existing().organizationId, uid)) &&
-                      incoming().diff(existing()).affectedKeys().hasOnly(['name', 'lastLogin', 'photoURL', 'preferences', 'organizationId', 'role']);
+
+      allow get: if
+        isUser(uid)
+        ||
+        (
+          isSignedIn()
+          &&
+          resource.data.organizationId != null
+          &&
+          belongsToOrg(resource.data.organizationId)
+        );
+
+      allow list: if
+        isSignedIn();
+
+      allow create: if
+        isUser(uid)
+        ||
+        (
+          isSignedIn()
+          &&
+          request.resource.data.organizationId != null
+          &&
+          isAdminOfOrg(request.resource.data.organizationId)
+        );
+
+      allow update: if
+        (
+          isUser(uid) ||
+          (
+            isSignedIn() &&
+            resource.data.organizationId != null &&
+            isAdminOfOrg(resource.data.organizationId)
+          )
+        ) &&
+        // HIERARCHY PROTECTION
+        // 1. Cannot demote/modify the Organization Authority (Creator) or MASTER_ADMIN
+        !(
+          (resource.data.role == 'MASTER_ADMIN' || (resource.data.organizationId != null && uid == orgDoc(resource.data.organizationId).createdBy)) &&
+          request.resource.data.role != resource.data.role
+        ) &&
+        // 2. Standard ADMINs can only modify STAFF. They cannot modify other ADMINs or promote someone to ADMIN/MASTER_ADMIN.
+        !(
+          (resource.data.organizationId != null && !isMasterAdmin(resource.data.organizationId)) &&
+          (request.resource.data.organizationId != null && !isMasterAdmin(request.resource.data.organizationId)) && 
+          (resource.data.role == "ADMIN" || request.resource.data.role == "ADMIN" || request.resource.data.role == "MASTER_ADMIN")
+        );
+
+      allow delete: if false;
     }
 
-    // Organization Root
+    // =========================================================
+    // ORGANIZATIONS
+    // =========================================================
+
     match /organizations/{orgId} {
+
       allow get: if belongsToOrg(orgId);
-      allow create: if isVerified() && 
-                      isValidId(orgId) &&
-                      incoming().createdBy == request.auth.uid;
-      allow update: if isAdminOfOrg(orgId) && 
-                      (incoming().createdBy == existing().createdBy || !existing().keys().hasAll(['createdBy']));
-      
-      // ORG SUB-COLLECTIONS
-      
+
+      allow create: if
+        isVerified()
+        &&
+        incoming().createdBy == request.auth.uid;
+
+      allow update: if isAdminOfOrg(orgId);
+
+      // =========================================================
+      // ORGANIZATION USERS
+      // =========================================================
+
       match /users/{userId} {
-        allow read: if belongsToOrg(orgId) || isUser(userId);
-        allow create: if isAdminOfOrg(orgId) || 
-                       (isUser(userId) && get(/databases/$(database)/documents/organizations/$(orgId)).data.createdBy == request.auth.uid); 
-        allow update: if (isAdminOfOrg(orgId) || (isUser(userId) && belongsToOrg(orgId) && incoming().role == existing().role)) &&
-                       (!incoming().diff(existing()).affectedKeys().hasAny(['role']) || !isOrgCreator(orgId, userId));
-        allow delete: if isAdminOfOrg(orgId) && userId != request.auth.uid && !isOrgCreator(orgId, userId);
+
+        allow read: if
+          belongsToOrg(orgId)
+          ||
+          isUser(userId);
+
+        allow create: if
+          isAdminOfOrg(orgId)
+          ||
+          isUser(userId);
+
+        allow update: if
+          (
+            isAdminOfOrg(orgId) ||
+            isUser(userId)
+          ) &&
+          // HIERARCHY PROTECTION
+          // 1. Cannot demote/modify the Organization Authority (Creator) or MASTER_ADMIN
+          !(
+            (resource.data.role == 'MASTER_ADMIN' || userId == orgDoc(orgId).createdBy) &&
+            request.resource.data.role != resource.data.role
+          ) &&
+          // 2. Standard ADMINs can only modify STAFF. They cannot modify other ADMINs or promote someone to ADMIN/MASTER_ADMIN.
+          !(
+            !isMasterAdmin(orgId) && 
+            (request.resource.data.organizationId != null && !isMasterAdmin(request.resource.data.organizationId)) &&
+            (resource.data.role == "ADMIN" || request.resource.data.role == "ADMIN" || request.resource.data.role == "MASTER_ADMIN")
+          );
+
+        allow delete: if
+          isAdminOfOrg(orgId) &&
+          userId != orgDoc(orgId).createdBy &&
+          // Standard ADMINs cannot delete other ADMINs or MASTER_ADMINs
+          (isMasterAdmin(orgId) || resource.data.role == "STAFF");
       }
 
-      match /visitors/{phone} {
+      // =========================================================
+      // INVITATIONS
+      // =========================================================
+
+      match /invitations/{email} {
+        allow read, write, delete: if isAdminOfOrg(orgId);
+      }
+
+      // =========================================================
+      // VISITORS
+      // =========================================================
+
+      match /visitors/{id} {
+        allow read, write: if belongsToOrg(orgId);
+      }
+
+      // =========================================================
+      // VISITS
+      // =========================================================
+
+      match /visits/{id} {
+        allow read, write: if belongsToOrg(orgId);
+      }
+
+      // =========================================================
+      // PROFILES
+      // =========================================================
+
+      match /profiles/{id} {
+        allow read, write: if belongsToOrg(orgId);
+      }
+
+      // =========================================================
+      // DONATIONS
+      // =========================================================
+
+      match /donations/{id} {
+        allow read, write: if belongsToOrg(orgId);
+      }
+
+      // =========================================================
+      // INQUIRIES
+      // =========================================================
+
+      match /inquiries/{id} {
+        allow read, write: if belongsToOrg(orgId);
+      }
+
+      // =========================================================
+      // PRE REGISTRATIONS
+      // =========================================================
+
+      match /preRegistrations/{id} {
+        allow read, write: if belongsToOrg(orgId);
+      }
+
+      // =========================================================
+      // NOTIFICATIONS
+      // =========================================================
+
+      match /notifications/{id} {
+        allow read, write: if belongsToOrg(orgId);
+      }
+
+      // =========================================================
+      // ACTIVITY LOGS
+      // =========================================================
+
+      match /activityLogs/{id} {
+
         allow read: if belongsToOrg(orgId);
-        allow write: if belongsToOrg(orgId);
+
+        allow create: if belongsToOrg(orgId);
+
+        allow update, delete: if false;
       }
 
-      match /profiles/{phone} {
-        allow read: if belongsToOrg(orgId);
-        allow write: if (belongsToOrg(orgId) || (!isSignedIn() && incoming().organizationId == orgId));
-      }
+      // =========================================================
+      // SYSTEM BACKUPS
+      // =========================================================
 
-      match /visits/{visitId} {
-        allow get: if belongsToOrg(orgId);
-        allow list: if belongsToOrg(orgId); 
-        allow create: if (belongsToOrg(orgId) || (!isSignedIn() && incoming().recordedBy == 'KIOSK')) && isValidVisit(incoming());
-        allow update: if belongsToOrg(orgId) && 
-                       incoming().organizationId == orgId &&
-                       (isAdminOfOrg(orgId) || (incoming().recordedBy == existing().recordedBy && incoming().diff(existing()).affectedKeys().hasOnly(['checkOutTime', 'status', 'review'])));
-      }
+      match /system_backups/{id} {
 
-      match /donations/{donationId} {
-        allow read: if belongsToOrg(orgId);
-        allow create: if belongsToOrg(orgId) && isValidDonation(incoming());
-        allow update: if belongsToOrg(orgId) && incoming().organizationId == orgId;
-        allow delete: if isAdminOfOrg(orgId);
-      }
+        allow read: if isAdminOfOrg(orgId);
 
-      match /invitations/{inviteId} {
-        allow read: if belongsToOrg(orgId);
-        allow write: if isAdminOfOrg(orgId);
-      }
-
-      match /activityLogs/{logId} {
-        allow get: if belongsToOrg(orgId);
-        allow list: if isAdminOfOrg(orgId);
-        allow create: if belongsToOrg(orgId) && 
-                        incoming().userId == request.auth.uid &&
-                        incoming().organizationId == orgId;
-        allow update, delete: if false; // Audit logs are immutable
-      }
-
-      match /notifications/{notifId} {
-        allow read: if belongsToOrg(orgId);
-        allow write: if belongsToOrg(orgId);
-      }
-
-      match /inquiries/{inquiryId} {
-        allow read: if belongsToOrg(orgId);
-        allow create: if belongsToOrg(orgId) && isValidInquiry(incoming());
-        allow update: if belongsToOrg(orgId) && 
-                        (isAdminOfOrg(orgId) || (existing().recordedBy == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'followUpDate', 'notes', 'updatedAt', 'deleted'])));
-        allow delete: if isAdminOfOrg(orgId);
-      }
-
-      match /preRegistrations/{preRegId} {
-        allow read: if belongsToOrg(orgId);
-        allow create: if isValidPreRegistration(incoming());
-        allow update: if belongsToOrg(orgId) || (incoming().status == 'CHECKED_IN' && existing().status == 'APPROVED');
-      }
-
-      match /system_backups/{backupId} {
-        allow read: if belongsToOrg(orgId);
         allow create: if isAdminOfOrg(orgId);
-        allow delete: if isAdminOfOrg(orgId);
+
+        allow delete: if isMasterAdmin(orgId);
       }
     }
 
-    // Global Public Collections
+    // =========================================================
+    // GLOBAL INVITATIONS
+    // =========================================================
+
+    match /invitations/{email} {
+
+      allow read: if
+        isSignedIn();
+
+      allow create: if
+        isSignedIn();
+
+      allow update: if
+        isSignedIn();
+
+      allow delete: if
+        isSignedIn();
+    }
+
+    // =========================================================
+    // FEEDBACK
+    // =========================================================
+
     match /appFeedback/{id} {
       allow create: if isSignedIn();
-      allow read: if false; // System only
     }
+
+    // =========================================================
+    // BUG REPORTS
+    // =========================================================
 
     match /bugReports/{id} {
       allow create: if isSignedIn();
-      allow read: if false; // System only
     }
-    
-    match /org_names/{name} {
+
+    // =========================================================
+    // ORG NAMES
+    // =========================================================
+
+    match /org_names/{id} {
+
       allow read: if isSignedIn();
+
       allow create: if isVerified();
     }
   }

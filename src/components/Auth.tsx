@@ -75,41 +75,137 @@ export default function Auth({ onAuthComplete }: AuthProps) {
       let needsSync = false;
 
       if (!userRegistrySnap.exists()) {
-        const inviteRef = doc(db, 'invitations', user.email?.toLowerCase() || '');
+        const normalizedEmail = user.email?.toLowerCase() || '';
+        const inviteRef = doc(db, 'invitations', normalizedEmail);
         const inviteSnap = await getDoc(inviteRef);
         
         if (inviteSnap.exists()) {
           const inviteData = inviteSnap.data();
           organizationId = inviteData.organizationId;
           role = inviteData.role;
+          
+          // Invitation cleanup
+          try {
+            const { deleteDoc } = await import('firebase/firestore');
+            await deleteDoc(inviteRef);
+            if (organizationId) {
+              await deleteDoc(doc(db, 'organizations', organizationId, 'invitations', normalizedEmail));
+            }
+          } catch (e) {
+            console.warn('Invitation cleanup failed:', e);
+          }
         }
 
         await setDoc(userRegistryRef, {
           uid: user.uid,
           name: user.displayName || 'Google User',
-          email: user.email,
+          email: user.email?.toLowerCase() || '',
           role: role,
           organizationId: organizationId,
           createdAt: new Date().toISOString(),
           lastLogin: new Date().toISOString()
         });
         needsSync = true;
+
+        if (!organizationId) {
+          // NO ROLE ASSIGNED ALERT
+          await Swal.fire({
+            title: 'No Access Found',
+            html: `<div class="space-y-4">
+              <p class="text-slate-600 font-medium">Your account is not associated with any organization.</p>
+              <p class="text-slate-400 text-xs text-center border-t border-slate-100 pt-4">Please contact your administrator to receive an invitation, or proceed to set up a new organization if you are an owner.</p>
+            </div>`,
+            icon: 'info',
+            confirmButtonText: 'Continue to Setup',
+            confirmButtonColor: '#0f172a',
+            customClass: {
+              popup: 'rounded-[2rem] p-10',
+              confirmButton: 'rounded-xl px-8 py-3'
+            }
+          });
+        }
       } else {
         const regData = userRegistrySnap.data();
         organizationId = regData.organizationId;
         role = regData.role;
         
+        // If existing user has no organization, check if they have a pending invitation
+        if (!organizationId) {
+          const normalizedEmail = user.email?.toLowerCase() || '';
+          const inviteRef = doc(db, 'invitations', normalizedEmail);
+          const inviteSnap = await getDoc(inviteRef);
+          
+          if (inviteSnap.exists()) {
+            const inviteData = inviteSnap.data();
+            organizationId = inviteData.organizationId;
+            role = inviteData.role;
+            
+            // Apply invitation to existing user
+            await setDoc(userRegistryRef, {
+              organizationId: organizationId,
+              role: role
+            }, { merge: true });
+
+            // Invitation cleanup
+            try {
+              const { deleteDoc } = await import('firebase/firestore');
+              await deleteDoc(inviteRef);
+              if (organizationId) {
+                await deleteDoc(doc(db, 'organizations', organizationId, 'invitations', normalizedEmail));
+              }
+            } catch (e) {
+              console.warn('Invitation cleanup failed:', e);
+            }
+          } else {
+             // NO ORGANIZATION AND NO INVITATION FOUND
+             console.warn('Logged in but no organization or invitation found for Google user');
+             
+             await Swal.fire({
+               title: 'No Access Found',
+               html: `<div class="space-y-4">
+                 <p class="text-slate-600 font-medium">No organization associated with <b>${normalizedEmail}</b>.</p>
+                 <p class="text-slate-400 text-xs text-center border-t border-slate-100 pt-4">Please contact your administrator or set up your own workspace.</p>
+               </div>`,
+               icon: 'info',
+               confirmButtonText: 'Continue to Setup',
+               confirmButtonColor: '#0f172a',
+               customClass: {
+                 popup: 'rounded-[2rem] p-10',
+                 confirmButton: 'rounded-xl px-8 py-3'
+               }
+             });
+          }
+        }
+
         await setDoc(userRegistryRef, {
           lastLogin: new Date().toISOString()
         }, { merge: true });
         needsSync = true;
+
+        if (!organizationId) {
+          // NO ROLE ASSIGNED ALERT
+          await Swal.fire({
+            title: 'No Access Found',
+            html: `<div class="space-y-4">
+              <p class="text-slate-600 font-medium">Your account is not associated with any organization.</p>
+              <p class="text-slate-400 text-xs">Please contact your administrator to receive an invitation, or proceed to set up a new organization if you are an owner.</p>
+            </div>`,
+            icon: 'info',
+            confirmButtonText: 'Continue to Setup',
+            confirmButtonColor: '#0f172a',
+            customClass: {
+              popup: 'rounded-[2rem] p-10',
+              confirmButton: 'rounded-xl px-8 py-3'
+            }
+          });
+        }
       }
       
       if (organizationId && needsSync) {
         const userOrgRef = doc(db, 'organizations', organizationId, 'users', user.uid);
         await setDoc(userOrgRef, {
           uid: user.uid,
-          name: user.displayName || 'Google User',
+          name: user.displayName || (userRegistrySnap.exists() ? userRegistrySnap.data()?.name : null) || 'Google User',
           email: user.email,
           role: role,
           organizationId: organizationId,
@@ -160,16 +256,109 @@ export default function Auth({ onAuthComplete }: AuthProps) {
     try {
       if (isLogin) {
         try {
-          await signInWithEmailAndPassword(auth, formData.email, formData.password);
+          const normalizedEmail = formData.email.toLowerCase();
+          await signInWithEmailAndPassword(auth, normalizedEmail, formData.password);
           const user = auth.currentUser;
           if (user) {
-            await setDoc(doc(db, 'users', user.uid), {
+            const userRef = doc(db, 'users', user.uid);
+            const userSnap = await getDoc(userRef);
+            let orgId = null;
+            let role = 'STAFF';
+
+            let name = user.displayName || 'User';
+
+            if (userSnap.exists()) {
+              const userData = userSnap.data();
+              orgId = userData.organizationId;
+              role = userData.role;
+              name = user.displayName || userData.name || 'User';
+
+              // Check for invitation if no org assigned
+              if (!orgId) {
+                const inviteRef = doc(db, 'invitations', normalizedEmail);
+                const inviteSnap = await getDoc(inviteRef);
+                if (inviteSnap.exists()) {
+                  const inviteData = inviteSnap.data();
+                  orgId = inviteData.organizationId;
+                  role = inviteData.role || 'STAFF';
+
+                  await setDoc(userRef, {
+                    organizationId: orgId,
+                    role: role
+                  }, { merge: true });
+
+                  // Invitation cleanup
+                  try {
+                    const { deleteDoc } = await import('firebase/firestore');
+                    await deleteDoc(inviteRef);
+                    if (orgId) {
+                      await deleteDoc(doc(db, 'organizations', orgId, 'invitations', normalizedEmail));
+                    }
+                  } catch (e) { console.warn('Invite cleanup failed', e); }
+                }
+              }
+            } else {
+              // User doc doesn't exist but they logged in? Check invitations anyway.
+              const inviteRef = doc(db, 'invitations', normalizedEmail);
+              const inviteSnap = await getDoc(inviteRef);
+              if (inviteSnap.exists()) {
+                const inviteData = inviteSnap.data();
+                orgId = inviteData.organizationId;
+                role = inviteData.role || 'STAFF';
+
+                await setDoc(userRef, {
+                  uid: user.uid,
+                  email: normalizedEmail,
+                  name: user.displayName || 'User',
+                  organizationId: orgId,
+                  role: role,
+                  createdAt: new Date().toISOString()
+                });
+
+                // Invitation cleanup
+                try {
+                  const { deleteDoc } = await import('firebase/firestore');
+                  await deleteDoc(inviteRef);
+                  if (orgId) {
+                    await deleteDoc(doc(db, 'organizations', orgId, 'invitations', normalizedEmail));
+                  }
+                } catch (e) { console.warn('Invite cleanup failed', e); }
+              }
+            }
+
+            await setDoc(userRef, {
               lastLogin: new Date().toISOString()
             }, { merge: true });
 
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            const orgId = userDoc.exists() ? userDoc.data().organizationId : null;
+            if (!orgId) {
+              // NO ROLE ASSIGNED ALERT
+              await Swal.fire({
+                title: 'No Access Found',
+                html: `<div class="space-y-4">
+                  <p class="text-slate-600 font-medium">Your account is not associated with any organization.</p>
+                  <p class="text-slate-400 text-xs">Please contact your administrator to receive an invitation, or proceed to set up a new organization if you are an owner.</p>
+                </div>`,
+                icon: 'info',
+                confirmButtonText: 'Continue to Setup',
+                confirmButtonColor: '#0f172a',
+                customClass: {
+                  popup: 'rounded-[2rem] p-10',
+                  confirmButton: 'rounded-xl px-8 py-3'
+                }
+              });
+            }
+
             if (orgId) {
+              // Sync to org collection
+              await setDoc(doc(db, 'organizations', orgId, 'users', user.uid), {
+                uid: user.uid,
+                email: normalizedEmail,
+                name: name,
+                role: role,
+                organizationId: orgId,
+                lastLogin: new Date().toISOString()
+              }, { merge: true });
+
               await addDoc(collection(db, 'organizations', orgId, 'activityLogs'), {
                 userId: user.uid,
                 organizationId: orgId,
@@ -189,8 +378,8 @@ export default function Auth({ onAuthComplete }: AuthProps) {
           });
         }
       } else {
-        const normalizedEmail = formData.email.toLowerCase();
-        const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+        const normalizedEmail = formData.email.toLowerCase().trim();
+        const userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, formData.password);
         const user = userCredential.user;
         
         await updateProfile(user, { displayName: formData.name });
@@ -204,6 +393,32 @@ export default function Auth({ onAuthComplete }: AuthProps) {
           const inviteData = inviteSnap.data();
           organizationId = inviteData.organizationId;
           role = inviteData.role || 'STAFF';
+
+          // Invitation cleanup
+          try {
+            const { deleteDoc } = await import('firebase/firestore');
+            await deleteDoc(inviteRef);
+            if (organizationId) {
+              await deleteDoc(doc(db, 'organizations', organizationId, 'invitations', normalizedEmail));
+            }
+          } catch (e) {
+            console.warn('Invitation cleanup failed:', e);
+          }
+        } else {
+          // Signup without invitation?
+          await Swal.fire({
+            title: 'No Pending Invite',
+            html: `<div class="space-y-4">
+              <p class="text-slate-600 font-medium">Account created for <b>${normalizedEmail}</b>, but no organization invitation was found.</p>
+              <p class="text-slate-400 text-xs">You can proceed to set up a new organization or wait for an admin to invite you.</p>
+            </div>`,
+            icon: 'info',
+            confirmButtonText: 'I Understand',
+            confirmButtonColor: '#0f172a',
+            customClass: {
+              popup: 'rounded-2xl p-10'
+            }
+          });
         }
 
         await setDoc(doc(db, 'users', user.uid), {

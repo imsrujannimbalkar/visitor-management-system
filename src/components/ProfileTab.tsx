@@ -286,9 +286,17 @@ export default function ProfileTab({
             <div className="space-y-4">
               <div className="flex items-center gap-4">
                 <h1 className="text-6xl font-black text-white tracking-tighter italic">{formData.name}</h1>
-                <div className="px-4 py-1.5 bg-white/20 backdrop-blur-md rounded-full border border-white/30 flex items-center gap-2">
-                   <Shield size={12} className="text-white fill-white" />
-                   <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">{user.role}</span>
+                <div className="flex flex-col gap-2">
+                  <div className="px-4 py-1.5 bg-white/20 backdrop-blur-md rounded-full border border-white/30 flex items-center gap-2 self-start">
+                     <Shield size={12} className="text-white fill-white" />
+                     <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">{user.role}</span>
+                  </div>
+                  {(user.uid === organization?.createdBy || user.role === 'MASTER_ADMIN') && (
+                    <div className="px-4 py-1.5 bg-amber-400/20 backdrop-blur-md rounded-full border border-amber-400/30 flex items-center gap-2 self-start ring-1 ring-amber-400/50">
+                       <Shield size={12} className="text-amber-300 fill-amber-300" />
+                       <span className="text-[10px] font-black text-amber-200 uppercase tracking-[0.2em]">Master Admin</span>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-3 text-white/70 font-bold">
@@ -472,6 +480,26 @@ export default function ProfileTab({
           </div>
 
           <div className="space-y-8">
+            {/* Organization Metadata Card - Fixed for All Levels */}
+            <div className="bg-white rounded-[3rem] p-12 border border-slate-100 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.05)]">
+              <div className="flex items-center gap-4 mb-10">
+                 <div className="h-10 w-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600">
+                    <Globe size={20} />
+                 </div>
+                 <h3 className="text-2xl font-black text-[#051739] italic tracking-tight">{organization?.name || 'System Environment'}</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-8">
+                 <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Workspace ID</p>
+                    <p className="text-sm font-bold text-slate-900 font-mono">{organization?.id?.substring(0, 8) || 'GLOBAL'}</p>
+                 </div>
+                 <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Access Tier</p>
+                    <p className="text-sm font-black text-brand-blue uppercase">{user?.role || 'STAFF'}</p>
+                 </div>
+              </div>
+            </div>
+
             {/* Core Actions Card */}
             <div className="bg-[#fff1f2] border border-rose-100 rounded-[3rem] p-12 shadow-[0_20px_50px_-20px_rgba(225,29,72,0.1)]">
              <div className="flex items-center gap-3 mb-6">
