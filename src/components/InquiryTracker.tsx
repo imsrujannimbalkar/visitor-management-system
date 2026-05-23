@@ -221,7 +221,7 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
       });
 
       window.open(url, '_blank');
-      showToast(`Follow-up sent to ${inquiry.callerName}`, 'success');
+      showToast(`WhatsApp link opened for ${inquiry.callerName}`, 'info');
     } catch (error) {
       console.error('Error sending WhatsApp follow-up:', error);
       showToast('Failed to send WhatsApp follow-up', 'error');
@@ -563,7 +563,7 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
                       >
                         <div className="flex items-center gap-3">
                           <PhoneCall className="h-4 w-4" /> 
-                          {inquiry.whatsappStatus === 'SENT' ? 'Follow-up Sent' : 'WhatsApp Follow-up'}
+                          {inquiry.whatsappStatus === 'SENT' ? 'Redirected' : 'WhatsApp Follow-up'}
                         </div>
                         {inquiry.whatsappStatus === 'SENT' && <CheckCircle2 className="h-4 w-4" />}
                       </button>

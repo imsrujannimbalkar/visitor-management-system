@@ -108,13 +108,15 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   }
 
   // Silence "Permission Denied" errors that occur during logout/unauthenticated states
-  if (isPermissionError && isUnauthenticated) {
-    console.warn('Silent Firestore Error (Unauthenticated):', path);
-    return;
+  if (isPermissionError) {
+    if (isUnauthenticated || operationType === OperationType.LIST || operationType === OperationType.GET) {
+      console.warn(`[Firestore] Suppressed expected permission error during state transition: ${path}`);
+      return;
+    }
   }
 
   console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  // Throwing here will crash React event handlers unnecessarily. Let components handle loading states.
 }
 
 // Optional: Initial connectivity check

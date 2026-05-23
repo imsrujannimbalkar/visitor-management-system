@@ -105,7 +105,7 @@ export default function DonationsTab({
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedDonor, setSelectedDonor] = useState<DonorSummary | null>(null);
   const [showAmounts, setShowAmounts] = useState(false);
-  const isAdmin = userRole === 'ADMIN';
+  const isAdmin = userRole === 'ADMIN' || userRole === 'MASTER_ADMIN';
 
   // Advanced Analytics useMemo
   const analytics = useMemo(() => {
@@ -1170,7 +1170,7 @@ export default function DonationsTab({
               className="px-6 py-2.5 bg-brand-blue text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center gap-2"
             >
               <Plus className="h-4 w-4" />
-              New Record
+              Add Donation
             </button>
           )}
           

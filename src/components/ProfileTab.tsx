@@ -35,6 +35,8 @@ interface ProfileTabProps {
   organization: Organization | null;
   onUpdateUser?: (updatedUser: Partial<UserType>) => void;
   onLogout?: () => void;
+  hasMultiOrg?: boolean;
+  onSwitchWorkspace?: () => void;
   // Google Integration Props
   googleStatus: { 
     connected: boolean; 
@@ -68,6 +70,8 @@ export default function ProfileTab({
   organization, 
   onUpdateUser, 
   onLogout,
+  hasMultiOrg,
+  onSwitchWorkspace,
   googleStatus,
   availableSheets,
   availableCalendars,
@@ -130,7 +134,7 @@ export default function ProfileTab({
   }, [organization?.id]);
 
   const loadBackups = async () => {
-    if (user?.role !== 'ADMIN') return;
+    if (user?.role !== 'ADMIN' && user?.role !== 'MASTER_ADMIN') return;
     setIsFetchingBackups(true);
     try {
       const data = await onFetchBackups();
@@ -234,10 +238,10 @@ export default function ProfileTab({
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 pb-20">
+    <div className="max-w-7xl mx-auto space-y-8 pb-20 px-4 sm:px-6">
       {/* High-Fidelity Hero Banner */}
       <div className="relative group">
-        <div className="h-[320px] w-full bg-gradient-to-br from-[#4f46e5] via-[#7c3aed] to-[#db2777] rounded-[3rem] shadow-2xl overflow-hidden relative p-12 flex items-center justify-between">
+        <div className="min-h-[320px] lg:h-[320px] w-full bg-gradient-to-br from-[#4f46e5] via-[#7c3aed] to-[#db2777] rounded-[2rem] sm:rounded-[3rem] shadow-2xl overflow-hidden relative p-8 sm:p-12 flex flex-col lg:flex-row items-center lg:justify-between justify-center gap-8">
           {/* Abstract wavy patterns */}
           <div className="absolute inset-0 opacity-20 pointer-events-none">
             <svg width="100%" height="100%" viewBox="0 0 1000 1000" xmlns="http://www.w3.org/2000/svg">
@@ -246,10 +250,10 @@ export default function ProfileTab({
             </svg>
           </div>
 
-          <div className="flex items-center gap-10 relative z-10">
+          <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-10 relative z-10 text-center sm:text-left">
             {/* Styled Profile Image Container */}
-            <div className="relative">
-              <div className="h-48 w-48 rounded-[2.5rem] bg-[#051739] border-[10px] border-[#0a0a0a]/10 shadow-2xl flex items-center justify-center text-6xl font-black text-white relative overflow-hidden group/avatar">
+            <div className="relative flex-shrink-0">
+              <div className="h-32 w-32 sm:h-48 sm:w-48 rounded-[2rem] sm:rounded-[2.5rem] bg-[#051739] border-[6px] sm:border-[10px] border-[#0a0a0a]/10 shadow-2xl flex items-center justify-center text-4xl sm:text-6xl font-black text-white relative overflow-hidden group/avatar">
                 {formData.photoURL ? (
                   <img src={formData.photoURL} alt={formData.name} className="w-full h-full object-cover" />
                 ) : (
@@ -274,19 +278,19 @@ export default function ProfileTab({
                   }}
                   className="absolute inset-0 bg-black/60 opacity-0 group-hover/avatar:opacity-100 transition-all duration-300 flex items-center justify-center cursor-pointer"
                 >
-                  <Camera size={40} className="text-white transform scale-90 group-hover/avatar:scale-100 transition-transform" />
+                  <Camera size={32} className="text-white transform scale-90 group-hover/avatar:scale-100 transition-transform" />
                 </div>
               </div>
               {/* On-Grid Status Indicator */}
-              <div className="absolute bottom-4 right-4 h-12 w-12 bg-[#051739] rounded-2xl border-4 border-white flex items-center justify-center shadow-2xl">
-                 <div className="h-4 w-4 rounded-full bg-[#22c55e] shadow-[0_0_15px_rgba(34,197,94,0.6)] animate-pulse" />
+              <div className="absolute bottom-2 right-2 sm:bottom-4 sm:right-4 h-10 w-10 sm:h-12 sm:w-12 bg-[#051739] rounded-xl sm:rounded-2xl border-4 border-white flex items-center justify-center shadow-2xl">
+                 <div className="h-3 w-3 sm:h-4 sm:w-4 rounded-full bg-[#22c55e] shadow-[0_0_15px_rgba(34,197,94,0.6)] animate-pulse" />
               </div>
             </div>
 
             <div className="space-y-4">
-              <div className="flex items-center gap-4">
-                <h1 className="text-6xl font-black text-white tracking-tighter italic">{formData.name}</h1>
-                <div className="flex flex-col gap-2">
+              <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
+                <h1 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-black text-white tracking-tighter italic break-all max-w-full">{formData.name}</h1>
+                <div className="flex flex-col gap-2 items-center sm:items-start">
                   <div className="px-4 py-1.5 bg-white/20 backdrop-blur-md rounded-full border border-white/30 flex items-center gap-2 self-start">
                      <Shield size={12} className="text-white fill-white" />
                      <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">{user.role}</span>
@@ -299,58 +303,58 @@ export default function ProfileTab({
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-3 text-white/70 font-bold">
-                 <Mail size={20} className="opacity-60" />
-                 <span className="text-xl tracking-tight">{formData.email}</span>
+              <div className="flex items-center justify-center sm:justify-start gap-3 text-white/70 font-bold">
+                 <Mail size={18} className="opacity-60 flex-shrink-0" />
+                 <span className="text-sm sm:text-base lg:text-lg tracking-tight break-all">{formData.email}</span>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 relative z-10 self-start mt-4">
+          <div className="flex flex-wrap items-center justify-center lg:justify-end gap-3 relative z-10 w-full lg:w-auto lg:self-start mt-2 lg:mt-4">
             {isEditing ? (
-              <div className="flex gap-3">
+              <div className="flex gap-3 w-full sm:w-auto justify-center">
                 <button 
                   onClick={() => setIsEditing(false)}
-                  className="px-8 py-4 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-bold transition-all border border-white/20 backdrop-blur-sm"
+                  className="px-6 sm:px-8 py-3.5 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-bold transition-all border border-white/20 backdrop-blur-sm"
                 >
                   Discard
                 </button>
                 <button 
                   onClick={handleSave}
                   disabled={loading}
-                  className="px-8 py-4 bg-white text-[#4f46e5] rounded-2xl font-black hover:bg-blue-50 transition-all shadow-2xl flex items-center gap-2 disabled:opacity-50"
+                  className="px-6 sm:px-8 py-3.5 bg-white text-[#4f46e5] rounded-2xl font-black hover:bg-blue-50 transition-all shadow-2xl flex items-center gap-2 disabled:opacity-50"
                 >
-                  {loading ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
+                  {loading ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
                   Sync Identity
                 </button>
               </div>
             ) : (
-              <>
+              <div className="flex gap-3 w-full sm:w-auto justify-center">
                 <button 
                   onClick={() => setIsEditing(true)}
-                  className="px-8 py-4 bg-white text-slate-900 rounded-2xl font-black hover:bg-slate-50 transition-all shadow-2xl flex items-center gap-3 group/btn"
+                  className="px-6 sm:px-8 py-3.5 bg-white text-slate-900 rounded-2xl font-black hover:bg-slate-50 transition-all shadow-2xl flex items-center gap-2.5 group/btn"
                 >
-                  <Edit2 size={20} className="group-hover/btn:rotate-12 transition-transform" />
+                  <Edit2 size={18} className="group-hover/btn:rotate-12 transition-transform" />
                   Edit Profile
                 </button>
-                <button className="p-4 bg-[#051739] text-[#7c3aed] rounded-2xl shadow-2xl hover:bg-slate-900 transition-all active:scale-95 border border-white/10 shadow-[0_0_30px_rgba(124,58,237,0.3)]">
-                  <Zap size={24} fill="currentColor" />
+                <button className="p-3.5 bg-[#051739] text-[#7c3aed] rounded-2xl shadow-2xl hover:bg-slate-900 transition-all active:scale-95 border border-white/10 shadow-[0_0_30px_rgba(124,58,237,0.3)]">
+                  <Zap size={20} fill="currentColor" />
                 </button>
-              </>
+              </div>
             )}
           </div>
         </div>
       </div>
 
       {/* Modern Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
           { label: 'Network Organization', value: organization?.name || 'VMS Global', icon: <Globe size={24} />, color: 'blue' },
-          { label: 'Security Privilege', value: user.role === 'ADMIN' ? 'Full Access' : 'Staff Level', icon: <Shield size={24} />, color: 'orange' },
+          { label: 'Security Privilege', value: user.role === 'MASTER_ADMIN' ? 'Primary Authority' : (user.role === 'ADMIN' ? 'Full Access' : 'Staff Level'), icon: <Shield size={24} />, color: 'orange' },
           { label: 'Creation Epoch', value: user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '15 Apr 2026', icon: <Calendar size={24} />, color: 'purple' },
           { label: 'Last Intelligence Load', value: user.lastLogin ? new Date(user.lastLogin).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Today, 10:43', icon: <Clock size={24} />, color: 'emerald' }
         ].map((stat, i) => (
-          <div key={i} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-[0_15px_40px_-15px_rgba(0,0,0,0.05)] relative overflow-hidden group hover:shadow-xl transition-all">
+         <div key={i} className="bg-white p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border border-slate-100 shadow-[0_15px_40px_-15px_rgba(0,0,0,0.05)] relative overflow-hidden group hover:shadow-xl transition-all">
              <div className="absolute top-6 right-6 opacity-[0.03] group-hover:opacity-[0.06] transition-opacity">
                 <svg width="60" height="60" viewBox="0 0 100 100">
                   <circle cx="10" cy="10" r="2" fill="currentColor" />
@@ -364,7 +368,7 @@ export default function ProfileTab({
                   <circle cx="50" cy="50" r="2" fill="currentColor" />
                 </svg>
              </div>
-             <div className={`h-14 w-14 rounded-2xl flex items-center justify-center mb-8 
+             <div className={`h-12 w-12 sm:h-14 sm:w-14 rounded-2xl flex items-center justify-center mb-6 sm:mb-8 
                ${stat.color === 'blue' ? 'bg-blue-50 text-blue-600' : 
                  stat.color === 'orange' ? 'bg-orange-50 text-orange-600' : 
                  stat.color === 'purple' ? 'bg-purple-50 text-purple-600' : 
@@ -373,41 +377,41 @@ export default function ProfileTab({
                {stat.icon}
              </div>
              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">{stat.label}</p>
-             <p className="text-xl font-black text-[#051739] tracking-tight">{stat.value}</p>
+             <p className="text-lg sm:text-xl font-black text-[#051739] tracking-tight">{stat.value}</p>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Specifications Column */}
-        <div className="md:col-span-2 space-y-8">
-           <div className="bg-white rounded-[3rem] p-12 border border-slate-100 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.05)]">
-             <div className="flex items-center justify-between mb-12">
+        <div className="lg:col-span-2 space-y-8">
+           <div className="bg-white rounded-[2rem] sm:rounded-[3rem] p-6 sm:p-12 border border-slate-100 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.05)]">
+             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 sm:mb-12">
                 <div className="flex items-center gap-4">
                    <div className="h-10 w-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600">
                       <Zap size={20} />
                    </div>
-                   <h3 className="text-2xl font-black text-[#051739] italic tracking-tight">Administrative Specifications</h3>
+                   <h3 className="text-xl sm:text-2xl font-black text-[#051739] italic tracking-tight">Administrative Specifications</h3>
                 </div>
                 <button 
                   onClick={() => isEditing ? handleSave() : setIsEditing(true)}
-                  className="text-blue-600 text-xs font-black uppercase tracking-[0.2em] hover:opacity-70 transition-opacity"
+                  className="text-blue-600 text-xs font-black uppercase tracking-[0.2em] hover:opacity-70 transition-opacity self-start sm:self-auto"
                 >
                   {isEditing ? 'SYNC NOW' : 'UPDATE DATA'}
                 </button>
              </div>
 
-             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-10">
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-x-12 sm:gap-y-10">
                 {[
                   { label: 'EMAIL IDENTITY', icon: <Mail size={18} />, value: formData.email, field: 'email', type: 'email' },
                   { label: 'PHONE NODE', icon: <Phone size={18} />, value: formData.phone || 'Not Connected', field: 'phone', type: 'tel' },
                   { label: 'PERSONAL NAME', icon: <User size={18} />, value: formData.name, field: 'name', type: 'text' },
                   { label: 'GEOGRAPHIC LOCATION', icon: <MapPin size={18} />, value: formData.address || 'Remote Terminal', field: 'address', type: 'text' }
                 ].map((input, idx) => (
-                  <div key={idx} className="space-y-4">
+                  <div key={idx} className="space-y-2 sm:space-y-4">
                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{input.label}</p>
-                     <div className={`flex items-center gap-4 p-5 rounded-[1.5rem] transition-all border ${isEditing ? 'bg-white border-blue-200 shadow-lg shadow-blue-50' : 'bg-slate-50/50 border-slate-100'}`}>
-                        <div className="text-slate-400">{input.icon}</div>
+                     <div className={`flex items-center gap-3 sm:gap-4 p-4 sm:p-5 rounded-[1.25rem] sm:rounded-[1.5rem] transition-all border ${isEditing ? 'bg-white border-blue-200 shadow-lg shadow-blue-50' : 'bg-slate-50/50 border-slate-100'}`}>
+                        <div className="text-slate-400 flex-shrink-0">{input.icon}</div>
                         {isEditing ? (
                           <input 
                             type={input.type}
@@ -426,28 +430,28 @@ export default function ProfileTab({
            </div>
 
            {/* Preferences Card */}
-           <div className="bg-white rounded-[3rem] p-12 border border-slate-100 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.05)]">
-             <div className="flex items-center gap-4 mb-10">
+           <div className="bg-white rounded-[2rem] sm:rounded-[3rem] p-6 sm:p-12 border border-slate-100 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.05)]">
+             <div className="flex items-center gap-4 mb-8 sm:mb-10">
                 <div className="h-10 w-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
                    <Bell size={20} />
                 </div>
-                <h3 className="text-2xl font-black text-[#051739] italic tracking-tight">System Preferences</h3>
+                <h3 className="text-xl sm:text-2xl font-black text-[#051739] italic tracking-tight">System Preferences</h3>
              </div>
              <div className="space-y-4 border-t border-slate-50">
                 {preferences.map((pref) => (
-                  <div key={pref.id} className="flex items-center justify-between py-6 group">
-                     <div className="flex items-center gap-6">
-                        <div className="h-14 w-14 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-all">
+                  <div key={pref.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-4 sm:py-6 group border-b border-slate-100/50 last:border-0">
+                     <div className="flex items-center gap-4 sm:gap-6">
+                        <div className="h-12 w-12 sm:h-14 sm:w-14 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-all flex-shrink-0">
                            {pref.icon}
                         </div>
-                        <div>
-                           <p className="text-base font-black text-slate-900 tracking-tight">{pref.label}</p>
-                           <p className="text-sm text-slate-400 font-medium">{pref.desc}</p>
+                        <div className="min-w-0 flex-1">
+                           <p className="text-sm sm:text-base font-black text-slate-900 tracking-tight">{pref.label}</p>
+                           <p className="text-xs sm:text-sm text-slate-400 font-medium leading-normal">{pref.desc}</p>
                         </div>
                      </div>
                      <button 
                         onClick={() => togglePreference(pref.id)}
-                        className={`w-14 h-7 rounded-full transition-all relative ${pref.active ? 'bg-[#3b82f6]' : 'bg-slate-200'}`}
+                        className={`w-14 h-7 rounded-full transition-all relative flex-shrink-0 ${pref.active ? 'bg-[#3b82f6]' : 'bg-slate-200'}`}
                      >
                         <div className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-300 ${pref.active ? 'left-8' : 'left-1'}`} />
                      </button>
@@ -457,7 +461,7 @@ export default function ProfileTab({
            </div>
 
            {/* Premium Google Integrations Section */}
-           {user.role === 'ADMIN' && (
+           {(user.role === 'ADMIN' || user.role === 'MASTER_ADMIN') && (
              <GoogleIntegration 
                 userEmail={user?.email}
                 googleStatus={googleStatus}
@@ -481,14 +485,14 @@ export default function ProfileTab({
 
           <div className="space-y-8">
             {/* Organization Metadata Card - Fixed for All Levels */}
-            <div className="bg-white rounded-[3rem] p-12 border border-slate-100 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.05)]">
+            <div className="bg-white rounded-[2rem] sm:rounded-[3rem] p-6 sm:p-12 border border-slate-100 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.05)]">
               <div className="flex items-center gap-4 mb-10">
                  <div className="h-10 w-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600">
                     <Globe size={20} />
                  </div>
                  <h3 className="text-2xl font-black text-[#051739] italic tracking-tight">{organization?.name || 'System Environment'}</h3>
               </div>
-              <div className="grid grid-cols-2 gap-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8">
                  <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Workspace ID</p>
                     <p className="text-sm font-bold text-slate-900 font-mono">{organization?.id?.substring(0, 8) || 'GLOBAL'}</p>
@@ -501,7 +505,7 @@ export default function ProfileTab({
             </div>
 
             {/* Core Actions Card */}
-            <div className="bg-[#fff1f2] border border-rose-100 rounded-[3rem] p-12 shadow-[0_20px_50px_-20px_rgba(225,29,72,0.1)]">
+            <div className="bg-[#fff1f2] border border-rose-100 rounded-[2rem] sm:rounded-[3rem] p-6 sm:p-12 shadow-[0_20px_50px_-20px_rgba(225,29,72,0.1)]">
              <div className="flex items-center gap-3 mb-6">
                 <Shield size={24} className="text-rose-600" />
                 <h3 className="text-2xl font-black text-rose-900 italic">Core Actions</h3>
@@ -509,12 +513,21 @@ export default function ProfileTab({
              <p className="text-rose-700/60 text-sm font-medium leading-relaxed mb-10">
                Signing out will terminate your current session. Deleting your profile will permanently remove your administrative access.
              </p>
-             <div className="flex gap-4">
+             <div className="flex flex-col sm:flex-row gap-4">
+                 {hasMultiOrg && onSwitchWorkspace && (
+                   <button
+                     onClick={onSwitchWorkspace}
+                     className="flex-1 py-4 bg-indigo-600 text-white hover:bg-indigo-700 rounded-3xl font-black transition-all active:scale-95 flex items-center justify-center gap-3 shadow-xl border border-indigo-500 text-sm"
+                   >
+                     <RefreshCw size={18} />
+                     Switch Workspace
+                   </button>
+                 )}
                 <button
                   onClick={onLogout}
-                  className="flex-1 py-5 bg-white text-rose-600 rounded-3xl font-black hover:bg-rose-50 transition-all active:scale-95 flex items-center justify-center gap-3 shadow-sm border border-rose-100"
+                  className="flex-1 py-4 bg-white text-rose-600 rounded-3xl font-black hover:bg-rose-50 transition-all active:scale-95 flex items-center justify-center gap-3 shadow-sm border border-rose-100 text-sm"
                 >
-                  <LogOut size={22} className="rotate-180" />
+                  <LogOut size={18} className="rotate-180" />
                   Sign Out
                 </button>
                 <button
@@ -529,16 +542,16 @@ export default function ProfileTab({
                      confirmButtonText: 'DELETE IDENTITY'
                    }).then((result) => { if (result.isConfirmed) { /* Logged in deletion logic here */ } });
                   }}
-                  className="flex-1 py-5 bg-[#e11d48] text-white rounded-3xl font-black hover:bg-rose-700 transition-all active:scale-95 flex items-center justify-center gap-3 shadow-xl shadow-rose-200"
+                  className="flex-1 py-4 bg-[#e11d48] text-white rounded-3xl font-black hover:bg-rose-700 transition-all active:scale-95 flex items-center justify-center gap-3 shadow-xl shadow-rose-200 text-sm"
                 >
-                  <Trash2 size={22} />
+                  <Trash2 size={18} />
                   Delete Identity
                 </button>
              </div>
            </div>
 
            {/* Support Hub Card */}
-           <div className="bg-[#051739] rounded-[3rem] p-12 text-white shadow-2xl relative overflow-hidden group min-h-[360px] flex flex-col justify-end">
+           <div className="bg-[#051739] rounded-[2rem] sm:rounded-[3rem] p-6 sm:p-12 text-white shadow-2xl relative overflow-hidden group min-h-[300px] sm:min-h-[360px] flex flex-col justify-end">
               <div className="absolute top-12 right-12 opacity-10 group-hover:opacity-20 group-hover:scale-110 transition-all duration-700">
                  <svg width="160" height="160" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -549,7 +562,7 @@ export default function ProfileTab({
                  </svg>
               </div>
               <div className="relative z-10 space-y-6">
-                <h4 className="text-3xl font-black italic tracking-tighter">Need Intelligence Support?</h4>
+                <h4 className="text-2xl sm:text-3xl font-black italic tracking-tighter">Need Intelligence Support?</h4>
                 <p className="text-slate-400 text-sm font-medium leading-relaxed max-w-[240px]">
                   Contact our specialized elite auditor team for security clearance issues or organization relocation.
                 </p>
@@ -567,13 +580,13 @@ export default function ProfileTab({
               </div>
            </div>
             {/* Data Management Card - Admin Only */}
-            {user.role === 'ADMIN' && (
-              <div className="bg-white rounded-[3rem] p-12 border border-slate-100 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.05)]">
+            {(user.role === 'ADMIN' || user.role === 'MASTER_ADMIN') && (
+              <div className="bg-white rounded-[2rem] sm:rounded-[3rem] p-6 sm:p-12 border border-slate-100 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.05)]">
                 <div className="flex items-center gap-4 mb-10">
                    <div className="h-10 w-10 bg-green-50 rounded-xl flex items-center justify-center text-green-600">
                       <Download size={20} />
                    </div>
-                   <h3 className="text-2xl font-black text-[#051739] italic tracking-tight">System Backups</h3>
+                   <h3 className="text-xl sm:text-2xl font-black text-[#051739] italic tracking-tight">System Backups</h3>
                 </div>
                 
                 <div className="space-y-6">

@@ -184,7 +184,7 @@ export default function PreRegistrationTab({
         window.location.href = whatsappUrl;
       }
 
-      showToast(`WhatsApp message generated for ${req.name}`, 'success');
+      showToast(`WhatsApp link opened for ${req.name}`, 'info');
     } catch (error) {
       console.error('Error sending WhatsApp:', error);
       showToast('Failed to update WhatsApp status', 'error');
@@ -311,6 +311,18 @@ export default function PreRegistrationTab({
 
       const visitRef = doc(db, 'organizations', organizationId, 'visits', visitId);
       await setDoc(visitRef, sanitizeForFirestore(visitData));
+
+      // 1.5 Update/Create profile record so DOB and Address are stored in the core profile metadata in Firestore
+      const profileRef = doc(db, 'organizations', organizationId, 'profiles', req.phone);
+      await setDoc(profileRef, sanitizeForFirestore({
+        phone: req.phone,
+        name: req.name,
+        email: req.email || '',
+        dob: req.dob || '',
+        address: req.address || '',
+        organizationId,
+        updatedAt: new Date().toISOString()
+      }), { merge: true });
 
       // 2. Mark pre-registration as CHECKED_IN
       await updateDoc(doc(db, 'organizations', organizationId, 'preRegistrations', req.id), {
@@ -453,7 +465,7 @@ export default function PreRegistrationTab({
         </div>
         
         <div className="flex items-center gap-3">
-          {user?.role === 'ADMIN' && (
+          {(user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN') && (
             <button
               onClick={() => setShowSettings(true)}
               className="flex items-center gap-2 px-4 py-3 bg-white text-slate-700 border border-slate-200 rounded-xl font-semibold hover:bg-slate-50 transition-all shadow-sm active:scale-95"
@@ -633,7 +645,7 @@ export default function PreRegistrationTab({
                           req.whatsappStatus === 'SENT' ? (
                             <div className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 text-emerald-600 rounded-lg border border-emerald-100">
                               <Check className="w-4 h-4" />
-                              <span className="text-[10px] font-black uppercase tracking-widest">Sent</span>
+                              <span className="text-[10px] font-black uppercase tracking-widest text-[#059669]">Redirected</span>
                               <button 
                                 onClick={() => handleManualNotification(req)}
                                 className="ml-1 p-1 hover:bg-emerald-100 rounded-md transition-colors"

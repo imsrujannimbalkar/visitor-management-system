@@ -230,7 +230,7 @@ export default function VisitorTable({
                   Bulk Check-out
                 </button>
               )}
-              {onBulkDelete && userRole === 'ADMIN' && (
+              {onBulkDelete && (userRole === 'ADMIN' || userRole === 'MASTER_ADMIN') && (
                 <button
                   onClick={handleBulkDelete}
                   className="flex items-center gap-2 px-6 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-black transition-all shadow-lg active:scale-95"
@@ -419,7 +419,7 @@ export default function VisitorTable({
                             >
                               <Edit2 className="h-3.5 w-3.5" />
                             </button>
-                            {userRole === 'ADMIN' && onDelete && (
+                            {(userRole === 'ADMIN' || userRole === 'MASTER_ADMIN') && onDelete && (
                               <button 
                                 onClick={(e) => { e.stopPropagation(); handleDelete(visitor.visitorId); }}
                                 className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
@@ -473,7 +473,7 @@ export default function VisitorTable({
                     </td>
                   </motion.tr>
                 <AnimatePresence mode="wait">
-                  {expandedRow === visitor.visitorId && (userRole === 'ADMIN' || userRole === 'STAFF') && (
+                  {expandedRow === visitor.visitorId && (userRole === 'ADMIN' || userRole === 'STAFF' || userRole === 'MASTER_ADMIN') && (
                     <motion.tr
                       key={`expanded-${visitor.visitorId}`}
                       initial={{ opacity: 0, height: 0 }}
@@ -512,7 +512,7 @@ export default function VisitorTable({
                                   Digital Pass
                                 </button>
                               )}
-                              {userRole === 'ADMIN' && onAddDonation && (
+                              {(userRole === 'ADMIN' || userRole === 'MASTER_ADMIN') && onAddDonation && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); onAddDonation(visitor); }}
                                   className="flex items-center gap-3 px-8 py-3.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded-[1.5rem] transition-all text-[11px] font-bold uppercase tracking-[0.2em] shadow-xl shadow-emerald-200 active:scale-95"

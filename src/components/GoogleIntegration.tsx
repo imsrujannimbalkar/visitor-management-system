@@ -109,7 +109,7 @@ export default function GoogleIntegration({
         </div>
 
         {googleStatus.connected ? (
-          <div className="bg-[#E6F4EA] border border-[#CEEAD6] rounded-2xl px-6 py-3 flex items-center justify-between min-w-[320px]">
+          <div className="bg-[#E6F4EA] border border-[#CEEAD6] rounded-2xl px-6 py-3 flex items-center justify-between w-full sm:min-w-[320px]">
             <div className="flex items-center gap-3">
               <div className="bg-[#0F9D58] h-5 w-5 rounded-full flex items-center justify-center">
                 <CheckCircle2 size={12} className="text-white" />
@@ -200,12 +200,12 @@ export default function GoogleIntegration({
           </div>
 
           {spreadsheetExpanded && (
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 animate-in fade-in slide-in-from-top-2 duration-500">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8 animate-in fade-in slide-in-from-top-2 duration-500">
               {/* Left Settings */}
-              <div className="lg:col-span-2 space-y-8">
+              <div className="md:col-span-2 space-y-6 sm:space-y-8">
                 <div className="space-y-4">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">SELECT SPREADSHEET</label>
-                  <div className="flex gap-3">
+                  <div className="flex flex-col sm:flex-row gap-3">
                     <div className="relative flex-1">
                       <select 
                         value={googleStatus.spreadsheetId || ''}
@@ -286,25 +286,25 @@ export default function GoogleIntegration({
               </div>
 
               {/* Right Buttons */}
-              <div className="lg:col-span-1 flex flex-col gap-3">
+              <div className="md:col-span-2 lg:col-span-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
                 <button 
                   onClick={onSyncNow}
                   disabled={isSyncingGoogle || !googleStatus.spreadsheetId}
-                  className="w-full py-4 bg-[#0F9D58] text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#0B8043] transition-all disabled:opacity-50 shadow-md shadow-[#0F9D58]/10"
+                  className="w-full py-4 bg-[#0F9D58] text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#0B8043] transition-all disabled:opacity-50 shadow-md shadow-[#0F9D58]/10 order-1"
                 >
                   <RefreshCw size={18} className={isSyncingGoogle ? 'animate-spin' : ''} />
                   Sync Now
                 </button>
                 <button 
                   onClick={onCreateSheet}
-                  className="w-full py-4 bg-white border border-slate-200 text-slate-700 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-50 transition-all border border-slate-200"
+                  className="w-full py-4 bg-white border border-slate-200 text-slate-700 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-50 transition-all shadow-sm order-2 lg:mt-0"
                 >
                   <Plus size={18} className="text-[#0F9D58]" />
-                  Create New Spreadsheet
+                  Create New
                 </button>
                 <button 
                   onClick={onDisconnectGoogle}
-                  className="w-full py-4 bg-white border border-[#FAD2CF] text-[#D93025] rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#FEF7F6] transition-all mt-auto"
+                  className="w-full py-4 bg-white border border-[#FAD2CF] text-[#D93025] rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#FEF7F6] transition-all sm:col-span-2 lg:col-span-1 order-3 lg:mt-auto"
                 >
                   <Trash2 size={18} />
                   Disconnect
@@ -348,12 +348,12 @@ export default function GoogleIntegration({
           </div>
 
           {calendarExpanded && (
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 animate-in fade-in slide-in-from-top-2 duration-500">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8 animate-in fade-in slide-in-from-top-2 duration-500">
               {/* Left Settings */}
-              <div className="lg:col-span-2 space-y-8">
+              <div className="md:col-span-2 space-y-6 sm:space-y-8">
                 <div className="space-y-4">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">SELECT CALENDAR</label>
-                  <div className="flex gap-3">
+                  <div className="flex flex-col sm:flex-row gap-3">
                     <div className="relative flex-1">
                       <select 
                         value={googleStatus.calendarId || googleStatus.birthdayCalendarId || ''}
@@ -429,32 +429,32 @@ export default function GoogleIntegration({
               </div>
 
               {/* Right Buttons */}
-              <div className="lg:col-span-1 flex flex-col gap-3">
+              <div className="md:col-span-2 lg:col-span-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
                 <button 
                   onClick={onSyncNow}
                   disabled={isSyncingGoogle || (!googleStatus.calendarId && !googleStatus.birthdayCalendarId)}
-                  className="w-full py-4 bg-[#0F9D58] text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#0B8043] transition-all shadow-md shadow-[#0F9D58]/10"
+                  className="w-full py-4 bg-[#0F9D58] text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#0B8043] transition-all shadow-md shadow-[#0F9D58]/10 order-1"
                 >
                   <RefreshCw size={18} className={isSyncingGoogle ? 'animate-spin' : ''} />
                   Sync Now
                 </button>
                 <button 
                   onClick={() => onCreateCalendar('primary')}
-                  className="w-full py-4 bg-white border border-slate-200 text-slate-700 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-50 transition-all border border-slate-200 shadow-sm"
+                  className="w-full py-4 bg-white border border-slate-200 text-slate-700 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-50 transition-all shadow-sm order-2"
                 >
                   <Calendar size={18} className="text-[#0F9D58]" />
-                  Create New Calendar
+                  Create New
                 </button>
                 <button 
                   onClick={onRefreshLists}
-                  className="w-full py-4 bg-white border border-slate-200 text-slate-700 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-50 transition-all border border-slate-200 shadow-sm"
+                  className="w-full py-4 bg-white border border-slate-200 text-slate-700 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-50 transition-all shadow-sm order-3"
                 >
-                  <Calendar size={18} className="text-[#0F9D58]" />
-                  Select Different Calendar
+                  <RefreshCw size={18} className="text-[#0F9D58]" />
+                  Refresh
                 </button>
                 <button 
                   onClick={onDisconnectGoogle}
-                  className="w-full py-4 bg-white border border-[#FAD2CF] text-[#D93025] rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#FEF7F6] transition-all mt-auto"
+                  className="w-full py-4 bg-white border border-[#FAD2CF] text-[#D93025] rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#FEF7F6] transition-all sm:col-span-2 lg:col-span-1 order-4 lg:mt-auto"
                 >
                   <Trash2 size={18} />
                   Disconnect

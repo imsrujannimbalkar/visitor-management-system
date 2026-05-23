@@ -1,10 +1,42 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Gift, MessageCircle, Calendar as CalendarIcon, Heart, Star, CheckCircle2, RotateCcw } from 'lucide-react';
-import { Visitor, Donation } from '../types';
-import { doc, updateDoc } from 'firebase/firestore';
+import { Visitor, Donation, PreRegistration } from '../types';
+import { doc, updateDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useToast } from './Toast';
+
+function parseDOB(dobString: string) {
+  if (!dobString) return null;
+  const parts = dobString.split(/[-/]/);
+  if (parts.length !== 3) return null;
+  
+  let year = 0;
+  let month = 0; // 0-indexed
+  let day = 0;
+  
+  const p0 = parseInt(parts[0].trim(), 10);
+  const p1 = parseInt(parts[1].trim(), 10);
+  const p2 = parseInt(parts[2].trim(), 10);
+  
+  if (parts[0].trim().length === 4) {
+    year = p0;
+    month = p1 - 1;
+    day = p2;
+  } else if (parts[2].trim().length === 4) {
+    year = p2;
+    month = p1 - 1;
+    day = p0;
+  } else {
+    // Fallback: assume YYYY-MM-DD
+    year = p0;
+    month = p1 - 1;
+    day = p2;
+  }
+  
+  if (isNaN(year) || isNaN(month) || isNaN(day)) return null;
+  return { year, month, day };
+}
 
 interface BirthdayTabProps {
   organizationId: string;
@@ -20,10 +52,32 @@ export default function BirthdayTab({ organizationId, visitors, donations, loadi
   const todayMonth = today.getMonth();
   const todayDate = today.getDate();
 
+  const [preRegistrations, setPreRegistrations] = useState<PreRegistration[]>([]);
+
+  useEffect(() => {
+    if (!organizationId) {
+      setPreRegistrations([]);
+      return;
+    }
+    const preRegRef = collection(db, 'organizations', organizationId, 'preRegistrations');
+    const qPreReg = query(preRegRef, where('deleted', '==', false));
+    const unsubscribe = onSnapshot(qPreReg, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PreRegistration));
+      setPreRegistrations(list);
+    }, (err) => {
+      console.error("Error loading pre-registrations in BirthdayTab:", err);
+    });
+    return () => unsubscribe();
+  }, [organizationId]);
+
   const { todaysBirthdays, upcomingBirthdays, specialOccasions } = useMemo(() => {
     const todayList: any[] = [];
     const upcomingList: any[] = [];
     const specialList: any[] = [];
+
+    // Map to keep track of processed phone numbers to avoid double listings on the same day if they did both pre-reg and normal check-in
+    const processedPhonesToday = new Set<string>();
+    const processedPhonesUpcoming = new Set<string>();
 
     // 1. Birthdays from Profiles
     const uniqueVisitorsMap = new Map<string, Visitor>();
@@ -35,11 +89,11 @@ export default function BirthdayTab({ organizationId, visitors, donations, loadi
 
     uniqueVisitorsMap.forEach(visitor => {
       if (!visitor.dob) return;
-      const dobParts = visitor.dob.split('-');
-      if (dobParts.length !== 3) return;
+      const parsed = parseDOB(visitor.dob);
+      if (!parsed) return;
 
-      const birthMonth = parseInt(dobParts[1], 10) - 1;
-      const birthDate = parseInt(dobParts[2], 10);
+      const birthMonth = parsed.month;
+      const birthDate = parsed.day;
 
       const item = {
         id: visitor.phone,
@@ -50,12 +104,13 @@ export default function BirthdayTab({ organizationId, visitors, donations, loadi
         icon: <Gift className="h-5 w-5" />,
         whatsappStatus: visitor.whatsappStatus,
         isDonation: false,
-        docId: visitor.phone // Profile ID is phone in this app logic usually, or visitorId? 
-        // Wait, Profile is stored by phone? No, organizations/{orgId}/profiles/{phone}
+        isPreReg: false,
+        docId: visitor.phone
       };
 
       if (birthMonth === todayMonth && birthDate === todayDate) {
         todayList.push(item);
+        processedPhonesToday.add(visitor.phone);
       } else {
         const currentYear = today.getFullYear();
         let nextDate = new Date(currentYear, birthMonth, birthDate);
@@ -64,18 +119,62 @@ export default function BirthdayTab({ organizationId, visitors, donations, loadi
         const diffDays = Math.ceil((nextDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
         if (diffDays > 0 && diffDays <= 7) {
           upcomingList.push({ ...item, daysRemaining: diffDays, dateStr: nextDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) });
+          processedPhonesUpcoming.add(visitor.phone);
         }
       }
     });
 
-    // 2. Special Occasions from Donations
+    // 2. Birthdays from Pre-registrations
+    preRegistrations.forEach(preReg => {
+      if (!preReg.dob || !preReg.phone) return;
+      const parsed = parseDOB(preReg.dob);
+      if (!parsed) return;
+
+      const birthMonth = parsed.month;
+      const birthDate = parsed.day;
+
+      const item = {
+        id: preReg.id,
+        name: preReg.name,
+        phone: preReg.phone,
+        type: 'Pre-Registered Birthday',
+        date: preReg.dob,
+        icon: <Gift className="h-5 w-5 text-indigo-400" />,
+        whatsappStatus: preReg.whatsappStatus,
+        isDonation: false,
+        isPreReg: true,
+        docId: preReg.id
+      };
+
+      if (birthMonth === todayMonth && birthDate === todayDate) {
+        // Only list if we haven't already listed this phone number today
+        if (!processedPhonesToday.has(preReg.phone)) {
+          todayList.push(item);
+          processedPhonesToday.add(preReg.phone);
+        }
+      } else {
+        const currentYear = today.getFullYear();
+        let nextDate = new Date(currentYear, birthMonth, birthDate);
+        if (nextDate < today) nextDate = new Date(currentYear + 1, birthMonth, birthDate);
+        
+        const diffDays = Math.ceil((nextDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays > 0 && diffDays <= 7) {
+          if (!processedPhonesUpcoming.has(preReg.phone)) {
+            upcomingList.push({ ...item, daysRemaining: diffDays, dateStr: nextDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) });
+            processedPhonesUpcoming.add(preReg.phone);
+          }
+        }
+      }
+    });
+
+    // 3. Special Occasions from Donations
     donations.forEach(donation => {
       if (donation.occasionDate) {
-        const dateParts = donation.occasionDate.split('-');
-        if (dateParts.length !== 3) return;
+        const parsed = parseDOB(donation.occasionDate);
+        if (!parsed) return;
 
-        const eventMonth = parseInt(dateParts[1], 10) - 1;
-        const eventDate = parseInt(dateParts[2], 10);
+        const eventMonth = parsed.month;
+        const eventDate = parsed.day;
 
         const item = {
           id: donation.id,
@@ -86,6 +185,7 @@ export default function BirthdayTab({ organizationId, visitors, donations, loadi
           icon: donation.occasion?.toLowerCase().includes('anniversary') ? <Heart className="h-5 w-5" /> : <Star className="h-5 w-5" />,
           whatsappStatus: donation.whatsappStatus,
           isDonation: true,
+          isPreReg: false,
           docId: donation.id
         };
 
@@ -114,13 +214,14 @@ export default function BirthdayTab({ organizationId, visitors, donations, loadi
       upcomingBirthdays: upcomingList.sort((a, b) => a.daysRemaining - b.daysRemaining),
       specialOccasions: specialList
     };
-  }, [visitors, donations, todayMonth, todayDate]);
+  }, [visitors, preRegistrations, donations, todayMonth, todayDate]);
 
   const calculateAge = (dob: string) => {
-    const birthDate = new Date(dob);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const m = today.getMonth() - birthDate.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
+    const parsed = parseDOB(dob);
+    if (!parsed) return 0;
+    let age = today.getFullYear() - parsed.year;
+    const m = today.getMonth() - parsed.month;
+    if (m < 0 || (m === 0 && today.getDate() < parsed.day)) age--;
     return age;
   };
 
@@ -131,7 +232,8 @@ export default function BirthdayTab({ organizationId, visitors, donations, loadi
     setSendingId(item.id);
     
     try {
-      const msg = item.type === 'Birthday' 
+      const isBday = item.type === 'Birthday' || item.type === 'Pre-Registered Birthday';
+      const msg = isBday 
         ? `Happy Birthday ${item.name}! 🎉 Regards, ${organizationName}`
         : `Happy ${item.type} ${item.name}! ✨ Warm wishes from ${organizationName}`;
       
@@ -142,7 +244,10 @@ export default function BirthdayTab({ organizationId, visitors, donations, loadi
       const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(msg)}`;
 
       // Update Firestore
-      const collectionName = item.isDonation ? 'donations' : 'profiles';
+      let collectionName = item.isDonation ? 'donations' : 'profiles';
+      if (item.isPreReg) {
+        collectionName = 'preRegistrations';
+      }
       const docRef = doc(db, 'organizations', organizationId, collectionName, item.docId);
       
       await updateDoc(docRef, {
@@ -151,7 +256,7 @@ export default function BirthdayTab({ organizationId, visitors, donations, loadi
       });
 
       window.open(whatsappUrl, '_blank');
-      showToast(`Wish generated for ${item.name}`, 'success');
+      showToast(`WhatsApp link opened for ${item.name}`, 'info');
     } catch (error) {
       console.error('Error tracking wish status:', error);
       showToast('Failed to update status', 'error');
@@ -215,7 +320,7 @@ export default function BirthdayTab({ organizationId, visitors, donations, loadi
                       {item.whatsappStatus === 'SENT' ? (
                         <div className="flex items-center gap-1.5 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100">
                            <CheckCircle2 className="h-4 w-4" />
-                           <span className="text-[10px] font-black uppercase tracking-widest">Sent</span>
+                           <span className="text-[10px] font-black uppercase tracking-widest text-[#059669]">Redirected</span>
                            <button 
                              onClick={() => handleSendWish(item)}
                              className="ml-1 text-emerald-400 hover:text-emerald-600 transition-colors"

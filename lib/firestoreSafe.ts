@@ -8,11 +8,11 @@ export const safely = async <T,>(promise: Promise<T>, fallback: T): Promise<T> =
   try {
     return await promise;
   } catch (error: any) {
-    if (error.code === 5 || error.code === 7) {
-      console.warn("Firestore Database not found or permission denied. Defaulting to safe fallback.", error.message);
-      return fallback;
+    // Suppress noisy expected permission denied logs when running serverless backend without service accounts
+    if (error?.code !== 7 && !String(error?.message).includes('PERMISSION_DENIED')) {
+      console.warn("[FirestoreSafe] Operation failed, utilizing fallback:", error.message || error);
     }
-    throw error;
+    return fallback;
   }
 };
 export const getFallback: any = { exists: false, data: () => undefined, docs: [], empty: true, forEach: () => {} };

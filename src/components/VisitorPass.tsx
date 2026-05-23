@@ -50,6 +50,10 @@ export default function VisitorPass({
   const [showReviewModal, setShowReviewModal] = useState(false);
   const { showToast } = useToast();
 
+  // Resolve language from URL parameter (e.g. ?lang=hi) or default to English
+  const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+  const language = (params.get('lang') || 'en').toLowerCase() === 'hi' ? 'HI' : 'EN';
+
   const x = useMotionValue(0);
   const textOpacity = useTransform(x, [0, 150], [1, 0]);
   const progressWidth = useTransform(x, (value) => `${(value / 260) * 100}%`);
@@ -168,16 +172,24 @@ export default function VisitorPass({
           // and we arrived via a checkout link
           setShowReviewModal(true);
           checkoutTriggered.current = true;
+          const reviewPromptMsg = language === 'HI'
+            ? 'कृपया अपना अनुभव साझा करें।'
+            : 'Please take a moment to rate your experience.';
+          showToast(reviewPromptMsg, 'success');
         }
       }
     }
-  }, [visitor, loading, checkingOut]);
+  }, [visitor, loading, checkingOut, language]);
 
   const handleCheckOut = async () => {
     const vid = visitor?.visitId || visitor?.visitorId || visitorId;
     if (!visitor || !organization?.id || checkingOut) return;
     if (visitor.status === 'CHECKED OUT') {
       setShowReviewModal(true);
+      const reviewPromptMsg = language === 'HI'
+        ? 'कृपया अपना अनुभव साझा करें।'
+        : 'Please take a moment to rate your experience.';
+      showToast(reviewPromptMsg, 'success');
       return;
     }
 
@@ -218,6 +230,12 @@ export default function VisitorPass({
           console.error('Failed to update pre-registration on checkout:', preRegErr);
         }
       }
+
+      // Trigger both centered review modal and a toast popup
+      const checkOutSuccessMsg = language === 'HI'
+        ? 'चेक-आउट सफल! कृपया अपना अनुभव साझा करें।'
+        : 'Check-out successful! Please share your feedback in the review panel.';
+      showToast(checkOutSuccessMsg, 'success');
 
       // Trigger review modal after successful checkout
       setTimeout(() => {
@@ -284,7 +302,7 @@ export default function VisitorPass({
       window.location.href = whatsappUrl;
     }
 
-    showToast('WhatsApp message generated successfully', 'success');
+    showToast('WhatsApp link opened successfully', 'info');
   };
 
   if (loading) {
@@ -559,13 +577,15 @@ export default function VisitorPass({
             visitorName={visitor.name || visitor.visitorName}
             visitorId={visitor.visitorId || visitor.visitId}
             googleReviewUrl={organization?.googleReviewUrl}
+            isMandatory={!!visitor.preRegistrationId}
+            lang={language}
             onClose={() => setShowReviewModal(false)}
             onSave={async (rating, comment) => {
               if (!organization?.id) return;
               try {
-                const vid = visitor.visitorId || visitor.visitId;
+                const vidToReview = visitor.visitId || visitor.visitorId || visitorId;
                 // Use API for review submission to overcome Firestore security rules for anonymous visitors
-                const response = await fetch(`/api/visitors/${vid}/review`, {
+                const response = await fetch(`/api/visitors/${vidToReview}/review`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ 
@@ -578,7 +598,7 @@ export default function VisitorPass({
                 if (!response.ok) {
                    // Fallback attempt to Firestore (might work if user is signed in)
                    await addDoc(collection(db, 'organizations', organization.id, 'reviews'), {
-                     visitorId: vid,
+                     visitorId: vidToReview,
                      visitorName: visitor.name || visitor.visitorName,
                      rating,
                      comment,

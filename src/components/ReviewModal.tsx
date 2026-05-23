@@ -10,9 +10,18 @@ interface ReviewModalProps {
   onClose: () => void;
   onSave: (rating: number, comment: string) => void;
   lang?: 'EN' | 'HI';
+  isMandatory?: boolean;
 }
 
-export default function ReviewModal({ visitorName, visitorId, googleReviewUrl, onClose, onSave, lang = 'EN' }: ReviewModalProps) {
+export default function ReviewModal({ 
+  visitorName, 
+  visitorId, 
+  googleReviewUrl, 
+  onClose, 
+  onSave, 
+  lang = 'EN',
+  isMandatory = false 
+}: ReviewModalProps) {
   const [rating, setRating] = useState(0);
   const [hover, setHover] = useState(0);
   const [comment, setComment] = useState('');
@@ -85,20 +94,22 @@ export default function ReviewModal({ visitorName, visitorId, googleReviewUrl, o
         initial={{ scale: 0.9, y: 20 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.9, y: 20 }}
-        className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden border border-gray-100 dark:border-slate-800"
+        className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden border border-gray-100 dark:border-slate-800 max-h-[90vh] sm:max-h-[95vh] flex flex-col"
       >
-        <div className="p-8 space-y-8">
+        <div className="p-6 sm:p-8 space-y-6 sm:space-y-8 overflow-y-auto custom-scrollbar flex-1">
           <div className="flex justify-between items-start">
             <div className="space-y-1">
               <h3 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">{t.title}</h3>
               <p className="text-gray-500 dark:text-slate-400 font-bold text-sm">{t.subtitle}</p>
             </div>
-            <button 
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-colors text-gray-400"
-            >
-              <X className="h-6 w-6" />
-            </button>
+            {!isMandatory && (
+              <button 
+                onClick={onClose}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-colors text-gray-400"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            )}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-8">
@@ -184,13 +195,15 @@ export default function ReviewModal({ visitorName, visitorId, googleReviewUrl, o
                 </a>
               )}
 
-              <button
-                type="button"
-                onClick={onClose}
-                className="w-full py-3 text-gray-400 dark:text-slate-500 font-bold text-xs hover:text-gray-600 dark:hover:text-slate-300 transition-colors uppercase tracking-widest"
-              >
-                {t.skip}
-              </button>
+              {!isMandatory && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full py-3 text-gray-400 dark:text-slate-500 font-bold text-xs hover:text-gray-600 dark:hover:text-slate-300 transition-colors uppercase tracking-widest"
+                >
+                  {t.skip}
+                </button>
+              )}
             </div>
           </form>
         </div>

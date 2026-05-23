@@ -26,7 +26,7 @@ import {
   updateProfile
 } from 'firebase/auth';
 import { auth, googleProvider, db, isConfigured } from '../firebase';
-import { doc, getDoc, setDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, addDoc, serverTimestamp, arrayUnion, deleteDoc } from 'firebase/firestore';
 import { UserRole } from '../types';
 import Swal from 'sweetalert2';
 
@@ -74,27 +74,25 @@ export default function Auth({ onAuthComplete }: AuthProps) {
       let role = 'STAFF';
       let needsSync = false;
 
+      // ATOMIC INVITATION CHECK (Always check for all users)
+      const normalizedEmail = user.email?.toLowerCase() || '';
+      const inviteRef = doc(db, 'invitations', normalizedEmail);
+      const inviteSnap = await getDoc(inviteRef);
+      
+      let foundInvite = false;
+      if (inviteSnap.exists()) {
+        const inviteData = inviteSnap.data();
+        organizationId = inviteData.organizationId;
+        role = inviteData.role;
+        foundInvite = true;
+      }
+
       if (!userRegistrySnap.exists()) {
-        const normalizedEmail = user.email?.toLowerCase() || '';
-        const inviteRef = doc(db, 'invitations', normalizedEmail);
-        const inviteSnap = await getDoc(inviteRef);
-        
-        if (inviteSnap.exists()) {
-          const inviteData = inviteSnap.data();
-          organizationId = inviteData.organizationId;
-          role = inviteData.role;
-          
-          // Invitation cleanup
-          try {
-            const { deleteDoc } = await import('firebase/firestore');
-            await deleteDoc(inviteRef);
-            if (organizationId) {
-              await deleteDoc(doc(db, 'organizations', organizationId, 'invitations', normalizedEmail));
-            }
-          } catch (e) {
-            console.warn('Invitation cleanup failed:', e);
-          }
-        }
+        const associatedOrgs = organizationId ? [{
+          orgId: organizationId,
+          role: role,
+          joinedAt: new Date().toISOString()
+        }] : [];
 
         await setDoc(userRegistryRef, {
           uid: user.uid,
@@ -102,102 +100,87 @@ export default function Auth({ onAuthComplete }: AuthProps) {
           email: user.email?.toLowerCase() || '',
           role: role,
           organizationId: organizationId,
+          associatedOrgs: associatedOrgs,
           createdAt: new Date().toISOString(),
           lastLogin: new Date().toISOString()
         });
         needsSync = true;
 
         if (!organizationId) {
-          // NO ROLE ASSIGNED ALERT
           await Swal.fire({
-            title: 'No Access Found',
+            title: 'Invitation Not Found',
             html: `<div class="space-y-4">
-              <p class="text-slate-600 font-medium">Your account is not associated with any organization.</p>
-              <p class="text-slate-400 text-xs text-center border-t border-slate-100 pt-4">Please contact your administrator to receive an invitation, or proceed to set up a new organization if you are an owner.</p>
+              <div class="h-20 w-20 bg-amber-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border border-amber-100">
+                <svg class="h-10 w-10 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <p class="text-slate-600 font-medium">No onboarding invitation was found for your account.</p>
+              <p class="text-slate-400 text-xs text-center border-t border-slate-100 pt-4">Please contact your administrator for an invitation, or proceed to set up a new workspace.</p>
             </div>`,
-            icon: 'info',
+            icon: 'warning',
             confirmButtonText: 'Continue to Setup',
             confirmButtonColor: '#0f172a',
             customClass: {
-              popup: 'rounded-[2rem] p-10',
+              popup: 'rounded-[2.5rem] p-10',
               confirmButton: 'rounded-xl px-8 py-3'
             }
           });
         }
       } else {
         const regData = userRegistrySnap.data();
-        organizationId = regData.organizationId;
-        role = regData.role;
         
-        // If existing user has no organization, check if they have a pending invitation
-        if (!organizationId) {
-          const normalizedEmail = user.email?.toLowerCase() || '';
-          const inviteRef = doc(db, 'invitations', normalizedEmail);
-          const inviteSnap = await getDoc(inviteRef);
-          
-          if (inviteSnap.exists()) {
-            const inviteData = inviteSnap.data();
-            organizationId = inviteData.organizationId;
-            role = inviteData.role;
-            
-            // Apply invitation to existing user
-            await setDoc(userRegistryRef, {
-              organizationId: organizationId,
-              role: role
-            }, { merge: true });
-
-            // Invitation cleanup
-            try {
-              const { deleteDoc } = await import('firebase/firestore');
-              await deleteDoc(inviteRef);
-              if (organizationId) {
-                await deleteDoc(doc(db, 'organizations', organizationId, 'invitations', normalizedEmail));
-              }
-            } catch (e) {
-              console.warn('Invitation cleanup failed:', e);
-            }
-          } else {
-             // NO ORGANIZATION AND NO INVITATION FOUND
-             console.warn('Logged in but no organization or invitation found for Google user');
-             
-             await Swal.fire({
-               title: 'No Access Found',
-               html: `<div class="space-y-4">
-                 <p class="text-slate-600 font-medium">No organization associated with <b>${normalizedEmail}</b>.</p>
-                 <p class="text-slate-400 text-xs text-center border-t border-slate-100 pt-4">Please contact your administrator or set up your own workspace.</p>
-               </div>`,
-               icon: 'info',
-               confirmButtonText: 'Continue to Setup',
-               confirmButtonColor: '#0f172a',
-               customClass: {
-                 popup: 'rounded-[2rem] p-10',
-                 confirmButton: 'rounded-xl px-8 py-3'
-               }
-             });
-          }
+        // UPGRADE LOGIC: If a fresh invitation was found, or if they are missing an orgId in registry
+        if (foundInvite && organizationId) {
+          await updateDoc(userRegistryRef, {
+            organizationId: organizationId,
+            role: role,
+            associatedOrgs: arrayUnion({
+              orgId: organizationId,
+              role: role,
+              joinedAt: new Date().toISOString()
+            }),
+            lastLogin: new Date().toISOString()
+          });
+          needsSync = true;
+        } else if (!regData.organizationId && organizationId) {
+          await updateDoc(userRegistryRef, {
+            organizationId: organizationId,
+            role: role,
+            associatedOrgs: arrayUnion({
+              orgId: organizationId,
+              role: role,
+              joinedAt: new Date().toISOString()
+            }),
+            lastLogin: new Date().toISOString()
+          });
+          needsSync = true;
+        } else {
+          organizationId = regData.organizationId;
+          role = regData.role;
+          await updateDoc(userRegistryRef, { lastLogin: new Date().toISOString() });
         }
 
-        await setDoc(userRegistryRef, {
-          lastLogin: new Date().toISOString()
-        }, { merge: true });
-        needsSync = true;
-
         if (!organizationId) {
-          // NO ROLE ASSIGNED ALERT
-          await Swal.fire({
-            title: 'No Access Found',
-            html: `<div class="space-y-4">
-              <p class="text-slate-600 font-medium">Your account is not associated with any organization.</p>
-              <p class="text-slate-400 text-xs">Please contact your administrator to receive an invitation, or proceed to set up a new organization if you are an owner.</p>
-            </div>`,
-            icon: 'info',
-            confirmButtonText: 'Continue to Setup',
-            confirmButtonColor: '#0f172a',
-            customClass: {
-              popup: 'rounded-[2rem] p-10',
-              confirmButton: 'rounded-xl px-8 py-3'
-            }
-          });
+           await Swal.fire({
+             title: 'Invitation Not Found',
+             html: `<div class="space-y-4">
+               <div class="h-20 w-20 bg-amber-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border border-amber-100">
+                 <svg class="h-10 w-10 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                 </svg>
+               </div>
+               <p class="text-slate-600 font-medium">Your account profile exists but no onboarding invitation was found.</p>
+               <p class="text-slate-400 text-xs text-center border-t border-slate-100 pt-4">Please contact your administrator for an invitation.</p>
+             </div>`,
+             icon: 'warning',
+             confirmButtonText: 'Continue to Setup',
+             confirmButtonColor: '#0f172a',
+             customClass: {
+               popup: 'rounded-[2.5rem] p-10',
+               confirmButton: 'rounded-xl px-8 py-3'
+             }
+           });
         }
       }
       
@@ -219,33 +202,181 @@ export default function Auth({ onAuthComplete }: AuthProps) {
           details: 'User logged in via Google',
           timestamp: new Date().toISOString()
         });
+
+        if (foundInvite) {
+          try {
+            const { deleteDoc } = await import('firebase/firestore');
+            await deleteDoc(inviteRef);
+            await deleteDoc(doc(db, 'organizations', organizationId, 'invitations', normalizedEmail));
+          } catch (e) { console.warn('Invitation cleanup failed:', e); }
+        }
       }
       
+      // Clear storage selection and assign fresh login identifier for multisession workspace selector
+      sessionStorage.removeItem('vms_selected_org_id');
+      sessionStorage.setItem('vms_fresh_login', 'true');
+
       Toast.fire({ icon: 'success', title: 'Signed in successfully' });
       onAuthComplete();
     } catch (error: any) {
       console.error('Google Auth Error:', error);
-      Toast.fire({ icon: 'error', title: error.message });
+      let errorTitle = 'Authentication Failed';
+      let errorMessage = error.message || 'An unexpected error occurred during Google sign in. Please try again.';
+      
+      if (error.code === 'auth/user-disabled') {
+        errorTitle = 'Access Revoked';
+        errorMessage = 'Your access privileges for this workspace have been revoked. Please contact your primary workspace owner for assistance.';
+      }
+
+      await Swal.fire({
+        title: errorTitle,
+        html: `<div class="space-y-4">
+          <div class="h-20 w-20 bg-rose-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border border-rose-100">
+            <svg class="h-10 w-10 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <p class="text-slate-600 font-medium text-sm text-center leading-relaxed px-2">${errorMessage}</p>
+        </div>`,
+        icon: 'error',
+        confirmButtonText: 'Acknowledge',
+        confirmButtonColor: '#0f172a',
+        customClass: {
+          popup: 'rounded-[2.5rem] p-12 shadow-2xl border border-slate-100',
+          confirmButton: 'rounded-xl px-8 py-3.5 font-bold text-sm tracking-wide transition-all'
+        }
+      });
     } finally {
       setLoading(false);
     }
   };
 
   const handleForgotPassword = async () => {
-    if (!formData.email) {
-      Toast.fire({ icon: 'warning', title: 'Please enter your email first' });
-      return;
-    }
-    try {
-      await sendPasswordResetEmail(auth, formData.email);
-      Swal.fire({
-        icon: 'success',
-        title: 'Reset Link Sent',
-        text: 'Check your email for instructions to reset your password.',
-        confirmButtonColor: '#00225d'
-      });
-    } catch (error: any) {
-      Toast.fire({ icon: 'error', title: error.message });
+    const { value: email } = await Swal.fire({
+      title: 'Reset Password',
+      html: `
+        <div class="text-sm text-slate-500 mb-6 text-center leading-relaxed">
+          Enter your email address and we'll send you a secure link to reset your password.
+        </div>
+      `,
+      input: 'email',
+      inputValue: formData.email || '',
+      inputPlaceholder: 'name@domain.com',
+      showCancelButton: true,
+      confirmButtonText: 'Send Reset Link',
+      confirmButtonColor: '#0f172a',
+      cancelButtonText: 'Cancel',
+      customClass: {
+        popup: 'rounded-[2.5rem] p-10 font-sans shadow-2xl border border-slate-100',
+        input: 'rounded-xl border border-slate-200 p-3 h-12 text-sm focus:ring-2 focus:ring-slate-900 focus:border-slate-900 outline-none transition-all',
+        confirmButton: 'rounded-xl px-8 py-3.5 font-bold text-sm tracking-wide transition-all shadow-sm',
+        cancelButton: 'rounded-xl px-4 py-3 font-semibold text-sm transition-all text-slate-500 bg-slate-50 hover:bg-slate-100 hover:text-slate-700 m-0 mr-3'
+      },
+      buttonsStyling: true,
+      inputValidator: (value) => {
+        if (!value || !/^\S+@\S+\.\S+$/.test(value)) {
+          return 'Please enter a valid email address';
+        }
+      }
+    });
+
+    if (email) {
+      setLoading(true);
+      const normalizedEmail = email.trim().toLowerCase();
+      try {
+        // First check if the email exists in our records to provide context-aware messaging
+        try {
+          const checkRes = await fetch('/api/auth/check-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: normalizedEmail })
+          });
+          
+          if (checkRes.ok) {
+            const checkData = await checkRes.json();
+            if (!checkData.inconclusive && !checkData.registered) {
+              await Swal.fire({
+                icon: 'info',
+                title: 'Account Not Found',
+                html: `
+                  <div class="text-sm text-slate-500 mt-4 leading-relaxed text-center">
+                    We couldn't find an account associated with <strong>${normalizedEmail}</strong>.<br><br>
+                    If you haven't created an account yet, please sign up first.
+                  </div>
+                `,
+                confirmButtonColor: '#0f172a',
+                confirmButtonText: 'Create Account',
+                showCancelButton: true,
+                cancelButtonText: 'Close',
+                customClass: {
+                  popup: 'rounded-[2.5rem] p-10 font-sans shadow-2xl border border-slate-100',
+                  confirmButton: 'rounded-xl px-8 py-3.5 font-bold text-sm tracking-wide transition-all shadow-sm',
+                  cancelButton: 'rounded-xl px-6 py-3 font-semibold text-sm transition-all text-slate-500 bg-slate-50 hover:bg-slate-100'
+                }
+              }).then((result) => {
+                if (result.isConfirmed) {
+                  setIsLogin(false);
+                  setFormData(prev => ({ ...prev, email: normalizedEmail }));
+                }
+              });
+              setLoading(false);
+              return; // Stop here if user not found
+            }
+          }
+        } catch (checkErr) {
+          console.warn("Could not pre-verify email for reset, proceeding with standard reset:", checkErr);
+        }
+
+        // Proceed with standard reset
+        await sendPasswordResetEmail(auth, normalizedEmail);
+        
+        await Swal.fire({
+          icon: 'success',
+          title: 'Reset Link Sent',
+          html: `
+            <div class="text-sm text-slate-500 mt-4 leading-relaxed text-center">
+              A secure password reset link has been dispatched to <strong>${normalizedEmail}</strong>.<br><br>
+              Please check your inbox and spam folders.
+            </div>
+          `,
+          confirmButtonColor: '#0f172a',
+          confirmButtonText: 'Back to Login',
+          customClass: {
+            popup: 'rounded-[2.5rem] p-10 font-sans shadow-2xl border border-slate-100',
+            confirmButton: 'rounded-xl px-8 py-3.5 font-bold text-sm tracking-wide transition-all shadow-sm'
+          }
+        });
+      } catch (error: any) {
+        console.error("Password reset failure:", error);
+        
+        // Handle potentially masked errors
+        let errorTitle = 'Reset Failed';
+        let errorMsg = 'We encountered an error processing your request. Please try again later.';
+        
+        if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-email') {
+           errorMsg = 'We could not process a reset for the provided email address.';
+        } else if (error.code === 'auth/too-many-requests') {
+           errorTitle = 'Too Many Requests';
+           errorMsg = 'We have received too many requests from this device. Please try again later.';
+        }
+        
+        await Swal.fire({
+          icon: 'error',
+          title: errorTitle,
+          html: `
+            <div class="text-sm text-slate-500 mt-4 leading-relaxed text-center">
+              ${errorMsg}
+            </div>
+          `,
+          confirmButtonColor: '#0f172a',
+          customClass: {
+            popup: 'rounded-[2.5rem] p-10 font-sans shadow-2xl border border-slate-100',
+            confirmButton: 'rounded-xl px-8 py-3.5 font-bold text-sm tracking-wide transition-all shadow-sm'
+          }
+        });
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -253,10 +384,13 @@ export default function Auth({ onAuthComplete }: AuthProps) {
     e.preventDefault();
     setLoading(true);
 
+    // Clear stale workspace selections on new login or registration attempt
+    sessionStorage.removeItem('vms_selected_org_id');
+
     try {
       if (isLogin) {
+        const normalizedEmail = formData.email.toLowerCase().trim();
         try {
-          const normalizedEmail = formData.email.toLowerCase();
           await signInWithEmailAndPassword(auth, normalizedEmail, formData.password);
           const user = auth.currentUser;
           if (user) {
@@ -331,18 +465,22 @@ export default function Auth({ onAuthComplete }: AuthProps) {
             }, { merge: true });
 
             if (!orgId) {
-              // NO ROLE ASSIGNED ALERT
               await Swal.fire({
-                title: 'No Access Found',
+                title: 'Invitation Not Found',
                 html: `<div class="space-y-4">
-                  <p class="text-slate-600 font-medium">Your account is not associated with any organization.</p>
-                  <p class="text-slate-400 text-xs">Please contact your administrator to receive an invitation, or proceed to set up a new organization if you are an owner.</p>
+                  <div class="h-20 w-20 bg-amber-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border border-amber-100">
+                    <svg class="h-10 w-10 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77-1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <p class="text-slate-600 font-medium">No onboarding invitation was found for your account.</p>
+                  <p class="text-slate-400 text-xs">Please contact your administrator for an invitation, or proceed to set up a new workspace.</p>
                 </div>`,
-                icon: 'info',
+                icon: 'warning',
                 confirmButtonText: 'Continue to Setup',
                 confirmButtonColor: '#0f172a',
                 customClass: {
-                  popup: 'rounded-[2rem] p-10',
+                  popup: 'rounded-[2.5rem] p-10',
                   confirmButton: 'rounded-xl px-8 py-3'
                 }
               });
@@ -368,14 +506,116 @@ export default function Auth({ onAuthComplete }: AuthProps) {
               });
             }
           }
+          // Clear storage selection and assign fresh login identifier for multisession workspace selector
+          sessionStorage.removeItem('vms_selected_org_id');
+          sessionStorage.setItem('vms_fresh_login', 'true');
+
           Toast.fire({ icon: 'success', title: 'Signed in successfully' });
           onAuthComplete();
         } catch (error: any) {
-          Toast.fire({ 
-            icon: 'error', 
-            title: 'Authentication Failed', 
-            text: 'Invalid email or password. Please try again.'
-          });
+          console.error("Login attempt failed:", error);
+          let errorTitle = 'Authentication Failed';
+          let errorMessage = 'An unexpected error occurred. Please try again.';
+          let showRegisterButton = false;
+          
+          if (error.code === 'auth/user-not-found') {
+            errorTitle = 'Account Not Found';
+            errorMessage = `No account found for "${normalizedEmail}". Please create an account to continue.`;
+            showRegisterButton = true;
+          } else if (error.code === 'auth/wrong-password') {
+            errorTitle = 'Incorrect Password';
+            errorMessage = 'The password you entered is incorrect. If you forgot your password, please use the reset option.';
+          } else if (error.code === 'auth/user-disabled') {
+            errorTitle = 'Access Revoked';
+            errorMessage = 'Your access privileges for this workspace have been revoked. Please contact your primary workspace owner for assistance.';
+          } else if (error.code === 'auth/invalid-email') {
+            errorTitle = 'Invalid Email Format';
+            errorMessage = 'The email address format you provided is invalid. Please ensure standard nomenclature (e.g., name@domain.com).';
+          } else if (error.code === 'auth/too-many-requests') {
+            errorTitle = 'Account Temporarily Locked';
+            errorMessage = 'Too many failed login attempts have been detected. This account has been temporarily disabled to protect its security. Please try again later or reset your password.';
+          } else if (error.code === 'auth/invalid-credential' || error.message?.toLowerCase().includes('credential')) {
+            try {
+              const checkRes = await fetch('/api/auth/check-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: normalizedEmail })
+              });
+              
+              if (checkRes.ok) {
+                const checkData = await checkRes.json();
+                if (checkData.inconclusive) {
+                  errorTitle = 'Authentication Failed';
+                  errorMessage = 'Invalid username or password. Please try again.';
+                } else if (checkData.disabled) {
+                  errorTitle = 'Access Revoked';
+                  errorMessage = 'Your access privileges for this workspace have been revoked. Please contact your primary workspace owner for assistance.';
+                } else if (!checkData.registered) {
+                  errorTitle = 'Account Not Found';
+                  errorMessage = `No account found for "${normalizedEmail}". Please create an account to continue.`;
+                  showRegisterButton = true;
+                } else {
+                  errorTitle = 'Incorrect Password';
+                  errorMessage = 'The password you entered is incorrect. If you forgot your password, please use the reset option.';
+                }
+              } else {
+                errorTitle = 'Authentication Failed';
+                errorMessage = 'Please verify your credentials or ensure your account is correctly set up.';
+              }
+            } catch (err) {
+              errorTitle = 'Authentication Failed';
+              errorMessage = 'Please verify your credentials or ensure your account is correctly set up.';
+            }
+          } else {
+            errorMessage = error.message || errorMessage;
+          }
+
+          if (showRegisterButton) {
+            await Swal.fire({
+              title: errorTitle,
+              html: `<div class="space-y-4">
+                <div class="h-20 w-20 bg-rose-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border border-rose-100">
+                  <svg class="h-10 w-10 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <p class="text-slate-600 font-medium text-sm text-center leading-relaxed px-2">${errorMessage}</p>
+              </div>`,
+              icon: 'error',
+              showCancelButton: true,
+              confirmButtonText: 'Create Account',
+              confirmButtonColor: '#0f172a',
+              cancelButtonText: 'Cancel',
+              customClass: {
+                popup: 'rounded-[2.5rem] p-12 shadow-2xl border border-slate-100',
+                confirmButton: 'rounded-xl px-8 py-3.5 font-bold text-sm tracking-wide transition-all hover:bg-slate-800',
+                cancelButton: 'rounded-xl px-6 py-3.5 font-semibold text-sm transition-all text-slate-400 bg-slate-50 hover:bg-slate-100'
+              }
+            }).then((res) => {
+              if (res.isConfirmed) {
+                setIsLogin(false);
+              }
+            });
+          } else {
+            await Swal.fire({
+              title: errorTitle,
+              html: `<div class="space-y-4">
+                <div class="h-20 w-20 bg-rose-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border border-rose-100 animate-pulse">
+                  <svg class="h-10 w-10 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <p class="text-slate-600 font-medium text-sm text-center leading-relaxed px-2">${errorMessage}</p>
+              </div>`,
+              icon: 'error',
+              confirmButtonText: 'Acknowledge',
+              confirmButtonColor: '#0f172a',
+              customClass: {
+                popup: 'rounded-[2.5rem] p-12 shadow-2xl border border-slate-100',
+                confirmButton: 'rounded-xl px-8 py-3.5 font-bold text-sm tracking-wide transition-all hover:opacity-95'
+              }
+            });
+          }
         }
       } else {
         const normalizedEmail = formData.email.toLowerCase().trim();
@@ -388,38 +628,44 @@ export default function Auth({ onAuthComplete }: AuthProps) {
         const inviteSnap = await getDoc(inviteRef);
         let organizationId = null;
         let role: UserRole = 'STAFF';
+        let foundInvite = false;
 
         if (inviteSnap.exists()) {
           const inviteData = inviteSnap.data();
           organizationId = inviteData.organizationId;
           role = inviteData.role || 'STAFF';
-
-          // Invitation cleanup
-          try {
-            const { deleteDoc } = await import('firebase/firestore');
-            await deleteDoc(inviteRef);
-            if (organizationId) {
-              await deleteDoc(doc(db, 'organizations', organizationId, 'invitations', normalizedEmail));
-            }
-          } catch (e) {
-            console.warn('Invitation cleanup failed:', e);
-          }
+          foundInvite = true;
         } else {
           // Signup without invitation?
           await Swal.fire({
-            title: 'No Pending Invite',
+            title: 'Invitation Not Found',
             html: `<div class="space-y-4">
-              <p class="text-slate-600 font-medium">Account created for <b>${normalizedEmail}</b>, but no organization invitation was found.</p>
-              <p class="text-slate-400 text-xs">You can proceed to set up a new organization or wait for an admin to invite you.</p>
+              <div class="h-20 w-20 bg-amber-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border border-amber-100">
+                <svg class="h-10 w-10 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h4 class="text-slate-900 font-bold text-lg leading-tight tracking-tight">Invitation Not Found</h4>
+              <p class="text-slate-500 text-sm font-medium leading-relaxed">Your account has been created for <span class="text-indigo-600 font-bold px-1">${normalizedEmail}</span>. No active organization invitation was found matching this identity.</p>
+              <div class="pt-4 border-t border-slate-100">
+                <p class="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] leading-relaxed">Proceed to initialize a new organization context, or ask your administrator to trigger a fresh invitation.</p>
+              </div>
             </div>`,
-            icon: 'info',
+            icon: 'warning',
             confirmButtonText: 'I Understand',
             confirmButtonColor: '#0f172a',
             customClass: {
-              popup: 'rounded-2xl p-10'
+              popup: 'rounded-[2.5rem] p-12 shadow-2xl border border-slate-100',
+              confirmButton: 'rounded-xl px-8 py-3.5 font-bold text-sm tracking-wide transition-all'
             }
           });
         }
+
+        const associatedOrgs = organizationId ? [{
+          orgId: organizationId,
+          role: role,
+          joinedAt: new Date().toISOString()
+        }] : [];
 
         await setDoc(doc(db, 'users', user.uid), {
           uid: user.uid,
@@ -427,6 +673,7 @@ export default function Auth({ onAuthComplete }: AuthProps) {
           email: normalizedEmail,
           role: role,
           organizationId: organizationId,
+          associatedOrgs: associatedOrgs,
           createdAt: new Date().toISOString(),
           lastLogin: new Date().toISOString()
         });
@@ -449,13 +696,59 @@ export default function Auth({ onAuthComplete }: AuthProps) {
             details: 'Account created and joined organization via invitation',
             timestamp: new Date().toISOString()
           });
+
+          if (foundInvite) {
+            try {
+              const { deleteDoc } = await import('firebase/firestore');
+              await deleteDoc(inviteRef);
+              await deleteDoc(doc(db, 'organizations', organizationId, 'invitations', normalizedEmail));
+            } catch (e) {
+              console.warn('Invitation cleanup failed:', e);
+            }
+          }
         }
+
+        // Clear storage selection and assign fresh login identifier for multisession workspace selector
+        sessionStorage.removeItem('vms_selected_org_id');
+        sessionStorage.setItem('vms_fresh_login', 'true');
+
         Toast.fire({ icon: 'success', title: 'Account created successfully!' });
         onAuthComplete();
       }
     } catch (error: any) {
-      console.error('Auth Error:', error);
-      Toast.fire({ icon: 'error', title: error.message });
+      console.error('Registration/Signup Auth Error:', error);
+      let errorTitle = 'Registration Failed';
+      let errorMessage = error.message || 'An unexpected error occurred during account creation. Please try again.';
+      
+      if (error.code === 'auth/email-already-in-use') {
+        errorTitle = 'Email Already in Use';
+        errorMessage = 'This email address is already registered. Please proceed to Sign In instead.';
+      } else if (error.code === 'auth/weak-password') {
+        errorTitle = 'Weak Password';
+        errorMessage = 'The password you entered is too weak. Please strengthen it with at least six characters.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorTitle = 'Invalid Email Format';
+        errorMessage = 'The email address you provided is invalid. Please ensure standard nomenclature (e.g., name@domain.com).';
+      }
+
+      await Swal.fire({
+        title: errorTitle,
+        html: `<div class="space-y-4">
+          <div class="h-20 w-20 bg-rose-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border border-rose-100">
+            <svg class="h-10 w-10 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <p class="text-slate-600 font-medium text-sm text-center leading-relaxed px-2">${errorMessage}</p>
+        </div>`,
+        icon: 'error',
+        confirmButtonText: 'Acknowledge',
+        confirmButtonColor: '#0f172a',
+        customClass: {
+          popup: 'rounded-[2.5rem] p-12 shadow-2xl border border-slate-100',
+          confirmButton: 'rounded-xl px-8 py-3.5 font-bold text-sm tracking-wide'
+        }
+      });
     } finally {
       setLoading(false);
     }
@@ -486,7 +779,7 @@ export default function Auth({ onAuthComplete }: AuthProps) {
   return (
     <div className="min-h-screen bg-[#f8f9fc] flex selection:bg-blue-100 overflow-hidden font-sans">
       {/* Branding Section (Left) */}
-      <div className="hidden lg:flex lg:w-[45%] bg-[#081b3d] relative overflow-hidden flex-col justify-between p-16 xl:p-24">
+      <div className="hidden lg:flex lg:w-[45%] bg-[#2563eb] relative overflow-hidden flex-col justify-between p-16 xl:p-24">
         {/* Decorative elements */}
         <div className="absolute inset-0 z-0">
           <div className="absolute top-[-10%] right-[-10%] w-[80%] h-[80%] bg-blue-600/10 rounded-full blur-[120px]" />

@@ -15,24 +15,67 @@ interface ReviewsTabProps {
 export default function ReviewsTab({ organizationId, userRole, visitors }: ReviewsTabProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [ratingFilter, setRatingFilter] = useState<number | 'all'>('all');
+  const [dbReviews, setDbReviews] = useState<Review[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(true);
+
+  useEffect(() => {
+    if (!organizationId) {
+      setDbReviews([]);
+      setLoadingReviews(false);
+      return;
+    }
+    const reviewsRef = collection(db, 'organizations', organizationId, 'reviews');
+    const qReviews = query(reviewsRef, orderBy('timestamp', 'desc'));
+    const unsubscribe = onSnapshot(qReviews, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as Review)).filter(r => !r.deleted);
+      setDbReviews(list);
+      setLoadingReviews(false);
+    }, (err) => {
+      console.error("Error loading reviews from db in ReviewsTab:", err);
+      setLoadingReviews(false);
+    });
+    return () => unsubscribe();
+  }, [organizationId]);
 
   const reviews = React.useMemo(() => {
-    return visitors
+    // 1. Core reviews from visitor visits
+    const visitorReviews = visitors
       .filter(v => v.review && !v.review.deleted)
       .map(v => ({
-        id: v.visitorId,
+        id: v.visitorId, // Fallback id
         rating: v.review!.rating,
         comment: v.review!.comment,
         visitorId: v.visitorId,
         organizationId: v.organizationId,
         timestamp: v.review!.timestamp,
         deleted: v.review!.deleted
-      } as Review))
+      } as Review));
+
+    // 2. Map and de-deduplicate with our standalone reviews collection
+    const combinedMap = new Map<string, Review>();
+
+    // Put visitor reviews first
+    visitorReviews.forEach(r => {
+      const key = `${r.visitorId}_${r.timestamp}`;
+      combinedMap.set(key, r);
+    });
+
+    // Populate with standalone dbReviews so they are guaranteed visible
+    dbReviews.forEach(r => {
+      const key = `${r.visitorId}_${r.timestamp}`;
+      combinedMap.set(key, r);
+    });
+
+    return Array.from(combinedMap.values())
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }, [visitors]);
+  }, [visitors, dbReviews]);
 
   const handleDeleteReview = async (reviewId: string) => {
-    if (userRole !== 'ADMIN') return;
+    const isAuthorize = userRole === 'ADMIN' || userRole === 'MASTER_ADMIN';
+    if (!isAuthorize) return;
 
     const result = await Swal.fire({
       title: 'Delete Review?',
@@ -47,10 +90,26 @@ export default function ReviewsTab({ organizationId, userRole, visitors }: Revie
 
     if (result.isConfirmed) {
       try {
-        await updateDoc(doc(db, 'organizations', organizationId, 'visits', reviewId), {
-          'review.deleted': true,
-          'review.deletedAt': new Date().toISOString()
-        });
+        // Attempt to mark as deleted in the corresponding visits collection
+        try {
+          await updateDoc(doc(db, 'organizations', organizationId, 'visits', reviewId), {
+            'review.deleted': true,
+            'review.deletedAt': new Date().toISOString()
+          });
+        } catch (e) {
+          console.log('No corresponding visit document with this ID to delete review from', e);
+        }
+
+        // Attempt to mark as deleted in the standalone reviews collection
+        try {
+          await updateDoc(doc(db, 'organizations', organizationId, 'reviews', reviewId), {
+            deleted: true,
+            deletedAt: new Date().toISOString()
+          });
+        } catch (e) {
+          console.log('No standalone review document with this ID to delete', e);
+        }
+
         Swal.fire('Deleted!', 'Review has been removed from view.', 'success');
       } catch (error) {
         console.error('Error deleting review:', error);
@@ -200,7 +259,7 @@ export default function ReviewsTab({ organizationId, userRole, visitors }: Revie
                         <Star key={s} className={`h-4 w-4 ${s <= review.rating ? 'fill-amber-400 text-amber-400' : 'text-gray-100'}`} />
                       ))}
                     </div>
-                    {userRole === 'ADMIN' && (
+                    {(userRole === 'ADMIN' || userRole === 'MASTER_ADMIN') && (
                       <button
                         onClick={() => handleDeleteReview(review.id)}
                         className="p-2 text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"

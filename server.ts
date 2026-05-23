@@ -234,6 +234,7 @@ if (!process.env.VERCEL && process.env.VITE_APP_BUILD_ENV !== 'serverless') {
 }
 
 const app = express();
+app.use(express.json());
 const PORT = Number(process.env.PORT) || 3000;
 
 // API Routes
@@ -258,6 +259,91 @@ const asyncHandler = (fn: express.RequestHandler) => (req: express.Request, res:
     res.status(500).json({ error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message || 'Internal Server Error' });
   });
 };
+
+app.post('/api/auth/check-email', asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  if (!email || typeof email !== 'string') {
+    return res.status(400).json({ error: 'Email is required' });
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+  console.log(`[Auth Check] Verifying registration status for: ${normalizedEmail}`);
+
+  let existsInAuth = false;
+  let isDisabled = false;
+  let authCheckError = false;
+
+  try {
+    // 1. Check in Firebase Authentication via Admin SDK
+    try {
+      const userRecord = await admin.auth().getUserByEmail(normalizedEmail);
+      existsInAuth = true;
+      isDisabled = userRecord.disabled;
+    } catch (authErr: any) {
+      if (authErr.code === 'auth/user-not-found') {
+        console.log(`[Auth Check] Email not registered in Firebase Auth: ${normalizedEmail}`);
+      } else {
+        authCheckError = true;
+        
+        // Log configuration or credential issue quietly, but do NOT throw to clients
+        const errMsg = authErr.message || String(authErr);
+        if (errMsg.includes('Identity Toolkit API has not been used') || errMsg.includes('SERVICE_DISABLED')) {
+           console.warn(`[Auth Check] Firebase Admin auth bypassed: Identity Toolkit API is disabled in GCP.`);
+        } else {
+           console.warn(`[Auth Check] Firebase Admin auth bypassed: ${errMsg}`);
+        }
+      }
+    }
+
+    // 2. Check in Firestore root 'users' collection to verify database profile
+    let existsInDb = false;
+    let isDbUserRevoked = false;
+    let dbCheckError = false;
+
+    if (adminDb) {
+      try {
+        const usersSnap = await adminDb.collection('users').where('email', '==', normalizedEmail).limit(1).get();
+        if (usersSnap && !usersSnap.empty) {
+          existsInDb = true;
+          const uDoc = usersSnap.docs[0].data();
+          if (uDoc.revokedFrom || uDoc.status === 'revoked' || uDoc.disabled === true) {
+            isDbUserRevoked = true;
+          }
+        }
+      } catch (dbErr: any) {
+        dbCheckError = true;
+        const errMsg = dbErr.message || String(dbErr);
+        if (errMsg.includes('Missing or insufficient permissions') || dbErr.code === 7) {
+          console.warn(`[Auth Check] adminDb query bypassed: Missing or insufficient permissions (Expected for unauthenticated serverless environment)`);
+        } else {
+          console.warn(`[Auth Check] adminDb query bypassed: ${errMsg}`);
+        }
+      }
+    } else {
+      dbCheckError = true;
+    }
+
+    // If both checks failed with server configuration errors (like permissions/service disabled)
+    // and neither check found the email, the result is inconclusive.
+    const isRegistered = existsInAuth || existsInDb;
+    const finalDisabled = isDisabled || isDbUserRevoked;
+    const inconclusive = !isRegistered && (authCheckError && dbCheckError);
+
+    res.json({
+      registered: isRegistered,
+      disabled: finalDisabled,
+      inconclusive: inconclusive
+    });
+  } catch (error: any) {
+    console.warn('[Auth Check] Gracefully handled error in check-email API:', error.message || error);
+    // On unexpected/fatal server error, return a successful 200 block with fallback values to ensure client doesn't break
+    res.json({
+      registered: false,
+      disabled: false,
+      inconclusive: true
+    });
+  }
+}));
 
 interface Profile {
   name: string;
@@ -318,11 +404,33 @@ app.put('/api/visitors/:id/checkout', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'organizationId is required for checkout' });
   }
 
-  const visitRef = adminDb.collection('organizations').doc(organizationId).collection('visits').doc(id);
-  const visitSnap = await safely(visitRef.get(), getFallback);
+  let visitRef = adminDb.collection('organizations').doc(organizationId).collection('visits').doc(id);
+  let visitSnap = await safely(visitRef.get(), getFallback);
 
   if (!visitSnap.exists) {
-    return res.status(404).json({ error: 'Visit record not found' });
+    const visitsColl = adminDb.collection('organizations').doc(organizationId).collection('visits');
+    // Try visitId field
+    let q = await safely(visitsColl.where('visitId', '==', id).limit(1).get(), getFallback);
+    if (q && !q.empty) {
+      visitSnap = q.docs[0];
+      visitRef = visitSnap.ref;
+    } else {
+      // Try preRegistrationId field
+      q = await safely(visitsColl.where('preRegistrationId', '==', id).limit(1).get(), getFallback);
+      if (q && !q.empty) {
+        visitSnap = q.docs[0];
+        visitRef = visitSnap.ref;
+      } else {
+        // Try visitorId field
+        q = await safely(visitsColl.where('visitorId', '==', id).limit(1).get(), getFallback);
+        if (q && !q.empty) {
+          visitSnap = q.docs[0];
+          visitRef = visitSnap.ref;
+        } else {
+          return res.status(404).json({ error: 'Visit record not found' });
+        }
+      }
+    }
   }
 
   const now = new Date().toISOString();
@@ -352,11 +460,33 @@ app.post('/api/visitors/:id/review', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'organizationId is required for review submission' });
   }
 
-  const visitRef = adminDb.collection('organizations').doc(organizationId).collection('visits').doc(id);
-  const visitSnap = await safely(visitRef.get(), getFallback);
+  let visitRef = adminDb.collection('organizations').doc(organizationId).collection('visits').doc(id);
+  let visitSnap = await safely(visitRef.get(), getFallback);
 
   if (!visitSnap.exists) {
-    return res.status(404).json({ error: 'Visit record not found' });
+    const visitsColl = adminDb.collection('organizations').doc(organizationId).collection('visits');
+    // Try visitId field
+    let q = await safely(visitsColl.where('visitId', '==', id).limit(1).get(), getFallback);
+    if (q && !q.empty) {
+      visitSnap = q.docs[0];
+      visitRef = visitSnap.ref;
+    } else {
+      // Try preRegistrationId field
+      q = await safely(visitsColl.where('preRegistrationId', '==', id).limit(1).get(), getFallback);
+      if (q && !q.empty) {
+        visitSnap = q.docs[0];
+        visitRef = visitSnap.ref;
+      } else {
+        // Try visitorId field
+        q = await safely(visitsColl.where('visitorId', '==', id).limit(1).get(), getFallback);
+        if (q && !q.empty) {
+          visitSnap = q.docs[0];
+          visitRef = visitSnap.ref;
+        } else {
+          return res.status(404).json({ error: 'Visit record not found' });
+        }
+      }
+    }
   }
 
   const reviewRecord = {
@@ -375,7 +505,7 @@ app.post('/api/visitors/:id/review', asyncHandler(async (req, res) => {
   await safely(adminDb.collection('organizations').doc(organizationId).collection('reviews').doc(reviewId).set({
     id: reviewId,
     visitorId: id,
-    visitorName: visitSnap.data()?.visitorName || 'Visitor',
+    visitorName: visitSnap.data()?.visitorName || visitSnap.data()?.name || 'Visitor',
     rating,
     comment,
     organizationId,

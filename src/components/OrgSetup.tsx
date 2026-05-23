@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { db, auth } from '../firebase';
 import { signOut } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp, query, collection, where, getDocs, arrayUnion } from 'firebase/firestore';
 import Swal from 'sweetalert2';
 import { UserRole } from '../types';
 
@@ -44,7 +44,7 @@ export default function OrgSetup({ onComplete }: OrgSetupProps) {
   const [adminName, setAdminName] = useState(auth.currentUser?.displayName || '');
   const [workEmail, setWorkEmail] = useState(auth.currentUser?.email || '');
   const [loading, setLoading] = useState(false);
-  const brandColor = '#081b3d';
+  const brandColor = '#2563eb';
 
   React.useEffect(() => {
     if (auth.currentUser) {
@@ -67,14 +67,56 @@ export default function OrgSetup({ onComplete }: OrgSetupProps) {
       const nameDoc = await getDoc(nameDocRef);
 
       if (nameDoc.exists()) {
-        Swal.fire({
-          icon: 'warning',
+        await Swal.fire({
           title: 'Identity Conflict',
-          text: `The organization name "${orgName}" is already registered. Please choose a different name.`,
-          confirmButtonColor: '#00225d'
+          html: `<div class="space-y-4">
+            <div class="h-20 w-20 bg-rose-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border border-rose-100 animate-pulse">
+              <svg class="h-10 w-10 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <p class="text-slate-600 font-medium text-sm text-center leading-relaxed px-2">The organization name <span class="text-indigo-600 font-bold px-1">"${orgName}"</span> is already registered. Please select a distinct name.</p>
+          </div>`,
+          icon: 'warning',
+          confirmButtonText: 'Acknowledge',
+          confirmButtonColor: '#0f172a',
+          customClass: {
+            popup: 'rounded-[2.5rem] p-12 shadow-2xl border border-slate-100',
+            confirmButton: 'rounded-xl px-8 py-3.5 font-bold text-sm tracking-wide transition-all'
+          }
         });
         setLoading(false);
         return;
+      }
+
+      // 1b. Check organization slug uniqueness (if provided)
+      const normalizedSlug = slug.trim().toLowerCase();
+      if (normalizedSlug) {
+        const slugQuery = query(collection(db, 'organizations'), where('slug', '==', normalizedSlug));
+        const slugQuerySnap = await getDocs(slugQuery);
+        
+        if (!slugQuerySnap.empty) {
+          await Swal.fire({
+            title: 'URL Slug Reserved',
+            html: `<div class="space-y-4">
+              <div class="h-20 w-20 bg-rose-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border border-rose-100">
+                <svg class="h-10 w-10 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+              </div>
+              <p class="text-slate-600 font-medium text-sm text-center leading-relaxed px-2">The URL Slug <span class="text-indigo-600 font-bold px-1">"${slug}"</span> is already claimed by another organization. Please enter a different slug or leave it blank to auto-generate.</p>
+            </div>`,
+            icon: 'warning',
+            confirmButtonText: 'Acknowledge',
+            confirmButtonColor: '#0f172a',
+            customClass: {
+              popup: 'rounded-[2.5rem] p-12 shadow-2xl border border-slate-100',
+              confirmButton: 'rounded-xl px-8 py-3.5 font-bold text-sm tracking-wide transition-all'
+            }
+          });
+          setLoading(false);
+          return;
+        }
       }
 
       // 2. Create organization
@@ -113,7 +155,12 @@ export default function OrgSetup({ onComplete }: OrgSetupProps) {
         name: userData.name,
         email: userData.email,
         organizationId: orgId,
-        role: 'MASTER_ADMIN'
+        role: 'MASTER_ADMIN',
+        associatedOrgs: arrayUnion({
+          orgId: orgId,
+          role: 'MASTER_ADMIN',
+          joinedAt: new Date().toISOString()
+        })
       }, { merge: true });
 
       await setDoc(userOrgRef, {
@@ -138,7 +185,7 @@ export default function OrgSetup({ onComplete }: OrgSetupProps) {
   return (
     <div className="min-h-screen bg-[#f8f9fc] flex selection:bg-blue-100 overflow-hidden font-sans">
       {/* Branding Section (Left) */}
-      <div className="hidden lg:flex lg:w-[45%] bg-[#081b3d] relative overflow-hidden flex-col justify-between p-16 xl:p-24">
+      <div className="hidden lg:flex lg:w-[45%] bg-[#2563eb] relative overflow-hidden flex-col justify-between p-16 xl:p-24">
         {/* Decorative elements */}
         <div className="absolute inset-0 z-0">
           <div className="absolute top-[-10%] right-[-10%] w-[80%] h-[80%] bg-blue-600/10 rounded-full blur-[120px]" />

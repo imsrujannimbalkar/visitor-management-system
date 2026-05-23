@@ -99,6 +99,8 @@ import ClockComponent from './components/Clock';
 import ProfileTab from './components/ProfileTab';
 import Auth from './components/Auth';
 import OrgSetup from './components/OrgSetup';
+import WorkspaceSelector from './components/WorkspaceSelector';
+import { Briefcase } from 'lucide-react';
 import NotificationsCenter from './components/NotificationsCenter';
 import PreRegistrationForm from './components/PreRegistrationForm';
 import PreRegistrationTab from './components/PreRegistrationTab';
@@ -120,6 +122,7 @@ import {
   doc, 
   getDoc, 
   collection, 
+  collectionGroup,
   query, 
   where, 
   onSnapshot, 
@@ -552,6 +555,8 @@ const isConfigValid = isConfigured;
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [availableOrgs, setAvailableOrgs] = useState<any[]>([]);
+  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [pageLoading, setPageLoading] = useState(true); // New state to handle initial load flicker
   const [organization, setOrganization] = useState<Organization | null>(null);
@@ -754,10 +759,7 @@ export default function App() {
     return organization.navigationVisibility[displayName] !== false;
   };
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    const savedTheme = localStorage.getItem('vms_theme');
-    return (savedTheme as 'light' | 'dark') || 'light';
-  });
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   const createNotification = useCallback(async (n: Omit<Notification, 'id' | 'organizationId' | 'read' | 'timestamp'>, docId?: string) => {
     const orgId = user?.organizationId;
@@ -1437,13 +1439,14 @@ export default function App() {
             if (response.ok) {
               Swal.fire({
                 title: 'Check-out Successful',
-                text: 'Your exit has been recorded automatically.',
+                text: 'Your exit has been recorded automatically. Please rate your experience.',
                 icon: 'success',
-                timer: 3000,
+                timer: 4000,
                 showConfirmButton: false,
                 background: theme === 'dark' ? '#1e293b' : '#ffffff',
                 color: theme === 'dark' ? '#ffffff' : '#000000',
               });
+              addToast('Check-out successful! Please rate your experience.', 'success');
             } else {
               const errorData = await response.json();
               throw new Error(errorData.error || 'Checkout failed');
@@ -1588,6 +1591,8 @@ export default function App() {
   useEffect(() => {
     let unsubscribeUser: (() => void) | null = null;
     let unsubscribeOrg: (() => void) | null = null;
+    let unsubscribeNestedUser: (() => void) | null = null;
+    let currentListeningOrgId: string | null = null;
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       console.log('Auth State Changed:', firebaseUser?.uid, firebaseUser?.email);
@@ -1599,17 +1604,207 @@ export default function App() {
           console.log('User registry snapshot received:', registrySnap.exists());
           if (registrySnap.exists()) {
             const registryData = registrySnap.data() as User;
-            const orgId = registryData.organizationId;
             
-            if (orgId) {
-              if (unsubscribeOrg) unsubscribeOrg();
+            // Step 0: Handle fresh login behavior - clear last selected workspace to force selector for multi-org users
+            if (sessionStorage.getItem('vms_fresh_login') === 'true') {
+              console.log('Detected fresh login. Auto-resetting workspace selection for multi-org awareness.');
+              sessionStorage.removeItem('vms_selected_org_id');
+              sessionStorage.removeItem('vms_fresh_login');
+              setSelectedOrgId(null);
+            }
+
+            // Step 1: Query all candidate organization IDs this user belongs to
+            const candidateOrgIds = new Set<string>();
+            if (registryData.organizationId) {
+              candidateOrgIds.add(registryData.organizationId);
+            }
+            if (Array.isArray((registryData as any).associatedOrgs)) {
+              (registryData as any).associatedOrgs.forEach((o: any) => {
+                if (typeof o === 'string' && o) {
+                  candidateOrgIds.add(o);
+                } else if (o && typeof o === 'object' && o.orgId) {
+                  candidateOrgIds.add(o.orgId);
+                }
+              });
+            }
+
+            const normalizedEmail = firebaseUser.email?.toLowerCase().trim() || registryData.email?.toLowerCase().trim() || '';
+
+            // Step 1b: Fetch any global and collectionGroup invitations matching the user's email
+            if (normalizedEmail) {
+              try {
+                // Read global invitation
+                const globalInviteSnap = await getDoc(doc(db, 'invitations', normalizedEmail));
+                if (globalInviteSnap.exists()) {
+                  const globalInviteData = globalInviteSnap.data();
+                  if (globalInviteData.organizationId) {
+                    candidateOrgIds.add(globalInviteData.organizationId);
+                  }
+                }
+              } catch (inviteErr) {
+                console.warn('Failed to fetch user global invitation:', inviteErr);
+              }
+
+              try {
+                // CollectionGroup query to find invitations nested inside organizations
+                const invitationsQuery = query(collectionGroup(db, 'invitations'), where('email', '==', normalizedEmail));
+                const invitationsSnap = await getDocs(invitationsQuery);
+                invitationsSnap.docs.forEach(docSnap => {
+                  const parentId = docSnap.ref.parent.parent?.id;
+                  const data = docSnap.data();
+                  const orgId = data.organizationId || parentId;
+                  if (orgId && orgId !== 'invitations') {
+                    candidateOrgIds.add(orgId);
+                  }
+                });
+              } catch (cgInvErr) {
+                console.warn('CollectionGroup invitations query restricted or failed:', cgInvErr);
+              }
+            }
+
+            try {
+              // CollectionGroup query to find other organizations where this user is registered
+              const userInOrgsQuery = query(collectionGroup(db, 'users'), where('uid', '==', firebaseUser.uid));
+              const userInOrgsSnap = await getDocs(userInOrgsQuery);
+              userInOrgsSnap.docs.forEach(docSnap => {
+                const data = docSnap.data();
+                const parentId = docSnap.ref.parent.parent?.id;
+                const orgId = data.organizationId || parentId;
+                if (orgId && orgId !== 'users') {
+                  candidateOrgIds.add(orgId);
+                }
+              });
+            } catch (cgError) {
+              console.warn('CollectionGroup users query restricted or failed:', cgError);
+            }
+
+            // Step 2: Fetch and verify details for each organization to ensure accessibility & membership
+            const orgsList: any[] = [];
+            for (const orgId of Array.from(candidateOrgIds)) {
+              try {
+                const orgSnap = await getDoc(doc(db, 'organizations', orgId));
+                if (orgSnap.exists()) {
+                  const orgData = orgSnap.data();
+                  let userRoleInOrg = 'STAFF';
+                  if (orgId === registryData.organizationId) {
+                    userRoleInOrg = registryData.role || 'STAFF';
+                  } else {
+                    const nestedUserSnap = await getDoc(doc(db, 'organizations', orgId, 'users', firebaseUser.uid));
+                    if (nestedUserSnap.exists()) {
+                      userRoleInOrg = nestedUserSnap.data().role || 'STAFF';
+                    } else if (orgData.createdBy === firebaseUser.uid) {
+                      userRoleInOrg = 'MASTER_ADMIN';
+                    } else {
+                      // Check for a pending invitation's role
+                      const orgInviteRef = doc(db, 'organizations', orgId, 'invitations', normalizedEmail);
+                      const orgInviteSnap = await getDoc(orgInviteRef);
+                      if (orgInviteSnap.exists()) {
+                        userRoleInOrg = orgInviteSnap.data().role || 'STAFF';
+                      } else {
+                        const globalInviteSnap = await getDoc(doc(db, 'invitations', normalizedEmail));
+                        if (globalInviteSnap.exists() && globalInviteSnap.data().organizationId === orgId) {
+                          userRoleInOrg = globalInviteSnap.data().role || 'STAFF';
+                        } else {
+                          continue; // User has no association with this organization
+                        }
+                      }
+                    }
+                  }
+                  orgsList.push({
+                    id: orgId,
+                    name: orgData.name || 'Unnamed Organization',
+                    logoUrl: orgData.logoUrl || '',
+                    role: userRoleInOrg
+                  });
+                }
+              } catch (err) {
+                console.warn(`Could not access/verify organization ${orgId}:`, err);
+              }
+            }
+
+            setAvailableOrgs(orgsList);
+
+            // Step 3: Resolution of active organization
+            let activeOrgId: string | null = null;
+            let activeRole: UserRole = 'STAFF';
+
+            if (orgsList.length === 1) {
+              // Auto-select single organization
+              activeOrgId = orgsList[0].id;
+              activeRole = orgsList[0].role;
+              if (selectedOrgId !== activeOrgId) {
+                setSelectedOrgId(activeOrgId);
+              }
+            } else if (orgsList.length > 1) {
+              // Multiple organizations - always show workspace selector unless they explicitly picked one in this React session state
+              if (selectedOrgId && orgsList.some(o => o.id === selectedOrgId)) {
+                const matchedOrg = orgsList.find(o => o.id === selectedOrgId);
+                activeOrgId = matchedOrg!.id;
+                activeRole = matchedOrg!.role;
+              } else {
+                // Enforce workspace selector on load, refresh, or missing selection
+                setSelectedOrgId(null);
+                setUser(registryData);
+                setOrganization(null);
+                setAuthLoading(false);
+                setPageLoading(false);
+                setIsAuthReady(true);
+                return;
+              }
+            }
+
+            if (activeOrgId) {
+              // Sync / update associatedOrgs array in users/{uid} safely
+              const currentAssociated = (registryData as any).associatedOrgs || [];
+              let newAssociatedList = [...currentAssociated.filter((o: any) => o !== null)];
+
+              // Ensure old organizationId is preserved in associatedOrgs
+              if (registryData.organizationId) {
+                const hasOldInAssociated = newAssociatedList.some((o: any) => 
+                  typeof o === 'string' ? o === registryData.organizationId : (o && o.orgId === registryData.organizationId)
+                );
+                if (!hasOldInAssociated) {
+                  newAssociatedList.push({
+                    orgId: registryData.organizationId,
+                    role: registryData.role || 'STAFF',
+                    joinedAt: new Date().toISOString()
+                  });
+                }
+              }
+
+              // Ensure activeOrgId is preserved
+              const hasActiveInAssociated = newAssociatedList.some((o: any) => 
+                typeof o === 'string' ? o === activeOrgId : (o && o.orgId === activeOrgId)
+              );
+              if (!hasActiveInAssociated) {
+                newAssociatedList.push({
+                  orgId: activeOrgId,
+                  role: activeRole,
+                  joinedAt: new Date().toISOString()
+                });
+              }
               
-              // Only update lastLogin if it's been a while (throttle to avoid repeated writes on refreshes)
+              const syncFields: any = {};
+              
+              if (newAssociatedList.length !== currentAssociated.length) {
+                syncFields.associatedOrgs = newAssociatedList;
+              }
+              
+              if (registryData.organizationId !== activeOrgId || registryData.role !== activeRole) {
+                syncFields.organizationId = activeOrgId;
+                syncFields.role = activeRole;
+              }
+              
+              if (Object.keys(syncFields).length > 0) {
+                setDoc(doc(db, 'users', firebaseUser.uid), syncFields, { merge: true })
+                  .catch(err => console.warn("Quietly skipped initial workspace context sync:", err));
+              }
+
               const lastLoginTime = registryData.lastLogin ? new Date(registryData.lastLogin).getTime() : 0;
               const now = Date.now();
               if (now - lastLoginTime > 1000 * 60 * 5) { // 5 minutes throttle
                  setDoc(doc(db, 'users', firebaseUser.uid), { lastLogin: new Date().toISOString() }, { merge: true });
-                 setDoc(doc(db, 'organizations', orgId, 'users', firebaseUser.uid), { lastLogin: new Date().toISOString() }, { merge: true });
+                 setDoc(doc(db, 'organizations', activeOrgId, 'users', firebaseUser.uid), { lastLogin: new Date().toISOString() }, { merge: true });
               }
 
               let orgReady = false;
@@ -1626,42 +1821,285 @@ export default function App() {
                 }
               };
 
-              unsubscribeOrg = onSnapshot(doc(db, 'organizations', orgId), (orgSnap) => {
-                if (orgSnap.exists()) {
-                  const orgData = orgSnap.data() as Organization;
-                  setOrganization({ id: orgSnap.id, ...orgData });
-                  document.title = `${orgData.name} - VMS`;
+              // Handler to automatically clear session/states, notify user, and redirect
+              const handleRevokedAccess = async (type: 'revoked' | 'deleted' | 'unauthorized' = 'revoked') => {
+                console.log(`Access event (${type}) detected for organization:`, activeOrgId);
+                
+                // 1. Clear session storage
+                sessionStorage.removeItem('vms_selected_org_id');
+                const remainingOrgs = orgsList.filter(o => o.id !== activeOrgId);
+                
+                // 2. Clear from Firestore root associatedOrgs
+                try {
+                  const cleanedAssociated = ((registryData as any).associatedOrgs || []).filter((o: any) => {
+                    const id = typeof o === 'string' ? o : o?.orgId;
+                    return id !== activeOrgId;
+                  });
+                  const nextOrgId = remainingOrgs.length > 0 ? remainingOrgs[0].id : null;
+                  const nextRole = remainingOrgs.length > 0 ? remainingOrgs[0].role : null;
+                  await setDoc(doc(db, 'users', firebaseUser.uid), {
+                    associatedOrgs: cleanedAssociated,
+                    organizationId: nextOrgId,
+                    role: nextRole
+                  }, { merge: true });
+                } catch (err) {
+                  console.warn("Failed to update user doc after revocation:", err);
                 }
-                checkReady(true);
-              }, (error) => {
-                handleFirestoreError(error, OperationType.GET, `organizations/${orgId}`);
-                checkReady(true);
-              });
 
-              // Subscribe to the ORG-NESTED user profile (The "Truth")
-              const nestedUserRef = doc(db, 'organizations', orgId, 'users', firebaseUser.uid);
-              onSnapshot(nestedUserRef, (nestedSnap) => {
-                const defaultPrefs = { notifs: true, public: false, density: true };
-                if (nestedSnap.exists()) {
-                  const data = nestedSnap.data() as User;
-                  setUser({ 
-                    uid: nestedSnap.id,
-                    ...data, 
-                    preferences: { ...defaultPrefs, ...data.preferences } 
-                  });
-                } else {
-                  setUser({ 
-                    uid: firebaseUser.uid,
-                    ...registryData, 
-                    preferences: { ...defaultPrefs, ...registryData.preferences } 
-                  });
+                // 3. Unsubscribe listeners
+                if (unsubscribeOrg) { unsubscribeOrg(); unsubscribeOrg = null; }
+                if (unsubscribeNestedUser) { unsubscribeNestedUser(); unsubscribeNestedUser = null; }
+                if (unsubscribeUser) { unsubscribeUser(); unsubscribeUser = null; }
+                currentListeningOrgId = null;
+                
+                // 4. Update React States
+                setOrganization(null);
+                setAvailableOrgs(remainingOrgs);
+                
+                // If user has other active organizations, routing back to Workspace Selector quietly (no scary alert banner!)
+                const totalCandidateOrgs = Math.max(orgsList.length, availableOrgs.length, candidateOrgIds.size);
+                const hasSubstantialOrgs = totalCandidateOrgs > 1 || remainingOrgs.length > 0;
+                if (hasSubstantialOrgs) {
+                  console.log("Multi-org user, bypassing organization alert in favor of quiet selection screen.");
+                  setSelectedOrgId(null);
+                  setUser((prev) => prev ? { ...prev, organizationId: null } : null);
+                  setPageLoading(false);
+                  setAuthLoading(false);
+                  setIsAuthReady(true);
+                  return;
                 }
-                checkReady(false);
-              }, (error) => {
-                handleFirestoreError(error, OperationType.GET, `organizations/${orgId}/users/${firebaseUser.uid}`);
-                checkReady(false);
-              });
-              
+
+                // If user still has valid membership but got transient permission/selection conflict error
+                const isCurrentOrgValid = orgsList.some(o => o.id === activeOrgId);
+                if (isCurrentOrgValid && type === 'unauthorized') {
+                  console.warn("Transient session mismatch / conflict warning in active user workspace, returning to selector.");
+                  setSelectedOrgId(null);
+                  setUser((prev) => prev ? { ...prev, organizationId: null } : null);
+                  setPageLoading(false);
+                  setAuthLoading(false);
+                  setIsAuthReady(true);
+                  return;
+                }
+
+                let swalHtml = '';
+                let swalTitle = 'Workspace Alert';
+                let swalIcon: 'warning' | 'error' = 'error';
+
+                if (type === 'revoked') {
+                  swalTitle = 'Access Deactivated';
+                  swalIcon = 'error';
+                  swalHtml = `
+                    <div class="space-y-4">
+                      <div class="h-20 w-20 bg-rose-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border border-rose-100">
+                        <svg class="h-10 w-10 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                      </div>
+                      <h4 class="text-slate-900 font-bold text-lg leading-tight tracking-tight">Organization Access Restricted</h4>
+                      <p class="text-slate-500 text-sm font-medium leading-relaxed">Your professional credentials or access privileges for this workspace have been deactivated or revoked by an administrator.</p>
+                      <div class="pt-4 border-t border-slate-100">
+                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] leading-relaxed">Please connect with your system owner or organization administrator to restore access.</p>
+                      </div>
+                    </div>
+                  `;
+                } else if (type === 'deleted') {
+                  swalTitle = 'Workspace De-provisioned';
+                  swalIcon = 'warning';
+                  swalHtml = `
+                    <div class="space-y-4">
+                      <div class="h-20 w-20 bg-amber-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border border-amber-100">
+                        <svg class="h-10 w-10 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </div>
+                      <h4 class="text-slate-900 font-bold text-lg leading-tight tracking-tight">Workspace Offline</h4>
+                      <p class="text-slate-500 text-sm font-medium leading-relaxed">The organization environment or template workspace has been de-provisioned, archived, or deleted by the primary administrative owner.</p>
+                      <div class="pt-4 border-t border-slate-100">
+                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] leading-relaxed">All active sessions connected to this workspace have been terminated.</p>
+                      </div>
+                    </div>
+                  `;
+                } else {
+                  swalTitle = 'Unauthorized Session';
+                  swalIcon = 'error';
+                  swalHtml = `
+                    <div class="space-y-4">
+                      <div class="h-20 w-20 bg-rose-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 border border-rose-100">
+                        <svg class="h-10 w-10 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                      </div>
+                      <h4 class="text-slate-900 font-bold text-lg leading-tight tracking-tight">Access Prohibited</h4>
+                      <p class="text-slate-500 text-sm font-medium leading-relaxed">You do not have the required security credentials to view or read records inside this organization partition.</p>
+                      <div class="pt-4 border-t border-slate-100">
+                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] leading-relaxed">Security rules prohibit this action. Contact systems administration to check credentials.</p>
+                      </div>
+                    </div>
+                  `;
+                }
+
+                await Swal.fire({
+                  title: swalTitle,
+                  html: swalHtml,
+                  icon: swalIcon,
+                  confirmButtonText: remainingOrgs.length > 0 ? 'Select Active Workspace' : 'Return to Login',
+                  confirmButtonColor: '#0f172a',
+                  customClass: {
+                    popup: 'rounded-[2.5rem] p-12 shadow-2xl border border-slate-100',
+                    confirmButton: 'rounded-xl px-8 py-3.5 font-bold text-sm tracking-wide transition-all'
+                  }
+                });
+
+                if (remainingOrgs.length > 0) {
+                  // Return to select from remaining organizations
+                  setSelectedOrgId(null);
+                  setUser((prev) => prev ? { ...prev, organizationId: null } : null);
+                } else {
+                  // Sign out completely to the login screen
+                  setSelectedOrgId(null);
+                  setUser(null);
+                  await signOut(auth);
+                }
+                
+                // 5. Finalize state
+                setPageLoading(false);
+                setAuthLoading(false);
+                setIsAuthReady(true);
+              };
+
+              if (currentListeningOrgId !== activeOrgId) {
+                if (unsubscribeOrg) { unsubscribeOrg(); unsubscribeOrg = null; }
+                if (unsubscribeNestedUser) { unsubscribeNestedUser(); unsubscribeNestedUser = null; }
+                currentListeningOrgId = activeOrgId;
+
+                unsubscribeOrg = onSnapshot(doc(db, 'organizations', activeOrgId), (orgSnap) => {
+                  if (orgSnap.exists()) {
+                    const orgData = orgSnap.data() as Organization;
+                    setOrganization({ id: orgSnap.id, ...orgData });
+                    document.title = `${orgData.name} - VMS`;
+                  } else {
+                    handleRevokedAccess('deleted');
+                    return;
+                  }
+                  checkReady(true);
+                }, (error) => {
+                  const isPermissionError = error?.code === 'permission-denied' || 
+                                            error?.message?.toLowerCase().includes('permission') || 
+                                            error?.message?.toLowerCase().includes('insufficient');
+                  if (isPermissionError) {
+                    handleRevokedAccess('unauthorized');
+                    return;
+                  }
+                  handleFirestoreError(error, OperationType.GET, `organizations/${activeOrgId}`);
+                  checkReady(true);
+                });
+
+                // Subscribe to the ORG-NESTED user profile (The "Truth")
+                const nestedUserRef = doc(db, 'organizations', activeOrgId, 'users', firebaseUser.uid);
+                unsubscribeNestedUser = onSnapshot(nestedUserRef, async (nestedSnap) => {
+                  const defaultPrefs = { notifs: true, public: false, density: true };
+                  if (nestedSnap.exists()) {
+                    const data = nestedSnap.data() as User;
+                    
+                    // Check if this user has been marked as deleted within this organization's subcollection
+                    if (data.deleted) {
+                      handleRevokedAccess('revoked');
+                      return;
+                    }
+
+                    setUser({ 
+                      uid: nestedSnap.id,
+                      ...data, 
+                      organizationId: activeOrgId,
+                      role: activeRole,
+                      preferences: { ...defaultPrefs, ...data.preferences } 
+                    });
+                  } else {
+                    // Provision the nested user document if accepting an active invitation
+                    try {
+                      const normalizedEmail = firebaseUser.email?.toLowerCase().trim() || registryData.email?.toLowerCase().trim() || '';
+                      if (normalizedEmail) {
+                        // Check if there is a pending invitation
+                        const orgInviteRef = doc(db, 'organizations', activeOrgId, 'invitations', normalizedEmail);
+                        const globalInviteRef = doc(db, 'invitations', normalizedEmail);
+                        const [orgInviteSnap, globalInviteSnap] = await Promise.all([
+                          getDoc(orgInviteRef),
+                          getDoc(globalInviteRef)
+                        ]);
+
+                        let assignedRole: UserRole = activeRole || 'STAFF';
+                        let hasInvite = false;
+
+                        if (orgInviteSnap.exists()) {
+                          assignedRole = orgInviteSnap.data().role || assignedRole;
+                          hasInvite = true;
+                        } else if (globalInviteSnap.exists() && globalInviteSnap.data().organizationId === activeOrgId) {
+                          assignedRole = globalInviteSnap.data().role || assignedRole;
+                          hasInvite = true;
+                        }
+
+                        // Create the nested user record
+                        await setDoc(nestedUserRef, {
+                          uid: firebaseUser.uid,
+                          name: firebaseUser.displayName || registryData.name || 'Staff Member',
+                          email: normalizedEmail,
+                          role: assignedRole,
+                          organizationId: activeOrgId,
+                          createdAt: new Date().toISOString(),
+                          lastLogin: new Date().toISOString()
+                        });
+
+                        // Log audit event
+                        await addDoc(collection(db, 'organizations', activeOrgId, 'activityLogs'), {
+                          userId: firebaseUser.uid,
+                          organizationId: activeOrgId,
+                          action: 'JOIN_ORGANIZATION',
+                          details: `Accepted invitation and joined organization with role ${assignedRole}`,
+                          timestamp: new Date().toISOString()
+                        });
+
+                        if (hasInvite) {
+                          try {
+                            const { deleteDoc } = await import('firebase/firestore');
+                            await Promise.all([
+                              deleteDoc(orgInviteRef),
+                              deleteDoc(globalInviteRef)
+                            ]);
+                          } catch (cleanErr) {
+                            console.warn('Asynchronous invitation cleanup omitted or failed:', cleanErr);
+                          }
+                        }
+                      }
+                    } catch (provErr) {
+                      console.error('Failed to provision nested user document:', provErr);
+                    }
+
+                    setUser({ 
+                      uid: firebaseUser.uid,
+                      ...registryData, 
+                      organizationId: activeOrgId,
+                      role: activeRole,
+                      preferences: { ...defaultPrefs, ...registryData.preferences } 
+                    });
+                  }
+                  checkReady(false);
+                }, (error) => {
+                  const isPermissionError = error?.code === 'permission-denied' || 
+                                            error?.message?.toLowerCase().includes('permission') || 
+                                            error?.message?.toLowerCase().includes('insufficient');
+                  if (isPermissionError) {
+                    handleRevokedAccess('revoked');
+                    return;
+                  }
+                  handleFirestoreError(error, OperationType.GET, `organizations/${activeOrgId}/users/${firebaseUser.uid}`);
+                  checkReady(false);
+                });
+              } else {
+                // Already listening correctly, bypass redundant subscription and resolve state loaders safely
+                setPageLoading(false);
+                setAuthLoading(false);
+                setIsAuthReady(true);
+              }
             } else {
               setUser(registryData);
               setOrganization(null);
@@ -1670,7 +2108,18 @@ export default function App() {
               setIsAuthReady(true);
             }
           } else {
-            setUser(null);
+            // Firebase user is authenticated, but no registry document exists yet in 'users' collection.
+            // Do NOT set user to null, as this causes random redirects and auth screen conflicts!
+            // Instead, set a temporary user state with their email/uid, allowing them to remain logged in.
+            setUser({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || '',
+              name: firebaseUser.displayName || 'Authenticating User',
+              role: 'STAFF', // placeholder
+              organizationId: null,
+              createdAt: new Date().toISOString(),
+              lastLogin: new Date().toISOString()
+            });
             setAuthLoading(false);
             setPageLoading(false);
             setIsAuthReady(true);
@@ -1684,6 +2133,7 @@ export default function App() {
       } else {
         if (unsubscribeUser) { unsubscribeUser(); unsubscribeUser = null; }
         if (unsubscribeOrg) { unsubscribeOrg(); unsubscribeOrg = null; }
+        if (unsubscribeNestedUser) { unsubscribeNestedUser(); unsubscribeNestedUser = null; }
         setUser(null);
         setOrganization(null);
         setVisitors([]);
@@ -1691,6 +2141,11 @@ export default function App() {
         setPageLoading(false);
         setIsAuthReady(true);
         document.title = 'Visitor Management System';
+        
+        // Local persistence cleanup on session end
+        sessionStorage.removeItem('vms_selected_org_id');
+        setSelectedOrgId(null);
+        setAvailableOrgs([]);
       }
     });
 
@@ -1698,8 +2153,9 @@ export default function App() {
       unsubscribeAuth();
       if (unsubscribeUser) unsubscribeUser();
       if (unsubscribeOrg) unsubscribeOrg();
+      if (unsubscribeNestedUser) unsubscribeNestedUser();
     };
-  }, [addToast]);
+  }, [selectedOrgId, addToast]);
 
   // Real-time Organization Listener
   useEffect(() => {
@@ -1719,7 +2175,7 @@ export default function App() {
             }
             
             // Auto-initialize missing settings
-            if (user?.role === 'ADMIN' && (!orgData.visitPurposes || !orgData.visitorCategories || !orgData.donationOccasions || !orgData.eventOccasions)) {
+            if ((user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN') && (!orgData.visitPurposes || !orgData.visitorCategories || !orgData.donationOccasions || !orgData.eventOccasions)) {
               try {
                 const orgRef = doc(db, 'organizations', orgId);
                 await updateDoc(orgRef, {
@@ -1951,7 +2407,7 @@ export default function App() {
   // Hierarchical Data Migration (Runs Once for each Org)
   useEffect(() => {
     const runMigration = async () => {
-      if (!user?.organizationId || !organization || organization.migratedToHierarchy || user.role !== 'ADMIN') return;
+      if (!user?.organizationId || !organization || organization.migratedToHierarchy || (user.role !== 'ADMIN' && user.role !== 'MASTER_ADMIN')) return;
       
       const orgId = user.organizationId;
       console.log(`Starting Data Migration for Org: ${orgId}`);
@@ -2023,11 +2479,24 @@ export default function App() {
 
   // Check for Access Revocation Notification
   useEffect(() => {
-    if (!isAuthReady || !user) return;
+    if (!isAuthReady || !user || pageLoading || authLoading) return;
     
     const checkRevocationAndInvites = async () => {
       // 1. Check for Revocation
       if (user.revokedFrom && !user.organizationId) {
+        // If they still have other active available organizations, bypass lockout and quietly clear flags
+        const hasOtherOrgs = ((user as any).associatedOrgs && (user as any).associatedOrgs.length > 0) || (availableOrgs && availableOrgs.length > 0);
+        if (hasOtherOrgs) {
+          console.log("User was deactivated in one workspace but has other active workspaces. Quietly clearing revocation flags.");
+          try {
+            await updateDoc(doc(db, 'users', user.uid), {
+              revokedFrom: deleteField(),
+              revokedAt: deleteField()
+            });
+          } catch (e) { console.error("Quietly clearing revocation failed:", e); }
+          return;
+        }
+
         console.log('Revocation detected for user:', user.uid);
         const hasShown = sessionStorage.getItem(`revoked_shown_${user.uid}`);
         if (!hasShown) {
@@ -2071,8 +2540,8 @@ export default function App() {
         }
       }
 
-      // 2. Background Invite Check for users with no org
-      if (!user.organizationId && user.email) {
+      // 2. Background Invite Check for all users
+      if (user && user.email) {
         console.log('Performing background invite check for:', user.email);
         const normalizedEmail = user.email.toLowerCase().trim();
         const inviteRef = doc(db, 'invitations', normalizedEmail);
@@ -2083,34 +2552,126 @@ export default function App() {
           const orgId = inviteData.organizationId;
           const role = inviteData.role || 'STAFF';
 
-          await Swal.fire({
-            title: 'New Invitation Found',
-            text: `You have been added to a new organization. Refreshing your workspace...`,
-            icon: 'success',
-            timer: 2000,
-            showConfirmButton: false,
-            customClass: { popup: 'rounded-3xl' }
-          });
+          if (orgId) {
+            const currentAssociated = (user as any).associatedOrgs || [];
+            const isOrgIdMatch = user.organizationId === orgId;
+            const isAlreadyLinked = currentAssociated.some((o: any) => 
+              typeof o === 'string' ? o === orgId : o?.orgId === orgId
+            );
 
-          // Sync locally and globally
-          await updateDoc(doc(db, 'users', user.uid), {
-            organizationId: orgId,
-            role: role
-          });
-
-          // Cleanup
-          try {
-            await deleteDoc(inviteRef);
-            if (orgId) {
-              await deleteDoc(doc(db, 'organizations', orgId, 'invitations', normalizedEmail));
+            if (isOrgIdMatch || isAlreadyLinked) {
+              console.log('User is already member of invited org. Cleaning up obsolete invitation.');
+              try {
+                await deleteDoc(inviteRef);
+                await deleteDoc(doc(db, 'organizations', orgId, 'invitations', normalizedEmail));
+              } catch (e) { console.warn('Obsolete invite cleanup failed', e); }
+              return;
             }
-          } catch (e) { console.warn('Invite cleanup failed', e); }
+
+            if (!user.organizationId) {
+              // User has no workspace yet - auto accept!
+              await Swal.fire({
+                title: 'New Invitation Found',
+                text: `You have been added to a new organization. Refreshing your workspace...`,
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false,
+                customClass: { popup: 'rounded-3xl' }
+              });
+
+              // Sync locally and globally
+              await updateDoc(doc(db, 'users', user.uid), {
+                organizationId: orgId,
+                role: role
+              });
+
+              // Cleanup
+              try {
+                await deleteDoc(inviteRef);
+                await deleteDoc(doc(db, 'organizations', orgId, 'invitations', normalizedEmail));
+              } catch (e) { console.warn('Invite cleanup failed', e); }
+            } else {
+              // User has a primary workspace - prompt to add as an additional workspace!
+              const orgSnap = await getDoc(doc(db, 'organizations', orgId));
+              const orgName = orgSnap.exists() ? (orgSnap.data()?.name || 'New Organization') : 'New Organization';
+
+              const { isConfirmed } = await Swal.fire({
+                title: 'Workspace Invitation',
+                text: `You have been invited to join "${orgName}". This will be added directly to your workspace options. Join workspace?`,
+                icon: 'info',
+                showCancelButton: true,
+                confirmButtonColor: '#2563EB',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Accept & Add Workspace',
+                cancelButtonText: 'Ignore',
+                customClass: { popup: 'rounded-3xl' }
+              });
+
+              if (isConfirmed) {
+                const updatedAssociated = [...currentAssociated];
+                
+                // Add new org
+                updatedAssociated.push({
+                  orgId: orgId,
+                  role: role,
+                  joinedAt: new Date().toISOString()
+                });
+
+                // Ensure current primary org is also preserved in associated list
+                const hasPrimary = updatedAssociated.some((o: any) => 
+                  typeof o === 'string' ? o === user.organizationId : o?.orgId === user.organizationId
+                );
+                if (!hasPrimary && user.organizationId) {
+                  updatedAssociated.push({
+                    orgId: user.organizationId,
+                    role: user.role || 'STAFF',
+                    joinedAt: new Date().toISOString()
+                  });
+                }
+
+                // 1. Update user profile with new workspace associations
+                await updateDoc(doc(db, 'users', user.uid), {
+                  associatedOrgs: updatedAssociated
+                });
+
+                // 2. Create membership inside organization users subcollection
+                await setDoc(doc(db, 'organizations', orgId, 'users', user.uid), {
+                  uid: user.uid,
+                  email: user.email,
+                  name: user.name || 'Workspace User',
+                  role: role,
+                  organizationId: orgId,
+                  lastLogin: new Date().toISOString()
+                });
+
+                // 3. Cleanup invitations
+                try {
+                  await deleteDoc(inviteRef);
+                  await deleteDoc(doc(db, 'organizations', orgId, 'invitations', normalizedEmail));
+                } catch (e) { console.warn('Invite cleanup failed', e); }
+
+                // 4. Alert success & redirect to selector
+                await Swal.fire({
+                  title: 'Workspace Linked!',
+                  text: `Successfully added and linked "${orgName}". Opening workspace selector...`,
+                  icon: 'success',
+                  timer: 2000,
+                  showConfirmButton: false,
+                  customClass: { popup: 'rounded-3xl' }
+                });
+
+                sessionStorage.removeItem('vms_selected_org_id');
+                setSelectedOrgId(null);
+                setOrganization(null);
+              }
+            }
+          }
         }
       }
     };
     
     checkRevocationAndInvites();
-  }, [user?.uid, user?.revokedFrom, user?.organizationId, isAuthReady, user?.email]);
+  }, [user?.uid, user?.revokedFrom, user?.organizationId, isAuthReady, user?.email, availableOrgs]);
 
   // Screen Saver Logic
   useEffect(() => {
@@ -2171,6 +2732,38 @@ export default function App() {
     syncLocalEntries();
   }, []);
 
+  const handleSwitchWorkspace = async () => {
+    if (availableOrgs.length <= 1) {
+      addToast('No other workspace associations found for your profile', 'info');
+      return;
+    }
+    const { isConfirmed } = await Swal.fire({
+      title: 'Switch Workspace',
+      text: 'Are you sure you want to transition out of your active workspace and choose another?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#2563EB',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Yes, Switch',
+      cancelButtonText: 'Stay Here',
+      customClass: {
+        container: 'z-[10000]',
+        popup: 'rounded-[1.5rem] border-none shadow-2xl p-4',
+        title: 'text-xl font-bold text-slate-900',
+        htmlContainer: 'text-slate-500 font-medium',
+        confirmButton: 'px-8 py-3 rounded-xl font-bold uppercase tracking-widest text-sm',
+        cancelButton: 'px-8 py-3 rounded-xl font-bold uppercase tracking-widest text-sm'
+      }
+    });
+
+    if (isConfirmed) {
+      sessionStorage.removeItem('vms_selected_org_id');
+      setSelectedOrgId(null);
+      setOrganization(null);
+      addToast('Opening Workspace Selector...', 'info');
+    }
+  };
+
   const handleLogout = async () => {
     const { isConfirmed } = await Swal.fire({
       title: 'Sign Out',
@@ -2194,6 +2787,9 @@ export default function App() {
     if (isConfirmed) {
       try {
         await logActivity('LOGOUT', `User ${user?.name} signed out`);
+        sessionStorage.removeItem('vms_selected_org_id');
+        sessionStorage.removeItem('vms_fresh_login');
+        setSelectedOrgId(null);
         await signOut(auth);
         setUser(null);
         setOrganization(null);
@@ -2398,7 +2994,13 @@ export default function App() {
   };
 
   const handleInviteUser = async () => {
-    const orgId = user?.organizationId;
+    const orgId = user?.organizationId || organization?.id;
+    const isMultiOrg = availableOrgs.length > 1;
+    
+    const orgOptionsHtml = availableOrgs.map(org => 
+      `<option value="${org.id}" ${org.id === orgId ? 'selected' : ''}>${org.name}</option>`
+    ).join('');
+
     const { value: formValues } = await Swal.fire({
       title: 'Grant System Access',
       html: `
@@ -2417,6 +3019,14 @@ export default function App() {
               <option value="ADMIN">Admin (Full Control)</option>
             </select>
           </div>
+          ${isMultiOrg ? `
+          <div>
+            <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Target Organization</label>
+            <select id="invite-org" class="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-brand-blue outline-none transition-all font-bold text-slate-900">
+              ${orgOptionsHtml}
+            </select>
+          </div>
+          ` : ''}
         </div>
       `,
       focusConfirm: false,
@@ -2426,6 +3036,9 @@ export default function App() {
       preConfirm: () => {
         const email = (document.getElementById('invite-email') as HTMLInputElement).value;
         const role = (document.getElementById('invite-role') as HTMLSelectElement).value;
+        const selectedOrg = isMultiOrg 
+          ? (document.getElementById('invite-org') as HTMLSelectElement).value 
+          : orgId;
         if (!email) {
           Swal.showValidationMessage('Email is required');
           return false;
@@ -2434,7 +3047,11 @@ export default function App() {
           Swal.showValidationMessage('Invalid email format');
           return false;
         }
-        return { email: email.toLowerCase().trim(), role };
+        if (!selectedOrg) {
+          Swal.showValidationMessage('Target organization is required');
+          return false;
+        }
+        return { email: email.toLowerCase().trim(), role, selectedOrg };
       },
       customClass: {
         container: 'z-[10000]',
@@ -2445,13 +3062,14 @@ export default function App() {
       }
     });
 
-    if (formValues && orgId) {
+    if (formValues) {
       setIsSaving(true);
       try {
+        const targetOrgId = formValues.selectedOrg;
         const invitationData = {
           email: formValues.email,
           role: formValues.role,
-          organizationId: orgId,
+          organizationId: targetOrgId,
           invitedBy: user?.uid,
           createdAt: new Date().toISOString()
         };
@@ -2460,9 +3078,9 @@ export default function App() {
         await setDoc(doc(db, 'invitations', formValues.email), invitationData);
         
         // 2. Org-nested Invitations (for UI listing)
-        await setDoc(doc(db, 'organizations', orgId, 'invitations', formValues.email), invitationData);
+        await setDoc(doc(db, 'organizations', targetOrgId, 'invitations', formValues.email), invitationData);
 
-        await logActivity('AUTHORIZE_USER', `Granted access to ${formValues.email} as ${formValues.role}`);
+        await logActivity('AUTHORIZE_USER', `Granted access to ${formValues.email} as ${formValues.role} for organization ${targetOrgId}`);
         addToast(`Access granted for ${formValues.email}`, 'success');
       } catch (error: any) {
         addToast(error.message, 'error');
@@ -2494,7 +3112,7 @@ export default function App() {
 
   const deleteVisitor = async (visitorId: string) => {
     const orgId = user?.organizationId;
-    if (user?.role !== 'ADMIN') {
+    if (user?.role !== 'ADMIN' && user?.role !== 'MASTER_ADMIN') {
       addToast('Only admins can delete records', 'error');
       return;
     }
@@ -2568,7 +3186,7 @@ export default function App() {
   const handleBulkDelete = async (visitorIds: string[]) => {
     const orgId = user?.organizationId;
     if (!orgId) return;
-    if (user?.role !== 'ADMIN') {
+    if (user?.role !== 'ADMIN' && user?.role !== 'MASTER_ADMIN') {
       addToast('Only admins can delete records', 'error');
       return;
     }
@@ -3139,7 +3757,7 @@ export default function App() {
 
 
   const handleEdit = (visitor: Visitor) => {
-    if (user?.role !== 'ADMIN') {
+    if (user?.role !== 'ADMIN' && user?.role !== 'MASTER_ADMIN') {
       addToast('Only Admins can edit records.', 'error');
       return;
     }
@@ -3152,7 +3770,7 @@ export default function App() {
     const orgId = user?.organizationId;
     if (!orgId || !organization) return;
     
-    if (user?.role !== 'ADMIN') {
+    if (user?.role !== 'ADMIN' && user?.role !== 'MASTER_ADMIN') {
       addToast('Only admins can deactivate the organization', 'error');
       return;
     }
@@ -3270,18 +3888,23 @@ export default function App() {
         await fetch(`/api/visitors/${visitorId}/checkout`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ checkOutTime, visitor })
+          body: JSON.stringify({ checkOutTime, visitor, organizationId: orgId })
         });
       } catch (apiErr) {
         console.error('Failed to sync checkout to backend:', apiErr);
       }
       
-      // Show success animation
-      Toast.fire({ icon: 'success', title: 'Checked Out!' });
+      // Show success animation and pop-up toast notification
+      Toast.fire({ icon: 'success', title: 'Checked Out! Please leave a review.' });
+      addToast('Please tell us how your visit was in the review panel.', 'success');
       
-      // Then show review modal
+      // Then show review modal in the center
       if (visitor) {
-        setReviewVisitor(visitor);
+        setReviewVisitor({
+          ...visitor,
+          visitorId: visitorId,
+          visitId: visitorId
+        });
       }
     } catch (error) {
       console.error('Failed to check out visitor:', error);
@@ -3298,34 +3921,15 @@ export default function App() {
     setIsSavingReview(true);
     
     try {
-      // 1. Create a review in the hierarchical reviews collection (Optional, may fail due to rules)
-      const reviewId = `REV-${Date.now()}`;
-      try {
-        await setDoc(doc(db, 'organizations', orgId, 'reviews', reviewId), sanitizeForFirestore({
-          id: reviewId,
-          rating,
-          comment,
-          visitorId: reviewVisitor.visitorId,
-          visitorPhone: reviewVisitor.phone,
-          organizationId: orgId,
-          timestamp: new Date().toISOString()
-        }));
-      } catch (revErr) {
-        console.warn('Standalone review record not created (possibly blocked by rules):', revErr);
-      }
+      // 1. Resolve correct document ID
+      // We prioritize visitId (Doc ID from Visits collection)
+      const vid = reviewVisitor.visitId || reviewVisitor.visitorId || (reviewVisitor as any).id;
+      if (!vid) throw new Error('Could not identify visit record');
 
-      // 2. Update visit record (Master Source of Truth for Reviews)
-      await updateDoc(doc(db, 'organizations', orgId, 'visits', reviewVisitor.visitorId), {
-        review: {
-          rating,
-          comment,
-          timestamp: new Date().toISOString()
-        }
-      });
-
-      // 3. Sync review to backend via API
+      // 2. Try Backend API first (Admin power skips Firestore rules issues)
+      let apiSuccess = false;
       try {
-        await fetch(`/api/visitors/${reviewVisitor.visitorId}/review`, {
+        const response = await fetch(`/api/visitors/${vid}/review`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
@@ -3334,25 +3938,71 @@ export default function App() {
             comment 
           })
         });
+        if (response.ok) {
+          apiSuccess = true;
+        } else {
+          const errData = await response.json();
+          console.warn('Backend review API returned error:', errData);
+        }
       } catch (apiErr) {
-        console.error('Failed to sync review to backend:', apiErr);
+        console.error('Failed to sync review via API:', apiErr);
+      }
+
+      // 3. Update Firestore (Redundant but keeps UI reactive if rules allow)
+      // We wrap this in its own try-catch so permission errors here don't block the whole flow if API worked
+      try {
+        const reviewId = `REV-${Date.now()}`;
+        // Create standalone review
+        await setDoc(doc(db, 'organizations', orgId, 'reviews', reviewId), sanitizeForFirestore({
+          id: reviewId,
+          rating,
+          comment,
+          visitorId: vid,
+          visitorPhone: reviewVisitor.phone || reviewVisitor.visitorPhone,
+          organizationId: orgId,
+          timestamp: new Date().toISOString()
+        }));
+
+        // Update visit record
+        await updateDoc(doc(db, 'organizations', orgId, 'visits', vid), {
+          review: {
+            rating,
+            comment,
+            timestamp: new Date().toISOString()
+          }
+        });
+      } catch (dbErr: any) {
+        console.warn('Firestore direct update failed (expected if permissions limited):', dbErr.message);
+        // If API also failed and Firestore failed, then we show error
+        if (!apiSuccess) {
+          throw dbErr;
+        }
       }
 
       await logActivity('SUBMIT_REVIEW', `Submitted review for visitor: ${reviewVisitor.name}`);
       
-      // Create Notification
-      await createNotification({
-        title: 'New Review Submitted',
-        message: `${reviewVisitor.name} left a ${rating}-star review.`,
-        type: 'REVIEW',
-        relatedId: reviewId
-      });
+      // Create Notification (Kiosk/Staff only)
+      try {
+        await createNotification({
+          title: 'New Review Submitted',
+          message: `${reviewVisitor.name} left a ${rating}-star review.`,
+          type: 'REVIEW',
+          relatedId: vid
+        });
+      } catch (nErr) {
+        console.warn('Notification creation failed:', nErr);
+      }
 
       addToast('Thank you for your review!', 'success');
       setReviewVisitor(null);
     } catch (error: any) {
       console.error('Error saving review:', error);
-      addToast(error.message || 'Failed to save review', 'error');
+      // More descriptive error for "Missing or insufficient permissions"
+      if (error.message?.includes('permissions')) {
+        addToast('Permission denied by security policy. Please contact admin.', 'error');
+      } else {
+        addToast(error.message || 'Failed to save review', 'error');
+      }
     } finally {
       setIsSavingReview(false);
     }
@@ -3739,6 +4389,27 @@ export default function App() {
     return <Auth onAuthComplete={() => {}} />;
   }
 
+  if (user && availableOrgs.length > 1 && !selectedOrgId) {
+    return (
+      <WorkspaceSelector 
+        orgs={availableOrgs} 
+        onSelect={(orgId) => {
+          sessionStorage.setItem('vms_selected_org_id', orgId);
+          setSelectedOrgId(orgId);
+        }}
+        onLogout={async () => {
+          sessionStorage.removeItem('vms_selected_org_id');
+          sessionStorage.removeItem('vms_fresh_login');
+          setSelectedOrgId(null);
+          setAvailableOrgs([]);
+          await signOut(auth);
+          setUser(null);
+          setOrganization(null);
+        }}
+      />
+    );
+  }
+
   if (user?.organizationId && !organization) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-8 text-center">
@@ -3777,7 +4448,7 @@ export default function App() {
 
   if (!user?.organizationId && !isSuperAdminValue) {
     return <OrgSetup onComplete={(orgId) => {
-        setPageLoading(true);
+        setPageLoading(false);
         setActiveOrgId(orgId);
     }} />;
   }
@@ -3869,8 +4540,12 @@ export default function App() {
         visitorPhone: req.phone,
         visitorName: req.name,
         visitorEmail: req.email || '',
+        visitorDOB: req.dob || '',
+        visitorAddress: req.address || '',
         purpose: req.purpose,
         category: req.category || 'Guest',
+        notes: req.notes || '',
+        occasion: req.occasion || '',
         date,
         checkInTime,
         status: 'INSIDE',
@@ -3884,6 +4559,18 @@ export default function App() {
 
       const visitRef = doc(db, 'organizations', organization.id, 'visits', visitId);
       await setDoc(visitRef, sanitizeForFirestore(visitData));
+
+      // Create or update profile record in Firestore
+      const profileRef = doc(db, 'organizations', organization.id, 'profiles', req.phone);
+      await setDoc(profileRef, sanitizeForFirestore({
+        phone: req.phone,
+        name: req.name,
+        email: req.email || '',
+        dob: req.dob || '',
+        address: req.address || '',
+        organizationId: organization.id,
+        updatedAt: new Date().toISOString()
+      }), { merge: true });
 
       // Mark pre-registration as CHECKED_IN
       await updateDoc(doc(db, 'organizations', organization.id, 'preRegistrations', req.id), {
@@ -3950,7 +4637,14 @@ export default function App() {
             </div>
           </div>
           <button 
-            onClick={() => signOut(auth)}
+            onClick={async () => {
+              sessionStorage.removeItem('vms_selected_org_id');
+              sessionStorage.removeItem('vms_fresh_login');
+              setSelectedOrgId(null);
+              await signOut(auth);
+              setUser(null);
+              setOrganization(null);
+            }}
             className="w-full py-5 bg-gray-900 text-white font-black rounded-2xl shadow-xl shadow-gray-200 transition-all active:scale-95 flex items-center justify-center gap-3 uppercase text-xs tracking-widest"
           >
             <LogOut className="h-5 w-5" />
@@ -4354,6 +5048,16 @@ export default function App() {
                 <h1 className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-ngo-primary leading-none mb-1.5 flex items-center gap-2">
                   {organization?.name || 'Visitor Management System'}
                   <span className="h-1.5 w-1.5 bg-ngo-accent rounded-full animate-pulse" />
+                  {availableOrgs.length > 1 && (
+                    <button 
+                      onClick={handleSwitchWorkspace}
+                      className="ml-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-150 text-indigo-700 hover:text-indigo-800 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all shadow-sm active:scale-95 cursor-pointer"
+                      title="Switch to another associated organization"
+                    >
+                      <Briefcase className="h-3 w-3" />
+                      Switch
+                    </button>
+                  )}
                 </h1>
                 <div className="flex flex-col gap-0.5">
                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">
@@ -5045,7 +5749,7 @@ export default function App() {
                   <h2 className="text-4xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">Master Archive</h2>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">Historical Node Persistence Logs</p>
                 </div>
-                {user.role === 'ADMIN' && (
+                {(user.role === 'ADMIN' || user.role === 'MASTER_ADMIN') && (
                   <div className="flex gap-4">
                     <button
                       onClick={exportToCSV}
@@ -5138,6 +5842,8 @@ export default function App() {
                 organization={organization} 
                 onUpdateUser={(updated) => setUser(prev => prev ? { ...prev, ...updated } as any : null)}
                 onLogout={handleLogout}
+                hasMultiOrg={availableOrgs.length > 1}
+                onSwitchWorkspace={handleSwitchWorkspace}
                 googleStatus={googleConfig}
                 availableSheets={availableSheets}
                 availableCalendars={availableCalendars}
@@ -5714,32 +6420,34 @@ export default function App() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              className="space-y-8"
+              className="space-y-6 sm:space-y-8 pb-20 sm:pb-0"
             >
               {!organization ? (
-                <div className="bg-white rounded-[2.5rem] p-20 flex flex-col items-center justify-center border border-slate-100 shadow-sm">
+                <div className="bg-white rounded-3xl sm:rounded-[2.5rem] p-8 sm:p-20 flex flex-col items-center justify-center border border-slate-100 shadow-sm">
                   <Loader2 className="h-10 w-10 animate-spin text-brand-blue mb-4" />
                   <p className="text-slate-500 font-bold tracking-tight uppercase text-[10px]">Resolving Authorization Matrix...</p>
                 </div>
               ) : (
                 <>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                    <div className="flex items-center gap-6">
+                  <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 sm:gap-8">
+                    <div className="flex items-start sm:items-center gap-4 sm:gap-6 flex-1 min-w-0">
                       <motion.button 
                         whileHover={{ x: -4 }}
                         onClick={() => setActiveTab('settings')}
-                        className="p-3 bg-white border border-slate-200 rounded-2xl hover:bg-brand-blue hover:text-white transition-all shadow-sm group"
+                        className="p-3 bg-white border border-slate-200 rounded-2xl hover:bg-brand-blue hover:text-white transition-all shadow-sm group shrink-0 mt-1 sm:mt-0"
                       >
                         <ChevronLeft className="h-5 w-5" />
                       </motion.button>
-                      <HeaderTitle 
-                        title="Access Control" 
-                        subtitle="Manage authorized staff, roles and system permissions" 
-                      />
+                      <div className="min-w-0 flex-1">
+                        <HeaderTitle 
+                          title="Access Control" 
+                          subtitle="Manage authorized staff, roles and system permissions" 
+                        />
+                      </div>
                     </div>
                     <button
                       onClick={handleInviteUser}
-                      className="px-8 py-4 bg-brand-blue text-white font-bold rounded-2xl shadow-xl shadow-blue-500/10 hover:bg-blue-700 transition-all flex items-center gap-3 active:scale-95 self-start sm:self-center"
+                      className="w-full xl:w-auto px-6 sm:px-8 py-3.5 sm:py-4 bg-brand-blue text-white font-bold rounded-2xl shadow-xl shadow-blue-500/10 hover:bg-blue-700 transition-all flex items-center justify-center gap-3 active:scale-95 text-xs sm:text-sm shrink-0"
                     >
                       <UserPlus className="h-5 w-5" />
                       Add Member Access
@@ -5748,15 +6456,15 @@ export default function App() {
 
                   <div className="grid grid-cols-1 gap-8">
                     {/* Active Members */}
-                    <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
-                      <div className="px-8 py-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white">
+                    <div className="bg-white rounded-3xl sm:rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+                      <div className="px-6 sm:px-8 py-5 sm:py-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white">
                         <div className="flex items-center gap-4">
                           <h3 className="text-sm font-bold text-slate-900">Active Workspace Members</h3>
                           <span className="px-3 py-1 bg-blue-50 text-brand-blue rounded-lg text-[10px] font-bold tracking-widest uppercase">
                             {orgUsers.filter(u => u.name?.toLowerCase().includes(userSearchQuery.toLowerCase()) || u.email?.toLowerCase().includes(userSearchQuery.toLowerCase())).length} Members
                           </span>
                         </div>
-                        <div className="relative w-full md:w-64">
+                        <div className="relative w-full sm:w-64 animate-in slide-in-from-top-1">
                           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                           <input 
                             type="text" 
@@ -5767,14 +6475,14 @@ export default function App() {
                           />
                         </div>
                       </div>
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto hidden md:block">
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="bg-slate-50/50">
-                          <th className="px-8 py-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">User Identity</th>
-                          <th className="px-8 py-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Authorization Level</th>
-                          <th className="px-8 py-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Joined Date</th>
-                          <th className="px-8 py-5 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">Actions</th>
+                          <th className="px-4 sm:px-8 py-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">User Identity</th>
+                          <th className="px-4 sm:px-8 py-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Authorization Level</th>
+                          <th className="px-4 sm:px-8 py-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Joined Date</th>
+                          <th className="px-4 sm:px-8 py-5 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -5782,26 +6490,26 @@ export default function App() {
                           .filter(u => u.name?.toLowerCase().includes(userSearchQuery.toLowerCase()) || u.email?.toLowerCase().includes(userSearchQuery.toLowerCase()))
                           .sort((a,b) => (['ADMIN', 'MASTER_ADMIN'].includes(b.role) ? 1 : -1)).map((m) => (
                           <tr key={m.uid} className="group border-b border-slate-50 last:border-0 hover:bg-blue-50/30 transition-all duration-300">
-                            <td className="px-8 py-6">
+                            <td className="px-4 sm:px-8 py-6">
                               <div className="flex items-center gap-4">
                                 <div className="h-10 w-10 bg-slate-100 rounded-xl flex items-center justify-center font-bold text-brand-blue border border-slate-200 transition-all duration-300">
                                   {m.name?.charAt(0) || '?'}
                                 </div>
-                                <div className="flex flex-col">
+                                <div className="flex flex-col min-w-0">
                                   <div className="flex items-center gap-2">
-                                    <p className="font-bold tracking-tight text-slate-900">{m.name}</p>
+                                    <p className="font-bold tracking-tight text-slate-900 truncate">{m.name}</p>
                                     {m.uid === organization?.createdBy && (
-                                      <span className="px-2 py-0.5 bg-amber-50 text-amber-600 rounded-md text-[8px] font-black uppercase tracking-tighter border border-amber-100 flex items-center gap-1 shadow-sm">
+                                      <span className="px-2 py-0.5 bg-amber-50 text-amber-600 rounded-md text-[8px] font-black uppercase tracking-tighter border border-amber-100 flex items-center gap-1 shadow-sm shrink-0">
                                         <Shield className="h-2 w-2 fill-current" />
-                                        Master Admin
+                                        Admin
                                       </span>
                                     )}
                                   </div>
-                                  <p className="text-[10px] font-bold font-mono text-slate-400 uppercase tracking-widest">{m.email}</p>
+                                  <p className="text-[10px] font-bold font-mono text-slate-400 uppercase tracking-widest truncate">{m.email}</p>
                                 </div>
                               </div>
                             </td>
-                            <td className="px-8 py-6 text-center">
+                            <td className="px-4 sm:px-8 py-6 text-center">
                               <span className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-colors ${
                                 (m.uid === organization?.createdBy || ['ADMIN', 'MASTER_ADMIN'].includes(m.role))
                                   ? 'bg-blue-50 text-brand-blue border border-blue-100' 
@@ -5810,10 +6518,10 @@ export default function App() {
                                 {m.uid === organization?.createdBy ? 'MASTER_ADMIN' : m.role}
                               </span>
                             </td>
-                            <td className="px-8 py-6 text-center text-[10px] font-bold text-slate-500">
+                            <td className="px-4 sm:px-8 py-6 text-center text-[10px] font-bold text-slate-500">
                                 {m.createdAt ? new Date(m.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
                             </td>
-                            <td className="px-8 py-6 text-right">
+                            <td className="px-4 sm:px-8 py-6 text-right">
                               <div className="flex items-center justify-end gap-2">
                                 <button
                                   disabled={
@@ -5860,12 +6568,82 @@ export default function App() {
                       </tbody>
                     </table>
                   </div>
+
+                  {/* Active Members Mobile Cards Layout */}
+                  <div className="md:hidden divide-y divide-slate-100 bg-white">
+                    {[...orgUsers]
+                      .filter(u => u.name?.toLowerCase().includes(userSearchQuery.toLowerCase()) || u.email?.toLowerCase().includes(userSearchQuery.toLowerCase()))
+                      .sort((a,b) => (['ADMIN', 'MASTER_ADMIN'].includes(b.role) ? 1 : -1)).map((m) => (
+                      <div key={m.uid} className="p-4 sm:p-6 space-y-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="h-10 w-10 bg-slate-100 rounded-xl flex items-center justify-center font-bold text-brand-blue border border-slate-200 shrink-0">
+                              {m.name?.charAt(0) || '?'}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="font-bold tracking-tight text-slate-900 truncate">{m.name}</p>
+                                {m.uid === organization?.createdBy && (
+                                  <span className="px-2 py-0.5 bg-amber-50 text-amber-600 rounded-md text-[8px] font-black uppercase tracking-tighter border border-amber-100 flex items-center gap-1 shadow-sm shrink-0">
+                                    <Shield className="h-2 w-2 fill-current" />
+                                    Master Admin
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[10px] font-bold font-mono text-slate-400 uppercase tracking-widest truncate">{m.email}</p>
+                            </div>
+                          </div>
+                          <span className={`px-2.5 py-1 rounded-lg text-[9px] font-bold uppercase tracking-widest shrink-0 ${
+                            (m.uid === organization?.createdBy || ['ADMIN', 'MASTER_ADMIN'].includes(m.role))
+                              ? 'bg-blue-50 text-brand-blue border border-blue-100' 
+                              : 'bg-slate-50 text-slate-400 border border-slate-100'
+                          }`}>
+                            {m.uid === organization?.createdBy ? 'MASTER_ADMIN' : m.role}
+                          </span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between border-t border-slate-50 pt-4">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                            Joined: <span className="text-slate-600 font-medium">{m.createdAt ? new Date(m.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}</span>
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              disabled={
+                                m.uid === user?.uid || 
+                                m.uid === organization?.createdBy || 
+                                m.role === 'MASTER_ADMIN' ||
+                                !(user?.role === 'MASTER_ADMIN' || user?.uid === organization?.createdBy)
+                              }
+                              onClick={() => handleToggleUserRole(m)}
+                              className="p-2 text-slate-400 hover:text-brand-blue hover:bg-slate-50 rounded-lg transition-all disabled:opacity-30 border border-slate-100"
+                              title="Permission Level"
+                            >
+                              <Shield className="h-4 w-4" />
+                            </button>
+                            <button
+                              disabled={
+                                m.uid === user?.uid || 
+                                m.uid === organization?.createdBy || 
+                                m.role === 'MASTER_ADMIN' ||
+                                (!(user?.role === 'MASTER_ADMIN' || user?.uid === organization?.createdBy) && m.role === 'ADMIN')
+                              }
+                              onClick={() => handleRemoveMember(m)}
+                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-slate-50 rounded-lg transition-all disabled:opacity-30 border border-slate-100"
+                              title="Revoke Access"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Pre-approved Access */}
                 {orgInvitations.length > 0 && (
-                  <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
-                    <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                  <div className="bg-white rounded-3xl sm:rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="px-6 sm:px-8 py-5 sm:py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                       <div className="flex items-center gap-4">
                         <h3 className="text-sm font-bold text-slate-900">Authorized Access (Pending Login)</h3>
                         <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-bold tracking-widest uppercase">
@@ -5873,7 +6651,7 @@ export default function App() {
                         </span>
                       </div>
                     </div>
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto hidden md:block">
                       <table className="w-full text-left">
                         <thead>
                           <tr className="bg-slate-50/20">
@@ -5918,6 +6696,40 @@ export default function App() {
                         </tbody>
                       </table>
                     </div>
+
+                    {/* Pre-approved Mobile Cards Layout */}
+                    <div className="md:hidden divide-y divide-slate-100 bg-white">
+                      {orgInvitations
+                        .filter(inv => !orgUsers.some(u => u.email?.toLowerCase() === inv.email?.toLowerCase()))
+                        .map((inv) => (
+                        <div key={inv.email} className="p-6 space-y-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="h-10 w-10 bg-blue-50 rounded-xl flex items-center justify-center shrink-0">
+                                <Mail className="h-5 w-5 text-brand-blue" />
+                              </div>
+                              <p className="font-bold text-slate-900 tracking-tight truncate min-w-0">{inv.email}</p>
+                            </div>
+                            <span className="px-2.5 py-1 bg-slate-50 text-slate-400 border border-slate-100 rounded-lg text-[9px] font-bold uppercase tracking-widest shrink-0">
+                              {inv.role}
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center justify-between border-t border-slate-50 pt-4">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                              Authorized: <span className="text-slate-600 font-medium">{inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : 'N/A'}</span>
+                            </span>
+                            <button
+                              onClick={() => handleCancelInvitation(inv.email)}
+                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-slate-50 transition-colors rounded-lg border border-slate-100"
+                              title="Revoke Permission"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
                   </div>
@@ -5940,7 +6752,7 @@ export default function App() {
                     <h2 className="text-3xl font-black text-slate-900 tracking-tight leading-none mb-2">Governance</h2>
                     <p className="text-slate-500 font-medium text-sm">Coordinate system accessibility, branding, and terminal security.</p>
                   </div>
-                  <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100 overflow-x-auto no-scrollbar">
+                  <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100 overflow-x-auto no-scrollbar max-w-full w-full md:w-auto">
                     {[
                       { id: 'Identity', icon: <Building2 className="h-4 w-4" /> },
                       { id: 'Visibility', icon: <Layout className="h-4 w-4" /> },
@@ -6243,15 +7055,15 @@ export default function App() {
                         }}
                       />
 
-                      <div className="p-8 bg-slate-50/50 rounded-3xl border border-slate-100 space-y-8">
+                      <div className="p-5 sm:p-8 bg-slate-50/50 rounded-3xl border border-slate-100 space-y-6 sm:space-y-8">
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-100/50">
                           <div className="flex items-center gap-4">
-                            <div className="h-14 w-14 bg-white rounded-2xl flex items-center justify-center shadow-sm">
-                              <Lock className="h-7 w-7 text-amber-600" />
+                            <div className="h-12 w-12 sm:h-14 sm:w-14 bg-white rounded-2xl flex items-center justify-center shadow-sm shrink-0">
+                               <Lock className="h-6 w-6 sm:h-7 sm:w-7 text-amber-600" />
                             </div>
                             <div>
-                              <h3 className="text-xl font-bold text-gray-900 tracking-tight">Kiosk Security</h3>
-                              <p className="text-gray-500 text-sm font-medium">Protect your kiosk from unauthorized exits.</p>
+                              <h3 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">Kiosk Security</h3>
+                              <p className="text-gray-500 text-xs sm:text-sm font-medium">Protect your kiosk from unauthorized exits.</p>
                             </div>
                           </div>
                           <button 
@@ -6263,7 +7075,7 @@ export default function App() {
                                 addToast('Kiosk PIN updated successfully!', 'success');
                               } catch (err) { addToast('Failed to update PIN', 'error'); }
                             }}
-                            className="px-8 py-4 bg-amber-600 text-white font-black rounded-2xl hover:bg-amber-700 transition-all active:scale-95 shadow-xl shadow-amber-100 uppercase tracking-widest text-[10px]"
+                            className="w-full md:w-auto px-8 py-3.5 sm:py-4 bg-amber-600 text-white font-black rounded-2xl hover:bg-amber-700 transition-all active:scale-95 shadow-xl shadow-amber-100 uppercase tracking-widest text-[10px]"
                           >
                             <Save className="h-4 w-4" /> Save Security PIN
                           </button>
@@ -6271,16 +7083,16 @@ export default function App() {
                         <div className="max-w-md space-y-4">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Terminal Exit Authorization PIN</label>
                           <div className="relative group">
-                            <Lock className="absolute left-6 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
+                            <Lock className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
                             <input 
                               type={showKioskPin ? "text" : "password"}
-                              maxLength={4}
+                              maxLength={6}
                               placeholder="••••"
-                              className="w-full pl-14 pr-16 py-6 bg-white border border-slate-200 rounded-[1.5rem] font-black text-slate-900 text-4xl tracking-[0.5em] outline-none focus:border-amber-500 focus:ring-[12px] focus:ring-amber-500/5 transition-all shadow-inner"
+                              className="w-full pl-12 sm:pl-16 pr-14 sm:pr-16 py-4 sm:py-6 bg-white border border-slate-200 rounded-2xl sm:rounded-[1.5rem] font-black text-slate-900 text-2xl sm:text-4xl tracking-[0.5em] outline-none focus:border-amber-500 focus:ring-8 sm:focus:ring-[12px] focus:ring-amber-500/5 transition-all shadow-sm"
                               value={kioskPin}
                               onChange={(e) => {
                                 const val = e.target.value.replace(/\D/g, '');
-                                if (val.length <= 4) {
+                                if (val.length <= 6) {
                                   setKioskPin(val);
                                 }
                               }}
@@ -6288,14 +7100,16 @@ export default function App() {
                             <button
                               type="button"
                               onClick={() => setShowKioskPin(!showKioskPin)}
-                              className="absolute right-6 top-1/2 -translate-y-1/2 p-2 text-slate-300 hover:text-slate-600 h-10 w-10 flex items-center justify-center rounded-xl transition-all"
+                              className="absolute right-4 sm:right-6 top-1/2 -translate-y-1/2 p-2 text-slate-300 hover:text-slate-600 transition-all flex items-center justify-center rounded-xl"
                             >
-                              {showKioskPin ? <EyeOff className="h-6 w-6" /> : <Eye className="h-6 w-6" />}
+                              {showKioskPin ? <EyeOff className="h-5 w-5 sm:h-6 sm:w-6" /> : <Eye className="h-5 w-5 sm:h-6 sm:w-6" />}
                             </button>
                           </div>
-                          <div className="p-6 bg-amber-50/50 rounded-3xl border border-amber-100 flex gap-4">
-                            <AlertCircle className="h-6 w-6 text-amber-600 shrink-0 mt-0.5" />
-                            <p className="text-xs font-bold text-amber-800 leading-relaxed uppercase tracking-widest leading-relaxed">System Critical: This PIN is mandatory for exiting kiosk modes.</p>
+                          <div className="p-4 sm:p-6 bg-amber-50/50 rounded-2xl sm:rounded-3xl border border-amber-100 flex gap-4">
+                            <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-amber-600 shrink-0 mt-0.5" />
+                            <p className="text-xs sm:text-sm text-slate-600 font-medium leading-relaxed">
+                              This PIN is required to deactivate the terminal session. Keep it secure and share only with authorized administrators.
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -6443,12 +7257,13 @@ export default function App() {
       {/* Toast Notifications */}
       {reviewVisitor && (
         <ReviewModal
-          visitorName={reviewVisitor.name}
-          visitorId={reviewVisitor.visitorId}
+          visitorName={reviewVisitor.name || reviewVisitor.visitorName}
+          visitorId={reviewVisitor.visitorId || reviewVisitor.visitId}
           googleReviewUrl={organization?.googleReviewUrl}
           onClose={() => setReviewVisitor(null)}
           onSave={handleSaveReview}
           lang={isKioskMode ? kioskLang : 'EN'}
+          isMandatory={!!reviewVisitor.preRegistrationId}
         />
       )}
 
@@ -6539,18 +7354,18 @@ function StatCard({ title, value, icon, trend, color = 'blue' }: { title: string
 
 function HeaderTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <div className="mb-14 text-left relative group">
-      <div className="flex flex-col md:flex-row md:items-end gap-6 md:gap-10">
+    <div className="mb-6 sm:mb-10 text-left relative group">
+      <div className="flex flex-col lg:flex-row lg:items-end gap-4 sm:gap-6 md:gap-10">
         <div className="space-y-2">
-          <div className="inline-flex items-center gap-3 px-3 py-1 bg-brand-blue/5 border border-brand-blue/10 rounded-full mb-3">
+          <div className="inline-flex items-center gap-3 px-3 py-1 bg-brand-blue/5 border border-brand-blue/10 rounded-full mb-2 sm:mb-3">
             <div className="h-1.5 w-1.5 rounded-full bg-brand-blue animate-pulse" />
-            <span className="text-[10px] font-black text-brand-blue uppercase tracking-widest">Active System Instance</span>
+            <span className="text-[9px] sm:text-[10px] font-black text-brand-blue uppercase tracking-widest">Active System Instance</span>
           </div>
-          <h1 className="text-6xl md:text-8xl font-black text-slate-900 tracking-tighter italic uppercase leading-[0.85]">{title}</h1>
+          <h1 className="text-2xl sm:text-4xl md:text-6xl lg:text-7xl xl:text-8xl font-black text-slate-900 tracking-tighter italic uppercase leading-none sm:leading-[0.85] break-words">{title}</h1>
         </div>
         {subtitle && (
-          <div className="max-w-md pb-2">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest leading-relaxed border-l-2 border-slate-100 pl-6">{subtitle}</p>
+          <div className="max-w-md pb-1 sm:pb-2">
+            <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest leading-relaxed border-l-2 border-slate-100 pl-4 sm:pl-6">{subtitle}</p>
           </div>
         )}
       </div>

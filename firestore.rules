@@ -1,90 +1,85 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // =========================================================
-    // HELPERS
+    // BASIC HELPERS
     // =========================================================
 
-    function isSignedIn() {
+    function signedIn() {
       return request.auth != null;
     }
 
-    function isVerified() {
-      return isSignedIn();
-    }
-
-    function isUser(uid) {
-      return isSignedIn() &&
+    function isSelf(uid) {
+      return signedIn() &&
              request.auth.uid == uid;
     }
 
-    function incoming() {
-      return request.resource.data;
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    function existing() {
-      return resource.data;
-    }
-
-    function orgDoc(orgId) {
-      return (
-        orgId != null &&
-        exists(/databases/$(database)/documents/organizations/$(orgId))
-      )
-      ? get(/databases/$(database)/documents/organizations/$(orgId)).data
-      : { createdBy: "UNKNOWN" };
+    function userExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
     function belongsToOrg(orgId) {
-      return isSignedIn() && (
+      return signedIn() &&
+      (
+        (
+          userExists() &&
+          userDoc().get('organizationId', '') == orgId
+        )
+        ||
         exists(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid))
         ||
         (
-          exists(/databases/$(database)/documents/users/$(request.auth.uid))
-          &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId
-        )
-        ||
-        (
-          exists(/databases/$(database)/documents/invitations/$(request.auth.token.email)) &&
-          get(/databases/$(database)/documents/invitations/$(request.auth.token.email)).data.organizationId == orgId
+          exists(/databases/$(database)/documents/organizations/$(orgId)) &&
+          get(/databases/$(database)/documents/organizations/$(orgId)).data.get('createdBy', '') == request.auth.uid
         )
       );
     }
 
     function isMasterAdmin(orgId) {
-      return isSignedIn() && (
-        orgDoc(orgId).createdBy == request.auth.uid ||
-        (exists(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid)) && get(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid)).data.role == 'MASTER_ADMIN') ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'MASTER_ADMIN' && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId)
-      );
-    }
-
-    function isAdminOfOrg(orgId) {
-      return isSignedIn() && (
-        isMasterAdmin(orgId)
-        ||
+      return belongsToOrg(orgId) &&
+      (
         (
-          exists(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid))
-          &&
-          get(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid)).data.role
-            in ['ADMIN', 'MASTER_ADMIN']
+          userExists() &&
+          userDoc().get('role', '') == "MASTER_ADMIN"
         )
         ||
         (
-          exists(/databases/$(database)/documents/users/$(request.auth.uid))
-          &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId
-          &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
-            in ['ADMIN', 'MASTER_ADMIN']
+          exists(/databases/$(database)/documents/organizations/$(orgId)) &&
+          get(/databases/$(database)/documents/organizations/$(orgId)).data.get('createdBy', '') == request.auth.uid
+        )
+        ||
+        (
+          exists(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid)).data.get('role', '') == "MASTER_ADMIN"
+        )
+      );
+    }
+
+    function isAdmin(orgId) {
+      return belongsToOrg(orgId) &&
+      (
+        isMasterAdmin(orgId)
+        ||
+        (
+          userExists() &&
+          userDoc().get('role', '') == "ADMIN"
+        )
+        ||
+        (
+          exists(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/organizations/$(orgId)/users/$(request.auth.uid)).data.get('role', '') == "ADMIN"
         )
       );
     }
 
     // =========================================================
-    // SAFETY DEFAULT
+    // BLOCK EVERYTHING BY DEFAULT
     // =========================================================
 
     match /{document=**} {
@@ -98,50 +93,73 @@ service cloud.firestore {
     match /users/{uid} {
 
       allow get: if
-        isUser(uid)
+        isSelf(uid)
         ||
         (
-          isSignedIn()
-          &&
-          resource.data.organizationId != null
-          &&
+          resource.data.organizationId != null &&
           belongsToOrg(resource.data.organizationId)
         );
 
-      allow list: if
-        isSignedIn();
+      allow list: if signedIn();
 
       allow create: if
-        isUser(uid)
+        isSelf(uid)
         ||
         (
-          isSignedIn()
-          &&
-          request.resource.data.organizationId != null
-          &&
-          isAdminOfOrg(request.resource.data.organizationId)
+          request.resource.data.organizationId != null &&
+          isAdmin(request.resource.data.organizationId)
         );
 
       allow update: if
+
+        // self profile updates
         (
-          isUser(uid) ||
+          isSelf(uid)
+          &&
+          request.resource.data.role == resource.data.role
+        )
+
+        ||
+
+        // allow role upgrade when setting up organization as owner
+        (
+          isSelf(uid) &&
+          request.resource.data.organizationId != null &&
+          exists(/databases/$(database)/documents/organizations/$(request.resource.data.organizationId)) &&
+          get(/databases/$(database)/documents/organizations/$(request.resource.data.organizationId)).data.createdBy == request.auth.uid
+        )
+
+        ||
+
+        // allow role update/set when accepting a global or org invitation
+        (
+          isSelf(uid) &&
+          request.resource.data.organizationId != null &&
+          request.resource.data.email != null &&
           (
-            isSignedIn() &&
-            resource.data.organizationId != null &&
-            isAdminOfOrg(resource.data.organizationId)
+            exists(/databases/$(database)/documents/invitations/$(request.resource.data.email.lower()))
+            ||
+            exists(/databases/$(database)/documents/organizations/$(request.resource.data.organizationId)/invitations/$(request.resource.data.email.lower()))
           )
-        ) &&
-        // HIERARCHY PROTECTION
-        // 1. Cannot demote/modify the Organization Authority (Creator) or MASTER_ADMIN
-        !(
-          (resource.data.role == 'MASTER_ADMIN' || (resource.data.organizationId != null && uid == orgDoc(resource.data.organizationId).createdBy)) &&
-          request.resource.data.role != resource.data.role
-        ) &&
-        // 2. Standard ADMINs can only modify STAFF. They cannot modify other ADMINs or promote someone to ADMIN/MASTER_ADMIN.
-        !(
-          (resource.data.organizationId != null && !isMasterAdmin(resource.data.organizationId)) &&
-          (request.resource.data.organizationId != null && !isMasterAdmin(request.resource.data.organizationId)) && 
-          (resource.data.role == "ADMIN" || request.resource.data.role == "ADMIN" || request.resource.data.role == "MASTER_ADMIN")
+        )
+
+        ||
+
+        // MASTER_ADMIN full control
+        (
+          resource.data.organizationId != null &&
+          isMasterAdmin(resource.data.organizationId)
+        )
+
+        ||
+
+        // ADMIN can manage STAFF only
+        (
+          resource.data.organizationId != null &&
+          isAdmin(resource.data.organizationId) &&
+          !isMasterAdmin(resource.data.organizationId) &&
+          resource.data.role == "STAFF" &&
+          request.resource.data.role in ["STAFF", "ADMIN"]
         );
 
       allow delete: if false;
@@ -153,14 +171,11 @@ service cloud.firestore {
 
     match /organizations/{orgId} {
 
-      allow get: if belongsToOrg(orgId);
+      allow get: if true;
 
-      allow create: if
-        isVerified()
-        &&
-        incoming().createdBy == request.auth.uid;
+      allow create: if signedIn();
 
-      allow update: if isAdminOfOrg(orgId);
+      allow update: if isAdmin(orgId);
 
       // =========================================================
       // ORGANIZATION USERS
@@ -168,47 +183,64 @@ service cloud.firestore {
 
       match /users/{userId} {
 
-        allow read: if
-          belongsToOrg(orgId)
-          ||
-          isUser(userId);
+        allow read: if belongsToOrg(orgId) || isSelf(userId);
 
-        allow create: if
-          isAdminOfOrg(orgId)
-          ||
-          isUser(userId);
+        allow create: if isAdmin(orgId) 
+          || (isSelf(userId) && get(/databases/$(database)/documents/organizations/$(orgId)).data.createdBy == request.auth.uid)
+          || (isSelf(userId) && request.resource.data.email != null && exists(/databases/$(database)/documents/invitations/$(request.resource.data.email.lower())))
+          || (isSelf(userId) && request.resource.data.email != null && exists(/databases/$(database)/documents/organizations/$(orgId)/invitations/$(request.resource.data.email.lower())));
 
         allow update: if
+
+          // MASTER_ADMIN full control
           (
-            isAdminOfOrg(orgId) ||
-            isUser(userId)
-          ) &&
-          // HIERARCHY PROTECTION
-          // 1. Cannot demote/modify the Organization Authority (Creator) or MASTER_ADMIN
-          !(
-            (resource.data.role == 'MASTER_ADMIN' || userId == orgDoc(orgId).createdBy) &&
-            request.resource.data.role != resource.data.role
-          ) &&
-          // 2. Standard ADMINs can only modify STAFF. They cannot modify other ADMINs or promote someone to ADMIN/MASTER_ADMIN.
-          !(
-            !isMasterAdmin(orgId) && 
-            (request.resource.data.organizationId != null && !isMasterAdmin(request.resource.data.organizationId)) &&
-            (resource.data.role == "ADMIN" || request.resource.data.role == "ADMIN" || request.resource.data.role == "MASTER_ADMIN")
+            isMasterAdmin(orgId)
+          )
+
+          ||
+
+          // ADMIN can manage STAFF only
+          (
+            isAdmin(orgId) &&
+            !isMasterAdmin(orgId) &&
+            resource.data.role == "STAFF" &&
+            request.resource.data.role in ["STAFF", "ADMIN"]
+          )
+
+          ||
+
+          // self updates without role change
+          (
+            isSelf(userId) &&
+            request.resource.data.role == resource.data.role
           );
 
         allow delete: if
-          isAdminOfOrg(orgId) &&
-          userId != orgDoc(orgId).createdBy &&
-          // Standard ADMINs cannot delete other ADMINs or MASTER_ADMINs
-          (isMasterAdmin(orgId) || resource.data.role == "STAFF");
+
+          // MASTER_ADMIN can delete anyone except creator
+          (
+            isMasterAdmin(orgId)
+            &&
+            userId != get(/databases/$(database)/documents/organizations/$(orgId)).data.createdBy
+          )
+
+          ||
+
+          // ADMIN can delete STAFF only
+          (
+            isAdmin(orgId) &&
+            !isMasterAdmin(orgId) &&
+            resource.data.role == "STAFF"
+          );
       }
 
       // =========================================================
       // INVITATIONS
       // =========================================================
 
-      match /invitations/{email} {
-        allow read, write, delete: if isAdminOfOrg(orgId);
+      match /invitations/{id} {
+        allow read, delete: if isAdmin(orgId) || (signedIn() && request.auth.token.email != null && request.auth.token.email.lower() == id.lower());
+        allow write: if isAdmin(orgId);
       }
 
       // =========================================================
@@ -225,6 +257,20 @@ service cloud.firestore {
 
       match /visits/{id} {
         allow read, write: if belongsToOrg(orgId);
+      }
+
+      // =========================================================
+      // REVIEWS
+      // =========================================================
+
+      match /reviews/{id} {
+
+        allow read: if belongsToOrg(orgId);
+
+        // public review submission
+        allow create: if true;
+
+        allow update, delete: if isAdmin(orgId);
       }
 
       // =========================================================
@@ -256,7 +302,8 @@ service cloud.firestore {
       // =========================================================
 
       match /preRegistrations/{id} {
-        allow read, write: if belongsToOrg(orgId);
+        allow read, update, delete: if belongsToOrg(orgId);
+        allow create: if true;
       }
 
       // =========================================================
@@ -264,7 +311,8 @@ service cloud.firestore {
       // =========================================================
 
       match /notifications/{id} {
-        allow read, write: if belongsToOrg(orgId);
+        allow read, update, delete: if belongsToOrg(orgId);
+        allow create: if true;
       }
 
       // =========================================================
@@ -286,31 +334,44 @@ service cloud.firestore {
 
       match /system_backups/{id} {
 
-        allow read: if isAdminOfOrg(orgId);
+        allow read: if isAdmin(orgId);
 
-        allow create: if isAdminOfOrg(orgId);
+        allow create: if isAdmin(orgId);
 
         allow delete: if isMasterAdmin(orgId);
       }
     }
 
     // =========================================================
-    // GLOBAL INVITATIONS
+    // USERS AND INVITATIONS (COLLECTION GROUP QUERIES)
     // =========================================================
 
-    match /invitations/{email} {
+    match /{path=**}/invitations/{id} {
+      allow read: if signedIn() && request.auth.token.email != null && resource.data.keys().hasAll(['email']) && resource.data.email.lower() == request.auth.token.email.lower();
+    }
 
-      allow read: if
-        isSignedIn();
+    match /{path=**}/users/{id} {
+      allow read: if signedIn() && resource.data.keys().hasAll(['uid']) && resource.data.uid == request.auth.uid;
+    }
 
-      allow create: if
-        isSignedIn();
+    match /invitations/{id} {
+      allow read, write, delete: if signedIn();
+    }
 
-      allow update: if
-        isSignedIn();
+    // =========================================================
+    // LEGACY TOP-LEVEL COLLECTIONS FOR MIGRATION
+    // =========================================================
 
-      allow delete: if
-        isSignedIn();
+    match /visitors/{id} {
+      allow read: if signedIn();
+    }
+
+    match /reviews/{id} {
+      allow read: if signedIn();
+    }
+
+    match /activityLogs/{id} {
+      allow read: if signedIn();
     }
 
     // =========================================================
@@ -318,7 +379,7 @@ service cloud.firestore {
     // =========================================================
 
     match /appFeedback/{id} {
-      allow create: if isSignedIn();
+      allow create: if signedIn();
     }
 
     // =========================================================
@@ -326,7 +387,7 @@ service cloud.firestore {
     // =========================================================
 
     match /bugReports/{id} {
-      allow create: if isSignedIn();
+      allow create: if signedIn();
     }
 
     // =========================================================
@@ -334,10 +395,8 @@ service cloud.firestore {
     // =========================================================
 
     match /org_names/{id} {
-
-      allow read: if isSignedIn();
-
-      allow create: if isVerified();
+      allow read: if signedIn();
+      allow create: if signedIn();
     }
   }
 }
