@@ -136,7 +136,7 @@ export default function PreRegistrationTab({
 
     try {
       const baseUrl = window.location.origin;
-      const passUrl = `${baseUrl}/?passId=${encodeURIComponent(req.id)}&orgId=${encodeURIComponent(organizationId)}&mode=checkin`;
+      const passUrl = `${baseUrl}/?passId=${encodeURIComponent(req.id)}&orgId=${encodeURIComponent(organizationId)}`;
       const visitorName = req.name || 'Visitor';
       const visitDate = new Date(req.visitDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
       const location = customLocation || settings.defaultLocation || organizationName || 'VMS Global';
@@ -280,8 +280,8 @@ export default function PreRegistrationTab({
     
     try {
       setLoading(true);
-      // 1. Create a Visit record
-      const visitId = `v_${Date.now()}`;
+      // 1. Create a Visit record using the pre-registration ID as the visit ID
+      const visitId = req.id;
       const timestamp = new Date().toISOString();
       const date = new Date().toISOString().split('T')[0];
       const checkInTime = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });

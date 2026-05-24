@@ -160,27 +160,16 @@ export default function VisitorPass({
 
   const checkoutTriggered = React.useRef(false);
 
-  // Handle auto check-in/check-out if scanned with appropriate mode parameter
+  // Handle auto-checkout if scanned with mode=checkout
   useEffect(() => {
     if (visitor && !loading && !checkingOut && !checkoutTriggered.current) {
       const params = new URLSearchParams(window.location.search);
-      const urlMode = params.get('mode');
+      const isCheckoutMode = params.get('mode') === 'checkout';
       
-      if (urlMode === 'checkin') {
-        if (visitor.status === 'PENDING') {
-          checkoutTriggered.current = true;
-          const timer = setTimeout(() => {
-            handleCheckIn();
-          }, 1200);
-          return () => clearTimeout(timer);
-        } else {
-          // They scanned checkin but are already checked in or checked out
-          checkoutTriggered.current = true;
-          showToast(language === 'HI' ? 'अतिथि पहले ही चेक-इन कर चुके हैं।' : 'Visitor already checked in.', 'info');
-        }
-      } else if (urlMode === 'checkout') {
+      if (isCheckoutMode) {
         if (visitor.status === 'CHECKED OUT') {
-          // Already checked out
+          // Already checked out, but we should show the review modal if it hasn't been shown yet
+          // and we arrived via a checkout link
           setShowReviewModal(true);
           checkoutTriggered.current = true;
           const reviewPromptMsg = language === 'HI'
@@ -188,9 +177,8 @@ export default function VisitorPass({
             : 'Please take a moment to rate your experience.';
           showToast(reviewPromptMsg, 'success');
         } else if (visitor.status === 'PENDING') {
-          // Can't checkout, need to checkin first!
           checkoutTriggered.current = true;
-          showToast(language === 'HI' ? 'चेक-आउट से पहले कृपया चेक-इन करें।' : 'Please check-in before checking out.', 'error');
+          showToast(language === 'HI' ? 'आपका स्वागत है! कृपया पहले चेक-इन करें।' : 'Welcome! Please check-in first.', 'info');
         } else {
           checkoutTriggered.current = true;
           // Small delay to let the UI settle
@@ -202,41 +190,6 @@ export default function VisitorPass({
       }
     }
   }, [visitor, loading, checkingOut, language]);
-
-  const handleCheckIn = async () => {
-    const vid = visitor?.visitId || visitor?.visitorId || visitorId;
-    if (!visitor || !organization?.id || checkingOut) return;
-
-    if (visitor.status === 'INSIDE' || visitor.status === 'CHECKED OUT') {
-      showToast(language === 'HI' ? 'अतिथि पहले ही चेक-इन कर चुके हैं।' : 'Visitor already checked in.', 'success');
-      return;
-    }
-
-    setCheckingOut(true);
-    try {
-      if (!vid) throw new Error('Missing visitor ID');
-
-      const response = await fetch(`/api/visitors/${vid}/checkin`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          organizationId: organization.id
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to check in via API');
-      }
-
-      showToast(language === 'HI' ? 'चेक-इन सफल!' : 'Check-in successful!', 'success');
-    } catch (err) {
-      console.error('Check-in failed:', err);
-      showToast('Check-in process encountered an issue.', 'error');
-    } finally {
-      setCheckingOut(false);
-      x.set(0);
-    }
-  };
 
   const handleCheckOut = async () => {
     const vid = visitor?.visitId || visitor?.visitorId || visitorId;
@@ -314,8 +267,7 @@ export default function VisitorPass({
   const handleShare = async () => {
     if (!visitor || !organization) return;
     const vid = visitor.visitId || visitor.visitorId;
-    const modeParam = visitor.status === 'PENDING' ? 'checkin' : 'checkout';
-    const passUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization.id}&mode=${modeParam}`;
+    const passUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization.id}&mode=checkout`;
     const visitorName = visitor.name || visitor.visitorName || 'Visitor';
     const visitDate = visitor.date ? new Date(visitor.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Today';
     
@@ -392,9 +344,8 @@ export default function VisitorPass({
   }
 
   const vid = visitor.visitId || visitor.visitorId;
+  const passUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization?.id}&mode=checkout`;
   const isCheckedOut = visitor.status === 'CHECKED OUT';
-  const modeParam = visitor.status === 'PENDING' ? 'checkin' : 'checkout';
-  const passUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization?.id}&mode=${modeParam}`;
 
   return (
     <div className={`relative w-full flex items-center justify-center overflow-x-hidden ${standalone ? 'min-h-screen bg-slate-50 dark:bg-slate-950 p-2 sm:p-4' : 'p-0'}`}>
@@ -564,7 +515,7 @@ export default function VisitorPass({
 
           {/* Actions */}
           <div className="grid grid-cols-1 gap-4 sm:gap-5 mt-6 sm:mt-10">
-            {visitor.status !== 'CHECKED OUT' && visitor.status !== 'DELETED' ? (
+            {!isCheckedOut && visitor.status !== 'PENDING' ? (
               <div className="space-y-4">
                  <div className="relative h-16 sm:h-20 bg-slate-100 dark:bg-slate-800 rounded-3xl p-1.5 flex items-center overflow-hidden border border-slate-200 dark:border-slate-700 shadow-inner group">
                    {/* Animated Track Overlay */}
@@ -578,7 +529,7 @@ export default function VisitorPass({
                        style={{ opacity: textOpacity }}
                        className="text-[10px] sm:text-xs font-black uppercase tracking-[0.3em] text-slate-400 group-hover:text-slate-500 transition-colors"
                      >
-                       {visitor.status === 'PENDING' ? 'Swipe Right to Check-in' : 'Swipe Right to Check-out'}
+                       Swipe Right to Check-out
                      </motion.span>
                    </div>
                    
@@ -590,11 +541,7 @@ export default function VisitorPass({
                      style={{ x }}
                      onDragEnd={(e, info) => {
                        if (info.offset.x > 200) {
-                         if (visitor.status === 'PENDING') {
-                           handleCheckIn();
-                         } else {
-                           handleCheckOut();
-                         }
+                         handleCheckOut();
                        } else {
                          x.set(0);
                        }
@@ -610,7 +557,7 @@ export default function VisitorPass({
                  </div>
                  
                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest text-center">
-                    {visitor.status === 'PENDING' ? 'Authorized Entry Protocol Required' : 'Authorized Exit Protocol Required'}
+                    Authorized Exit Protocol Required
                  </p>
               </div>
             ) : (

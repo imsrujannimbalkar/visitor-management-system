@@ -10,7 +10,6 @@ import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import cron from 'node-cron';
 import { safely, getFallback, setFallback, getAdminDb } from './lib/firestoreSafe.js';
-const updateFallback: any = undefined;
 import { google } from 'googleapis';
 
 // Determine the current directory correctly for ES Modules
@@ -395,90 +394,6 @@ app.post('/api/visitors', asyncHandler(async (req, res) => {
   syncToGoogle(organizationId, result, false);
 
   res.status(201).json(result);
-}));
-
-app.put('/api/visitors/:id/checkin', asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { organizationId } = req.body;
-
-  if (!organizationId || typeof organizationId !== 'string') {
-    return res.status(400).json({ error: 'organizationId is required for checkin' });
-  }
-
-  const preRegRef = adminDb.collection('organizations').doc(organizationId).collection('preRegistrations').doc(id);
-  let preRegSnap = await safely(preRegRef.get(), getFallback);
-
-  if (!preRegSnap || !preRegSnap.exists) {
-    return res.status(404).json({ error: 'Pre-registration not found' });
-  }
-
-  const preReq = preRegSnap.data();
-
-  if (preReq.status === 'CHECKED_IN' || preReq.status === 'COMPLETED') {
-    return res.status(400).json({ error: 'Already checked in' });
-  }
-
-  const now = new Date();
-  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-  const dateStr = now.toISOString().split('T')[0];
-
-  const datePrefix = dateStr.replace(/-/g, '').slice(2);
-  const visitId = `AF-${datePrefix}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
-
-  const visitData = {
-    visitorId: visitId,
-    visitId: visitId,
-    name: preReq.name || '',
-    phone: preReq.phone || '',
-    email: preReq.email || '',
-    purpose: preReq.purpose || 'Visitor',
-    category: preReq.visitorType || 'Pre-Registered',
-    visiting: preReq.visitingPerson || '',
-    department: preReq.department || '',
-    organization: preReq.company || '',
-    location: preReq.location || '',
-    vehicleNo: preReq.vehicleNo || '',
-    laptopAssetNo: preReq.laptopAssetNo || '',
-    photo: preReq.photo || '',
-    idProof: preReq.idProof || '',
-    date: dateStr,
-    checkInTime: timeStr,
-    status: 'INSIDE',
-    organizationId,
-    createdBy: 'DIGITAL_PASS',
-    recordedBy: 'DIGITAL_PASS',
-    recordedByName: 'Digital Pass Auto Check-In',
-    signature: preReq.signature || '',
-    preRegistrationId: id,
-    createdAt: now.toISOString(),
-    updatedAt: now.toISOString()
-  };
-
-  const visitRef = adminDb.collection('organizations').doc(organizationId).collection('visits').doc(visitId);
-  await safely(visitRef.set(visitData), setFallback);
-
-  if (preReq.phone) {
-    const profileRef = adminDb.collection('organizations').doc(organizationId).collection('profiles').doc(preReq.phone);
-    await safely(profileRef.set({
-      phone: preReq.phone,
-      name: preReq.name || '',
-      email: preReq.email || '',
-      dob: preReq.dob || '',
-      address: preReq.address || '',
-      organizationId,
-      updatedAt: now.toISOString()
-    }, { merge: true }), setFallback);
-  }
-
-  await safely(preRegRef.update({
-    status: 'CHECKED_IN',
-    processedAt: now.toISOString(),
-    processedBy: 'DIGITAL_PASS'
-  }), updateFallback);
-
-  syncToGoogle(organizationId, visitData, false);
-
-  res.status(200).json({ message: 'Checked in successfully', visit: visitData });
 }));
 
 app.put('/api/visitors/:id/checkout', asyncHandler(async (req, res) => {

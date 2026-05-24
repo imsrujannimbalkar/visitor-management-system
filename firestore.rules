@@ -256,7 +256,8 @@ service cloud.firestore {
       // =========================================================
 
       match /visits/{id} {
-        allow read, write: if belongsToOrg(orgId);
+        allow get: if true;
+        allow list, write: if belongsToOrg(orgId);
       }
 
       // =========================================================
@@ -302,7 +303,8 @@ service cloud.firestore {
       // =========================================================
 
       match /preRegistrations/{id} {
-        allow read, update, delete: if belongsToOrg(orgId);
+        allow get: if true;
+        allow list, update, delete: if belongsToOrg(orgId);
         allow create: if true;
       }
 

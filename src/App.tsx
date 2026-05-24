@@ -1420,6 +1420,80 @@ export default function App() {
       } else if (passId && orgId) {
         setStandalonePassData({ visitorId: passId, orgId });
         setShowPublicRegister(null);
+        
+        if (mode === 'checkout') {
+          // Check if we already tried this in this session to avoid race with VisitorPass
+          const sessionKey = `checkout_${passId}`;
+          if (sessionStorage.getItem(sessionKey)) return;
+          sessionStorage.setItem(sessionKey, 'processing');
+
+          try {
+            const response = await fetch(`/api/visitors/${passId}/checkout`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                checkOutTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+                organizationId: orgId 
+              })
+            });
+            
+            if (response.ok) {
+              Swal.fire({
+                title: 'Check-out Successful',
+                text: 'Your exit has been recorded automatically. Please rate your experience.',
+                icon: 'success',
+                timer: 4000,
+                showConfirmButton: false,
+                background: theme === 'dark' ? '#1e293b' : '#ffffff',
+                color: theme === 'dark' ? '#ffffff' : '#000000',
+              });
+              addToast('Check-out successful! Please rate your experience.', 'success');
+            } else {
+              const errorData = await response.json();
+              throw new Error(errorData.error || 'Checkout failed');
+            }
+          } catch (error: any) {
+            console.error('Auto-checkout error:', error);
+            let errorTitle = 'Check-out Status';
+            let errorText = error.message || 'We could not complete your automatic check-out.';
+            
+            const errMsg = error.message?.toLowerCase() || '';
+            if (errMsg.includes('not found') || errMsg.includes('already checked out')) {
+              errorTitle = 'Check-out Already Complete';
+              errorText = 'We couldn\'t find an active visit for this link. You may have already checked out or the session has expired.';
+              
+              // No need to show error for "already complete" as it's not really an error for the user
+              Swal.fire({
+                title: errorTitle,
+                text: errorText,
+                icon: 'info',
+                background: theme === 'dark' ? '#1e293b' : '#ffffff',
+                color: theme === 'dark' ? '#ffffff' : '#000000',
+                confirmButtonText: 'OK',
+                confirmButtonColor: '#3b82f6',
+                customClass: {
+                  popup: 'rounded-[2rem]',
+                  confirmButton: 'rounded-xl px-10 py-3 font-bold'
+                }
+              });
+              return;
+            }
+
+            Swal.fire({
+              title: errorTitle,
+              text: errorText,
+              icon: 'error',
+              background: theme === 'dark' ? '#1e293b' : '#ffffff',
+              color: theme === 'dark' ? '#ffffff' : '#000000',
+              confirmButtonText: 'OK',
+              confirmButtonColor: '#3b82f6',
+              customClass: {
+                popup: 'rounded-[2rem]',
+                confirmButton: 'rounded-xl px-10 py-3 font-bold'
+              }
+            });
+          }
+        }
       } else {
         setStandalonePassData(null);
       }
@@ -4470,7 +4544,8 @@ export default function App() {
     try {
       setLoadingStates(prev => ({ ...prev, [req.id]: true }));
       
-      const visitId = `v_${Date.now()}`;
+      // Use pre-registration ID as visit ID for 1:1 mapping
+      const visitId = req.id;
       const timestamp = new Date().toISOString();
       const date = new Date().toISOString().split('T')[0];
       const checkInTime = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
