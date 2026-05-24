@@ -10,6 +10,7 @@ import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import cron from 'node-cron';
 import { safely, getFallback, setFallback, getAdminDb } from './lib/firestoreSafe.js';
+const updateFallback: any = undefined;
 import { google } from 'googleapis';
 
 // Determine the current directory correctly for ES Modules

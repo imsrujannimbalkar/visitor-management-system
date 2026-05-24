@@ -136,7 +136,7 @@ export default function PreRegistrationTab({
 
     try {
       const baseUrl = window.location.origin;
-      const passUrl = `${baseUrl}/?passId=${encodeURIComponent(req.id)}&orgId=${encodeURIComponent(organizationId)}`;
+      const passUrl = `${baseUrl}/?passId=${encodeURIComponent(req.id)}&orgId=${encodeURIComponent(organizationId)}&mode=checkin`;
       const visitorName = req.name || 'Visitor';
       const visitDate = new Date(req.visitDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
       const location = customLocation || settings.defaultLocation || organizationName || 'VMS Global';

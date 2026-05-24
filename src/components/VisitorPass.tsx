@@ -314,7 +314,8 @@ export default function VisitorPass({
   const handleShare = async () => {
     if (!visitor || !organization) return;
     const vid = visitor.visitId || visitor.visitorId;
-    const passUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization.id}`;
+    const modeParam = visitor.status === 'PENDING' ? 'checkin' : 'checkout';
+    const passUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization.id}&mode=${modeParam}`;
     const visitorName = visitor.name || visitor.visitorName || 'Visitor';
     const visitDate = visitor.date ? new Date(visitor.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Today';
     
