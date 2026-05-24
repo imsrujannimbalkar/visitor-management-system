@@ -59,7 +59,7 @@ export default function VisitorPass({
   const progressWidth = useTransform(x, (value) => `${(value / 260) * 100}%`);
 
   useEffect(() => {
-    let unsubscribeVisitor: (() => void) | undefined;
+    let unsubs: (() => void)[] = [];
 
     async function initialize() {
       // Resolve organization first
@@ -79,67 +79,74 @@ export default function VisitorPass({
       const effectiveVisitorId = visitorId || initialVisitor?.visitId || initialVisitor?.visitorId;
       
       if (effectiveVisitorId && orgIdToFetch) {
-        const visitorRef = doc(db, 'organizations', orgIdToFetch, 'visits', effectiveVisitorId);
-        
-        unsubscribeVisitor = onSnapshot(visitorRef, async (snapshot) => {
+        let hasVisitData = false;
+
+        // Listener 1: Using direct visit document ID
+        const visitRef = doc(db, 'organizations', orgIdToFetch, 'visits', effectiveVisitorId);
+        unsubs.push(onSnapshot(visitRef, async (snapshot) => {
           if (snapshot.exists()) {
+            hasVisitData = true;
             const data = snapshot.data();
             setVisitor({ ...data, visitorId: snapshot.id, visitId: snapshot.id } as Visitor);
             setError(null);
             setLoading(false);
-          } else {
-            // Check if this ID is a pre-registration ID that has been converted to a visit
-            try {
-              const visitsRef = collection(db, 'organizations', orgIdToFetch, 'visits');
-              const q = query(visitsRef, where('preRegistrationId', '==', effectiveVisitorId));
-              const visitSnap = await getDocs(q);
-              
-              if (!visitSnap.empty) {
-                const visitDoc = visitSnap.docs[0];
-                const data = visitDoc.data();
-                setVisitor({ ...data, visitorId: visitDoc.id, visitId: visitDoc.id } as Visitor);
-                setError(null);
-                setLoading(false);
-                return;
-              }
-            } catch (err) {
-              console.error('Error checking for cross-linked visit:', err);
-            }
+          }
+        }, (err) => {
+          console.error('Real-time pass error (visit doc):', err);
+        }));
 
-            // Try fetching from pre-registrations
-            try {
-              const preRegRef = doc(db, 'organizations', orgIdToFetch, 'preRegistrations', effectiveVisitorId);
-              const preRegSnap = await getDoc(preRegRef);
-              if (preRegSnap.exists()) {
-                const preData = preRegSnap.data();
-                if (preData.status === 'APPROVED' || preData.status === 'CHECKED_IN' || preData.status === 'COMPLETED') {
-                  setVisitor({ 
-                    ...preData, 
-                    visitorId: preRegSnap.id, 
-                    visitId: preRegSnap.id,
-                    visitorName: preData.name,
-                    visitorPhone: preData.phone,
-                    date: preData.visitDate,
-                    checkInTime: preData.status === 'APPROVED' ? 'Pre-Approved' : 'Checked In',
-                    status: preData.status === 'APPROVED' ? 'PENDING' : (preData.status === 'COMPLETED' ? 'CHECKED OUT' : 'INSIDE')
-                  } as any);
-                  setError(null);
-                } else {
-                  setError(`Pass Status: ${preData.status}`);
-                }
-              } else {
-                setError('Pass not found or invalid');
-              }
-            } catch (err) {
-              setError('Pass not found or invalid');
-            }
+        // Listener 2: Query by preRegistrationId
+        const visitsCollRef = collection(db, 'organizations', orgIdToFetch, 'visits');
+        const q = query(visitsCollRef, where('preRegistrationId', '==', effectiveVisitorId));
+        unsubs.push(onSnapshot(q, (snapshot) => {
+          if (!snapshot.empty) {
+            hasVisitData = true;
+            const visitDoc = snapshot.docs[0];
+            const data = visitDoc.data();
+            setVisitor({ ...data, visitorId: visitDoc.id, visitId: visitDoc.id } as Visitor);
+            setError(null);
             setLoading(false);
           }
         }, (err) => {
-          console.error('Real-time pass error:', err);
-          setError('Failed to sync pass status');
-          setLoading(false);
-        });
+          console.error('Real-time pass error (visit query):', err);
+        }));
+
+        // Listener 3: Fallback PreRegistration document
+        const preRegRef = doc(db, 'organizations', orgIdToFetch, 'preRegistrations', effectiveVisitorId);
+        unsubs.push(onSnapshot(preRegRef, (snapshot) => {
+          // Only update from preReg if we haven't already found a checked-in visit
+          if (snapshot.exists() && !hasVisitData) {
+            const preData = snapshot.data();
+            if (preData.status === 'APPROVED' || preData.status === 'CHECKED_IN' || preData.status === 'COMPLETED') {
+              setVisitor({ 
+                ...preData, 
+                visitorId: snapshot.id, 
+                visitId: snapshot.id,
+                visitorName: preData.name,
+                visitorPhone: preData.phone,
+                date: preData.visitDate,
+                checkInTime: preData.status === 'APPROVED' ? 'Pending Check-In' : 'Checked In',
+                status: preData.status === 'APPROVED' ? 'PENDING' : (preData.status === 'COMPLETED' ? 'CHECKED OUT' : 'INSIDE')
+              } as any);
+              setError(null);
+              setLoading(false);
+            }
+          }
+        }, (err) => {
+          console.error('Real-time pass error (preReg):', err);
+        }));
+        
+        // Timeout to stop loading if no records found at all
+        setTimeout(() => {
+          setLoading(prev => {
+            if (prev) {
+               setError('Pass not found or invalid');
+               return false;
+            }
+            return prev;
+          });
+        }, 3000);
+
       } else {
         setLoading(false);
       }
@@ -147,39 +154,89 @@ export default function VisitorPass({
 
     initialize();
     return () => {
-      if (unsubscribeVisitor) unsubscribeVisitor();
+      unsubs.forEach(unsub => unsub());
     };
   }, [initialVisitor, visitorId, organizationId]);
 
   const checkoutTriggered = React.useRef(false);
 
-  // Handle auto-checkout if scanned with mode=checkout
+  // Handle auto check-in/check-out if scanned with appropriate mode parameter
   useEffect(() => {
     if (visitor && !loading && !checkingOut && !checkoutTriggered.current) {
       const params = new URLSearchParams(window.location.search);
-      const isCheckoutMode = params.get('mode') === 'checkout';
+      const urlMode = params.get('mode');
       
-      if (isCheckoutMode) {
-        if (visitor.status !== 'CHECKED OUT') {
+      if (urlMode === 'checkin') {
+        if (visitor.status === 'PENDING') {
           checkoutTriggered.current = true;
-          // Small delay to let the UI settle
           const timer = setTimeout(() => {
-            handleCheckOut();
+            handleCheckIn();
           }, 1200);
           return () => clearTimeout(timer);
         } else {
-          // Already checked out, but we should show the review modal if it hasn't been shown yet
-          // and we arrived via a checkout link
+          // They scanned checkin but are already checked in or checked out
+          checkoutTriggered.current = true;
+          showToast(language === 'HI' ? 'अतिथि पहले ही चेक-इन कर चुके हैं।' : 'Visitor already checked in.', 'info');
+        }
+      } else if (urlMode === 'checkout') {
+        if (visitor.status === 'CHECKED OUT') {
+          // Already checked out
           setShowReviewModal(true);
           checkoutTriggered.current = true;
           const reviewPromptMsg = language === 'HI'
             ? 'कृपया अपना अनुभव साझा करें।'
             : 'Please take a moment to rate your experience.';
           showToast(reviewPromptMsg, 'success');
+        } else if (visitor.status === 'PENDING') {
+          // Can't checkout, need to checkin first!
+          checkoutTriggered.current = true;
+          showToast(language === 'HI' ? 'चेक-आउट से पहले कृपया चेक-इन करें।' : 'Please check-in before checking out.', 'error');
+        } else {
+          checkoutTriggered.current = true;
+          // Small delay to let the UI settle
+          const timer = setTimeout(() => {
+            handleCheckOut();
+          }, 1200);
+          return () => clearTimeout(timer);
         }
       }
     }
   }, [visitor, loading, checkingOut, language]);
+
+  const handleCheckIn = async () => {
+    const vid = visitor?.visitId || visitor?.visitorId || visitorId;
+    if (!visitor || !organization?.id || checkingOut) return;
+
+    if (visitor.status === 'INSIDE' || visitor.status === 'CHECKED OUT') {
+      showToast(language === 'HI' ? 'अतिथि पहले ही चेक-इन कर चुके हैं।' : 'Visitor already checked in.', 'success');
+      return;
+    }
+
+    setCheckingOut(true);
+    try {
+      if (!vid) throw new Error('Missing visitor ID');
+
+      const response = await fetch(`/api/visitors/${vid}/checkin`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          organizationId: organization.id
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to check in via API');
+      }
+
+      showToast(language === 'HI' ? 'चेक-इन सफल!' : 'Check-in successful!', 'success');
+    } catch (err) {
+      console.error('Check-in failed:', err);
+      showToast('Check-in process encountered an issue.', 'error');
+    } finally {
+      setCheckingOut(false);
+      x.set(0);
+    }
+  };
 
   const handleCheckOut = async () => {
     const vid = visitor?.visitId || visitor?.visitorId || visitorId;
@@ -190,6 +247,10 @@ export default function VisitorPass({
         ? 'कृपया अपना अनुभव साझा करें।'
         : 'Please take a moment to rate your experience.';
       showToast(reviewPromptMsg, 'success');
+      return;
+    }
+    if (visitor.status === 'PENDING') {
+      showToast(language === 'HI' ? 'चेक-आउट से पहले कृपया चेक-इन करें।' : 'Please check-in before checking out.', 'error');
       return;
     }
 
@@ -253,7 +314,7 @@ export default function VisitorPass({
   const handleShare = async () => {
     if (!visitor || !organization) return;
     const vid = visitor.visitId || visitor.visitorId;
-    const passUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization.id}&mode=checkout`;
+    const passUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization.id}`;
     const visitorName = visitor.name || visitor.visitorName || 'Visitor';
     const visitDate = visitor.date ? new Date(visitor.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Today';
     
@@ -277,7 +338,20 @@ export default function VisitorPass({
       formattedPhone = '91' + formattedPhone;
     }
     
-    // Update status in Firestore if possible
+    // Use official WhatsApp API URL which is highly reliable
+    const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(message)}`;
+    
+    // Attempt to open in new tab immediately to prevent popup blocker
+    const newWindow = window.open(whatsappUrl, '_blank');
+    
+    // Fallback for blocked popups or certain mobile browsers
+    if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+      window.location.href = whatsappUrl;
+    }
+
+    showToast('WhatsApp link opened successfully', 'info');
+
+    // Update status in Firestore if possible (in background)
     const vidToUpdate = visitor.visitId || visitor.visitorId || visitorId;
     if (vidToUpdate && organization?.id) {
       try {
@@ -290,19 +364,6 @@ export default function VisitorPass({
         console.warn('Could not update WhatsApp status for visit:', err);
       }
     }
-
-    // Use official WhatsApp API URL which is highly reliable
-    const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(message)}`;
-    
-    // Attempt to open in new tab
-    const newWindow = window.open(whatsappUrl, '_blank');
-    
-    // Fallback for blocked popups or certain mobile browsers
-    if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
-      window.location.href = whatsappUrl;
-    }
-
-    showToast('WhatsApp link opened successfully', 'info');
   };
 
   if (loading) {
@@ -330,8 +391,9 @@ export default function VisitorPass({
   }
 
   const vid = visitor.visitId || visitor.visitorId;
-  const passUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization?.id}&mode=checkout`;
   const isCheckedOut = visitor.status === 'CHECKED OUT';
+  const modeParam = visitor.status === 'PENDING' ? 'checkin' : 'checkout';
+  const passUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization?.id}&mode=${modeParam}`;
 
   return (
     <div className={`relative w-full flex items-center justify-center overflow-x-hidden ${standalone ? 'min-h-screen bg-slate-50 dark:bg-slate-950 p-2 sm:p-4' : 'p-0'}`}>
@@ -501,7 +563,7 @@ export default function VisitorPass({
 
           {/* Actions */}
           <div className="grid grid-cols-1 gap-4 sm:gap-5 mt-6 sm:mt-10">
-            {!isCheckedOut ? (
+            {visitor.status !== 'CHECKED OUT' && visitor.status !== 'DELETED' ? (
               <div className="space-y-4">
                  <div className="relative h-16 sm:h-20 bg-slate-100 dark:bg-slate-800 rounded-3xl p-1.5 flex items-center overflow-hidden border border-slate-200 dark:border-slate-700 shadow-inner group">
                    {/* Animated Track Overlay */}
@@ -515,7 +577,7 @@ export default function VisitorPass({
                        style={{ opacity: textOpacity }}
                        className="text-[10px] sm:text-xs font-black uppercase tracking-[0.3em] text-slate-400 group-hover:text-slate-500 transition-colors"
                      >
-                       Swipe Right to Check-out
+                       {visitor.status === 'PENDING' ? 'Swipe Right to Check-in' : 'Swipe Right to Check-out'}
                      </motion.span>
                    </div>
                    
@@ -527,7 +589,11 @@ export default function VisitorPass({
                      style={{ x }}
                      onDragEnd={(e, info) => {
                        if (info.offset.x > 200) {
-                         handleCheckOut();
+                         if (visitor.status === 'PENDING') {
+                           handleCheckIn();
+                         } else {
+                           handleCheckOut();
+                         }
                        } else {
                          x.set(0);
                        }
@@ -543,7 +609,7 @@ export default function VisitorPass({
                  </div>
                  
                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest text-center">
-                    Authorized Exit Protocol Required
+                    {visitor.status === 'PENDING' ? 'Authorized Entry Protocol Required' : 'Authorized Exit Protocol Required'}
                  </p>
               </div>
             ) : (

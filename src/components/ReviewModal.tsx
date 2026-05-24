@@ -88,13 +88,13 @@ export default function ReviewModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[9000] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[11000] flex items-start justify-center pt-10 pb-10 px-4 bg-slate-950/60 backdrop-blur-sm overflow-y-auto"
     >
       <motion.div
         initial={{ scale: 0.9, y: 20 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.9, y: 20 }}
-        className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden border border-gray-100 dark:border-slate-800 max-h-[90vh] sm:max-h-[95vh] flex flex-col"
+        className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden border border-gray-100 dark:border-slate-800 shrink-0 flex flex-col relative"
       >
         <div className="p-6 sm:p-8 space-y-6 sm:space-y-8 overflow-y-auto custom-scrollbar flex-1">
           <div className="flex justify-between items-start">

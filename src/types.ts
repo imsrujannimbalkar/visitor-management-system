@@ -1,4 +1,4 @@
-export type VisitorStatus = 'INSIDE' | 'CHECKED OUT' | 'DELETED';
+export type VisitorStatus = 'PENDING' | 'INSIDE' | 'CHECKED OUT' | 'DELETED';
 
 export type VisitorType = 
   | 'Donor' 
@@ -200,6 +200,7 @@ export interface Organization {
   autoSyncEnabled?: boolean;
   deactivated?: boolean;
   deactivatedAt?: string;
+  legalAccepted?: boolean;
   preRegSettings?: {
     purposes?: string[];
     visitorTypes?: string[];

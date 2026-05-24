@@ -214,14 +214,15 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
       
       const url = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
       
-      // Update status in Firestore
+      // Open immediately to prevent popup blocker
+      window.open(url, '_blank');
+      showToast(`WhatsApp link opened for ${inquiry.callerName}`, 'info');
+
+      // Update status in background
       await updateDoc(doc(db, 'organizations', organization.id, 'inquiries', inquiry.id), {
         whatsappStatus: 'SENT',
         whatsappSentAt: new Date().toISOString()
       });
-
-      window.open(url, '_blank');
-      showToast(`WhatsApp link opened for ${inquiry.callerName}`, 'info');
     } catch (error) {
       console.error('Error sending WhatsApp follow-up:', error);
       showToast('Failed to send WhatsApp follow-up', 'error');

@@ -128,6 +128,7 @@ export default function OrgSetup({ onComplete }: OrgSetupProps) {
         createdBy: auth.currentUser.uid,
         brandColor: brandColor,
         setupComplete: true,
+        legalAccepted: false,
         createdAt: new Date().toISOString()
       });
 

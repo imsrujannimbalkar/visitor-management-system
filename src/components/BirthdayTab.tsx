@@ -243,7 +243,11 @@ export default function BirthdayTab({ organizationId, visitors, donations, loadi
       
       const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(msg)}`;
 
-      // Update Firestore
+      // Open immediately to avoid popup blocker
+      window.open(whatsappUrl, '_blank');
+      showToast(`WhatsApp link opened for ${item.name}`, 'info');
+
+      // Update Firestore in background
       let collectionName = item.isDonation ? 'donations' : 'profiles';
       if (item.isPreReg) {
         collectionName = 'preRegistrations';
@@ -254,9 +258,6 @@ export default function BirthdayTab({ organizationId, visitors, donations, loadi
         whatsappStatus: 'SENT',
         whatsappSentAt: new Date().toISOString()
       });
-
-      window.open(whatsappUrl, '_blank');
-      showToast(`WhatsApp link opened for ${item.name}`, 'info');
     } catch (error) {
       console.error('Error tracking wish status:', error);
       showToast('Failed to update status', 'error');
@@ -385,8 +386,15 @@ export default function BirthdayTab({ organizationId, visitors, donations, loadi
                     </div>
                     <div className="flex items-center gap-3">
                        {item.whatsappStatus === 'SENT' ? (
-                         <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
-                           <CheckCircle2 className="h-5 w-5" />
+                         <div className="flex items-center gap-1.5 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100">
+                           <CheckCircle2 className="h-4 w-4" />
+                           <span className="text-[10px] font-black uppercase tracking-widest text-[#059669]">Redirected</span>
+                           <button 
+                             onClick={() => handleSendWish(item)}
+                             className="ml-1 text-emerald-400 hover:text-emerald-600 transition-colors"
+                           >
+                             <RotateCcw className="h-3 w-3" />
+                           </button>
                          </div>
                        ) : (
                          <button

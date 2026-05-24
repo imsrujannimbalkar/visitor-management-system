@@ -650,15 +650,23 @@ export default function App() {
     }
   }, [showLoader]);
   
+  const isSuperAdminValue = useMemo(() => user?.email === 'nimbalkar.srujan@gmail.com', [user]);
+  const { showToast } = useToast();
+  
+  useEffect(() => {
+    setIsSuperAdmin(isSuperAdminValue);
+  }, [isSuperAdminValue]);
+
   // Terms Acceptance Check
   useEffect(() => {
-    if (!showSplash && !showLoader && isAuthReady) {
-      const accepted = localStorage.getItem('vms_terms_accepted') === 'true';
-      if (!accepted) {
+    if (!showSplash && !showLoader && isAuthReady && organization) {
+      if (organization.legalAccepted === false && (user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN' || isSuperAdminValue)) {
         setShowTermsAcceptance(true);
+      } else {
+        setShowTermsAcceptance(false);
       }
     }
-  }, [showSplash, showLoader, isAuthReady]);
+  }, [showSplash, showLoader, isAuthReady, organization?.legalAccepted, user?.role, isSuperAdminValue]);
 
   // Handle Kiosk Assistance Approval
   useEffect(() => {
@@ -674,13 +682,6 @@ export default function App() {
       updateDoc(ref, { deleted: true });
     }
   }, [notifications, isKioskMode, user?.organizationId]);
-
-  const isSuperAdminValue = useMemo(() => user?.email === 'nimbalkar.srujan@gmail.com', [user]);
-  const { showToast } = useToast();
-  
-  useEffect(() => {
-    setIsSuperAdmin(isSuperAdminValue);
-  }, [isSuperAdminValue]);
 
   const effectiveOrgId = useMemo(() => {
     if (isSuperAdminValue && activeOrgId) return activeOrgId;
@@ -3110,6 +3111,19 @@ export default function App() {
     }
   };
 
+  const handleWhatsAppSent = async (visitorId: string) => {
+    const orgId = user?.organizationId || activeOrgId;
+    if (!orgId) return;
+    try {
+      await updateDoc(doc(db, 'organizations', orgId, 'visits', visitorId), {
+        whatsappStatus: 'SENT',
+        whatsappSentAt: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error('Failed to update WhatsApp status', err);
+    }
+  };
+
   const deleteVisitor = async (visitorId: string) => {
     const orgId = user?.organizationId;
     if (user?.role !== 'ADMIN' && user?.role !== 'MASTER_ADMIN') {
@@ -5516,6 +5530,7 @@ export default function App() {
                       onAddReview={(v) => setReviewVisitor(v)}
                       onAddDonation={handleAddDonationRecord}
                       onGeneratePass={handleGeneratePass}
+                      onWhatsAppSent={handleWhatsAppSent}
                       userRole={user.role}
                       loadingStates={loadingStates}
                       organizationName={organization?.name}
@@ -5727,6 +5742,7 @@ export default function App() {
                   onAddReview={(v) => setReviewVisitor(v)}
                   onAddDonation={handleAddDonationRecord}
                   onGeneratePass={handleGeneratePass}
+                  onWhatsAppSent={handleWhatsAppSent}
                   userRole={user.role}
                   loadingStates={loadingStates}
                   organizationName={organization?.name}
@@ -5821,6 +5837,7 @@ export default function App() {
                   onAddReview={(v) => setReviewVisitor(v)}
                   onAddDonation={handleAddDonationRecord}
                   onGeneratePass={handleGeneratePass}
+                  onWhatsAppSent={handleWhatsAppSent}
                   userRole={user.role}
                   loadingStates={loadingStates}
                   organizationName={organization?.name}
@@ -7235,8 +7252,16 @@ export default function App() {
         {showTermsAcceptance && (
           <LegalAcceptanceModal
             organizationName={organization?.name}
-            onAccept={() => {
-              localStorage.setItem('vms_terms_accepted', 'true');
+            onAccept={async () => {
+              if (organization?.id) {
+                try {
+                  await updateDoc(doc(db, 'organizations', organization.id), {
+                    legalAccepted: true
+                  });
+                } catch (err) {
+                  console.error('Failed to accept legal terms:', err);
+                }
+              }
               setShowTermsAcceptance(false);
               addToast('Welcome to the workspace. Legal conditions accepted.', 'success');
             }}

@@ -172,19 +172,18 @@ export default function PreRegistrationTab({
       
       const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(message)}`;
       
-      // Update Firestore status first
-      await updateDoc(doc(db, 'organizations', organizationId, 'preRegistrations', req.id), {
-        whatsappStatus: 'SENT',
-        whatsappSentAt: new Date().toISOString()
-      });
-
-      // Open WhatsApp in a new tab
+      // Open WhatsApp immediately to avoid popup blockers
       const newWindow = window.open(whatsappUrl, '_blank');
       if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
         window.location.href = whatsappUrl;
       }
-
       showToast(`WhatsApp link opened for ${req.name}`, 'info');
+
+      // Update Firestore status in background
+      await updateDoc(doc(db, 'organizations', organizationId, 'preRegistrations', req.id), {
+        whatsappStatus: 'SENT',
+        whatsappSentAt: new Date().toISOString()
+      });
     } catch (error) {
       console.error('Error sending WhatsApp:', error);
       showToast('Failed to update WhatsApp status', 'error');

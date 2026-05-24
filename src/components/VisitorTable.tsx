@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LogOut, Edit2, Search, Trash2, FileText, Phone, MessageCircle, History, ChevronDown, ChevronUp, User, MapPin, PenTool, CheckSquare, Square, Trash, CheckCircle, X, Calendar, Star, Heart, Shield, Clock, TrendingUp, Share2, ShieldCheck, Ticket, Gift, AlertTriangle } from 'lucide-react';
+import { LogOut, Edit2, Search, Trash2, FileText, Phone, MessageCircle, History, ChevronDown, ChevronUp, User, MapPin, PenTool, CheckSquare, Square, Trash, CheckCircle, X, Calendar, Star, Heart, Shield, Clock, TrendingUp, Share2, ShieldCheck, Ticket, Gift, AlertTriangle, RotateCcw } from 'lucide-react';
 import { Visitor, UserRole, Donation } from '../types';
 import { DEFAULT_WHATSAPP_TEMPLATES } from '../constants';
 import Swal from 'sweetalert2';
@@ -17,6 +17,7 @@ interface VisitorTableProps {
   onAddReview?: (visitor: Visitor) => void;
   onAddDonation?: (visitor: Visitor) => void;
   onGeneratePass?: (visitor: Visitor) => void;
+  onWhatsAppSent?: (visitorId: string) => void;
   userRole?: UserRole;
   loadingStates?: Record<string, boolean>;
   organizationName?: string;
@@ -37,6 +38,7 @@ export default function VisitorTable({
   onAddReview,
   onAddDonation,
   onGeneratePass,
+  onWhatsAppSent,
   userRole,
   loadingStates = {},
   organizationName = 'VMS Global',
@@ -179,6 +181,9 @@ export default function VisitorTable({
     }
     
     if (formattedPhone) {
+      if (onWhatsAppSent) {
+        onWhatsAppSent(visitor.visitorId || '');
+      }
       const url = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
       const win = window.open(url, '_blank');
       if (!win) {
@@ -455,13 +460,27 @@ export default function VisitorTable({
                             </button>
                          )}
                          {visitor.status === 'CHECKED OUT' && (
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); sendThankYou(visitor); }}
-                              className="p-2.5 bg-emerald-500 text-white hover:bg-emerald-600 rounded-[1rem] shadow-lg shadow-emerald-500/10 transition-all active:scale-95"
-                              title="Send Thank You Note"
-                            >
-                              <MessageCircle className="h-4 w-4" />
-                            </button>
+                            visitor.whatsappStatus === 'SENT' ? (
+                               <div className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 text-emerald-600 rounded-[1rem] border border-emerald-100">
+                                 <CheckCircle className="h-4 w-4" />
+                                 <span className="text-[9px] font-black uppercase tracking-widest hidden sm:inline">Redirected</span>
+                                 <button 
+                                   onClick={(e) => { e.stopPropagation(); sendThankYou(visitor); }}
+                                   className="ml-1 p-0.5 text-emerald-400 hover:text-emerald-600 transition-colors"
+                                   title="Resend Thank You Note"
+                                 >
+                                   <RotateCcw className="h-3 w-3" />
+                                 </button>
+                               </div>
+                            ) : (
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); sendThankYou(visitor); }}
+                                 className="flex items-center justify-center p-2.5 bg-emerald-500 text-white hover:bg-emerald-600 rounded-[1rem] shadow-lg shadow-emerald-500/10 transition-all active:scale-95"
+                                 title="Send Thank You Note"
+                               >
+                                 <MessageCircle className="h-4 w-4" />
+                               </button>
+                            )
                          )}
                          <button 
                            onClick={(e) => { e.stopPropagation(); toggleRow(visitor.visitorId); }}
