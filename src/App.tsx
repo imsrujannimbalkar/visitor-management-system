@@ -4544,8 +4544,7 @@ export default function App() {
     try {
       setLoadingStates(prev => ({ ...prev, [req.id]: true }));
       
-      // Use pre-registration ID as visit ID for 1:1 mapping
-      const visitId = req.id;
+      const visitId = `v_${Date.now()}`;
       const timestamp = new Date().toISOString();
       const date = new Date().toISOString().split('T')[0];
       const checkInTime = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
