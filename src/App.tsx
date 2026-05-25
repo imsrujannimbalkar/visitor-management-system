@@ -3875,32 +3875,14 @@ export default function App() {
     const activeVisit = visitors.find(v => (v.visitorId === passId || v.preRegistrationId === passId) && v.status === 'INSIDE');
     if (activeVisit) {
       await checkOutVisitor(activeVisit.visitorId, false);
-      return;
+    } else {
+       Swal.fire({
+          title: kioskLang === 'HI' ? 'नहीं मिला' : 'Not Found',
+          text: kioskLang === 'HI' ? 'इस QR कोड के लिए कोई सक्रिय विज़िट नहीं मिली।' : 'No active visit found for this QR code.',
+          icon: 'error',
+          confirmButtonColor: '#ef4444',
+       });
     }
-    
-    // Check if it's an approved PreRegistration (for fast check-in)
-    if (organization?.id) {
-      try {
-        const preRegRef = doc(db, 'organizations', organization.id, 'preRegistrations', passId);
-        const preRegSnap = await getDoc(preRegRef);
-        if (preRegSnap.exists()) {
-          const req = { id: preRegSnap.id, ...preRegSnap.data() } as PreRegistration;
-          if (req.status === 'APPROVED') {
-            await handleKioskPreRegCheckIn(req, '');
-            return;
-          }
-        }
-      } catch (err) {
-        console.warn('Failed to check preRegistration for QR code:', err);
-      }
-    }
-
-    Swal.fire({
-      title: kioskLang === 'HI' ? 'नहीं मिला' : 'Not Found',
-      text: kioskLang === 'HI' ? 'इस QR कोड के लिए कोई सक्रिय विज़िट या स्वीकृत पंजीकरण नहीं मिला।' : 'No active visit or approved registration found for this QR code.',
-      icon: 'error',
-      confirmButtonColor: '#ef4444',
-    });
   };
 
   const checkOutVisitor = async (visitorId: string, skipConfirm: boolean = false) => {

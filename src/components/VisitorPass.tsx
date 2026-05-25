@@ -209,32 +209,8 @@ export default function VisitorPass({
       showToast(reviewPromptMsg, 'success');
       return;
     }
-
     if (visitor.status === 'PENDING') {
-      setCheckingOut(true);
-      try {
-        if (!vid) throw new Error('Missing visitor ID');
-        const response = await fetch(`/api/visitors/${vid}/checkin`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            organizationId: organization.id
-          })
-        });
-        
-        if (!response.ok) {
-           throw new Error('Checkin failed via API');
-        }
-        
-        showToast(language === 'HI' ? 'चेक-इन सफल रहा।' : 'Check-in successful!', 'success');
-        
-        // Let the real-time listener update the state automatically
-        setTimeout(() => setCheckingOut(false), 2000);
-      } catch (err) {
-        console.error('Check-in failed:', err);
-        showToast('Check-in encountered an issue.', 'error');
-        setCheckingOut(false);
-      }
+      showToast(language === 'HI' ? 'चेक-आउट से पहले कृपया चेक-इन करें।' : 'Please check-in before checking out.', 'error');
       return;
     }
 
@@ -569,12 +545,12 @@ export default function VisitorPass({
                      style={{ width: x }}
                    />
 
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                      <motion.span 
                        style={{ opacity: textOpacity }}
                        className="text-[10px] sm:text-xs font-black uppercase tracking-[0.3em] text-slate-400 group-hover:text-slate-500 transition-colors"
                      >
-                       {visitor.status === 'PENDING' ? 'Swipe Right to Check-in' : 'Swipe Right to Check-out'}
+                       Swipe Right to Check-out
                      </motion.span>
                    </div>
                    
