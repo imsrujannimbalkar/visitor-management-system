@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Star, X, MessageSquare, Send, ExternalLink, AlertCircle } from 'lucide-react';
 import Swal from 'sweetalert2';
@@ -83,7 +84,7 @@ export default function ReviewModal({
     setIsSubmitting(false);
   };
 
-  return (
+  const modalContent = (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -210,4 +211,6 @@ export default function ReviewModal({
       </motion.div>
     </motion.div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 }

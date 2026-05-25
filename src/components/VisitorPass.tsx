@@ -30,6 +30,7 @@ interface VisitorPassProps {
   visitorId?: string;
   organizationId?: string;
   onClose?: () => void;
+  onCheckOut?: () => void;
   organization?: Organization | null;
   standalone?: boolean;
 }
@@ -39,6 +40,7 @@ export default function VisitorPass({
   visitorId, 
   organizationId, 
   onClose, 
+  onCheckOut,
   organization: initialOrg,
   standalone = false 
 }: VisitorPassProps) {
@@ -192,6 +194,11 @@ export default function VisitorPass({
   }, [visitor, loading, checkingOut, language]);
 
   const handleCheckOut = async () => {
+    if (onCheckOut) {
+      onCheckOut();
+      return;
+    }
+
     const vid = visitor?.visitId || visitor?.visitorId || visitorId;
     if (!visitor || !organization?.id || checkingOut) return;
     if (visitor.status === 'CHECKED OUT') {
@@ -202,8 +209,32 @@ export default function VisitorPass({
       showToast(reviewPromptMsg, 'success');
       return;
     }
+
     if (visitor.status === 'PENDING') {
-      showToast(language === 'HI' ? 'चेक-आउट से पहले कृपया चेक-इन करें।' : 'Please check-in before checking out.', 'error');
+      setCheckingOut(true);
+      try {
+        if (!vid) throw new Error('Missing visitor ID');
+        const response = await fetch(`/api/visitors/${vid}/checkin`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            organizationId: organization.id
+          })
+        });
+        
+        if (!response.ok) {
+           throw new Error('Checkin failed via API');
+        }
+        
+        showToast(language === 'HI' ? 'चेक-इन सफल रहा।' : 'Check-in successful!', 'success');
+        
+        // Let the real-time listener update the state automatically
+        setTimeout(() => setCheckingOut(false), 2000);
+      } catch (err) {
+        console.error('Check-in failed:', err);
+        showToast('Check-in encountered an issue.', 'error');
+        setCheckingOut(false);
+      }
       return;
     }
 
@@ -267,16 +298,30 @@ export default function VisitorPass({
   const handleShare = async () => {
     if (!visitor || !organization) return;
     const vid = visitor.visitId || visitor.visitorId;
-    const passUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization.id}&mode=checkout`;
+    const passUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization.id}`;
     const visitorName = visitor.name || visitor.visitorName || 'Visitor';
     const visitDate = visitor.date ? new Date(visitor.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Today';
     
     const template = organization.preRegSettings?.templates?.digitalPass || DEFAULT_WHATSAPP_TEMPLATES.digitalPass;
-    const message = template
+    const checkoutUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization.id}&mode=checkout`;
+    let message = template
       .replace(/{{name}}/g, visitorName)
       .replace(/{{date}}/g, visitDate)
       .replace(/{{location}}/g, organization.name)
-      .replace(/{{url}}/g, passUrl);
+      .replace(/{{url}}/g, passUrl)
+      .replace(/{{checkout_url}}/g, checkoutUrl);
+      
+    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(passUrl)}`;
+      
+    // Fallback if the legacy template doesn't include the checkout_url tag
+    if (!template.includes('{{checkout_url}}')) {
+       message += `\n\n🚪 *Ready to leave?*\nYou can check out using this direct link:\n👉 ${checkoutUrl}`;
+    }
+    
+    // Append QR Code image link directly so it shows up
+    if (!message.includes('api.qrserver.com')) {
+       message += `\n\n📷 *Direct QR Code Image:*\n${qrImageUrl}`;
+    }
     
     const phoneToUse = visitor.visitorPhone || visitor.phone;
     const digitsOnly = phoneToUse?.replace(/\D/g, '') || '';
@@ -524,12 +569,12 @@ export default function VisitorPass({
                      style={{ width: x }}
                    />
 
-                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                      <motion.span 
                        style={{ opacity: textOpacity }}
                        className="text-[10px] sm:text-xs font-black uppercase tracking-[0.3em] text-slate-400 group-hover:text-slate-500 transition-colors"
                      >
-                       Swipe Right to Check-out
+                       {visitor.status === 'PENDING' ? 'Swipe Right to Check-in' : 'Swipe Right to Check-out'}
                      </motion.span>
                    </div>
                    

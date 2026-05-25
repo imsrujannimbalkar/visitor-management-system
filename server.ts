@@ -452,6 +452,65 @@ app.put('/api/visitors/:id/checkout', asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Checked out successfully', visitor: updatedData });
 }));
 
+app.put('/api/visitors/:id/checkin', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { organizationId } = req.body;
+
+  if (!organizationId || typeof organizationId !== 'string') {
+    return res.status(400).json({ error: 'organizationId is required for checkin' });
+  }
+
+  // Find the pre-registration doc
+  const preRegRef = adminDb.collection('organizations').doc(organizationId).collection('preRegistrations').doc(id);
+  const preRegSnap = await safely(preRegRef.get(), getFallback);
+
+  if (!preRegSnap.exists) {
+    return res.status(404).json({ error: 'Pre-registration not found' });
+  }
+
+  const reqData = preRegSnap.data();
+
+  // Create visit record
+  const visitId = `v_${Date.now()}`;
+  const now = new Date().toISOString();
+  const dateStr = now.split('T')[0];
+  const checkInTime = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+  const visitData = {
+    visitId,
+    visitorPhone: reqData.phone || '',
+    visitorName: reqData.name || '',
+    visitorEmail: reqData.email || '',
+    visitorDOB: reqData.dob || '',
+    visitorAddress: reqData.address || '',
+    purpose: reqData.purpose || 'Other',
+    category: reqData.category || 'Guest',
+    notes: reqData.notes || '',
+    date: dateStr,
+    checkInTime,
+    status: 'INSIDE',
+    organizationId: organizationId,
+    createdBy: 'DIGITAL_PASS',
+    recordedBy: 'DIGITAL_PASS',
+    recordedByName: 'Self Check-in',
+    signature: '',
+    preRegistrationId: id,
+    createdAt: now,
+    updatedAt: now
+  };
+
+  await safely(adminDb.collection('organizations').doc(organizationId).collection('visits').doc(visitId).set(visitData), undefined);
+
+  // Update PreReg status
+  await safely(preRegRef.update({
+    status: 'CHECKED_IN',
+    processedAt: now,
+    processedBy: 'DIGITAL_PASS'
+  }), undefined);
+
+  res.json({ success: true, message: 'Checked in successfully', visit: visitData });
+}));
+
 app.post('/api/visitors/:id/review', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { organizationId, rating, comment } = req.body;

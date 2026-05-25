@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LogOut, Edit2, Search, Trash2, FileText, Phone, MessageCircle, History, ChevronDown, ChevronUp, User, MapPin, PenTool, CheckSquare, Square, Trash, CheckCircle, X, Calendar, Star, Heart, Shield, Clock, TrendingUp, Share2, ShieldCheck, Ticket, Gift, AlertTriangle, RotateCcw } from 'lucide-react';
+import { LogOut, Edit2, Search, Trash2, FileText, Phone, MessageCircle, History, ChevronDown, ChevronUp, User, MapPin, PenTool, CheckSquare, Square, Trash, CheckCircle, X, Calendar, Star, Heart, Shield, Clock, TrendingUp, Share2, ShieldCheck, Ticket, Gift, AlertTriangle, RotateCcw, Printer } from 'lucide-react';
 import { Visitor, UserRole, Donation } from '../types';
 import { DEFAULT_WHATSAPP_TEMPLATES } from '../constants';
 import Swal from 'sweetalert2';
@@ -17,6 +17,7 @@ interface VisitorTableProps {
   onAddReview?: (visitor: Visitor) => void;
   onAddDonation?: (visitor: Visitor) => void;
   onGeneratePass?: (visitor: Visitor) => void;
+  onPrintPass?: (visitor: Visitor) => void;
   onWhatsAppSent?: (visitorId: string) => void;
   userRole?: UserRole;
   loadingStates?: Record<string, boolean>;
@@ -38,6 +39,7 @@ export default function VisitorTable({
   onAddReview,
   onAddDonation,
   onGeneratePass,
+  onPrintPass,
   onWhatsAppSent,
   userRole,
   loadingStates = {},
@@ -435,13 +437,22 @@ export default function VisitorTable({
                             )}
                          </div>
                          {visitor.status === 'INSIDE' && (
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); onGeneratePass?.(visitor); }}
-                              className="p-2.5 bg-brand-blue text-white hover:bg-blue-600 rounded-[1rem] shadow-lg shadow-blue-500/10 transition-all active:scale-95"
-                              title="Generate Digital Pass"
-                            >
-                              <Ticket className="h-4 w-4" />
-                            </button>
+                            <>
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); onGeneratePass?.(visitor); }}
+                                 className="p-2.5 bg-brand-blue text-white hover:bg-blue-600 rounded-[1rem] shadow-lg shadow-blue-500/10 transition-all active:scale-95"
+                                 title="Generate Digital Pass"
+                               >
+                                 <Ticket className="h-4 w-4" />
+                               </button>
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); onPrintPass?.(visitor); }}
+                                 className="p-2.5 bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 rounded-[1rem] transition-all active:scale-95 border border-slate-200/50"
+                                 title="Print Badge"
+                               >
+                                 <Printer className="h-4 w-4" />
+                               </button>
+                            </>
                          )}
                          {visitor.status === 'INSIDE' && (
                             <button 
@@ -523,13 +534,22 @@ export default function VisitorTable({
                             </div>
                             <div className="flex flex-wrap items-center gap-3">
                               {visitor.status === 'INSIDE' && (
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); onGeneratePass?.(visitor); }}
-                                  className="flex items-center gap-3 px-8 py-3.5 bg-slate-900 text-white hover:bg-black rounded-[1.5rem] transition-all text-[11px] font-bold uppercase tracking-[0.2em] shadow-xl shadow-slate-100 active:scale-95"
-                                >
-                                  <ShieldCheck className="h-4 w-4 text-brand-blue" />
-                                  Digital Pass
-                                </button>
+                                <>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); onGeneratePass?.(visitor); }}
+                                    className="flex items-center gap-3 px-8 py-3.5 bg-slate-900 text-white hover:bg-black rounded-[1.5rem] transition-all text-[11px] font-bold uppercase tracking-[0.2em] shadow-xl shadow-slate-100 active:scale-95"
+                                  >
+                                    <ShieldCheck className="h-4 w-4 text-brand-blue" />
+                                    Digital Pass
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); onPrintPass?.(visitor); }}
+                                    className="flex items-center gap-3 px-8 py-3.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-100 rounded-[1.5rem] transition-all text-[11px] font-bold uppercase tracking-[0.2em] active:scale-95"
+                                  >
+                                    <Printer className="h-4 w-4" />
+                                    Print Badge
+                                  </button>
+                                </>
                               )}
                               {(userRole === 'ADMIN' || userRole === 'MASTER_ADMIN') && onAddDonation && (
                                 <button

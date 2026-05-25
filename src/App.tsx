@@ -69,7 +69,8 @@ import {
   ArrowRight,
   Phone,
   PhoneCall,
-  MessageCircle
+  MessageCircle,
+  Camera
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -94,6 +95,7 @@ import DonationsTab from './components/DonationsTab';
 import AppFeedbackModal from './components/AppFeedbackModal';
 import BugReportModal from './components/BugReportModal';
 import VisitorPass from './components/VisitorPass';
+import PrintablePassModal from './components/PrintablePassModal';
 import LegalCenter from './components/LegalPages';
 import ClockComponent from './components/Clock';
 import ProfileTab from './components/ProfileTab';
@@ -105,6 +107,7 @@ import NotificationsCenter from './components/NotificationsCenter';
 import PreRegistrationForm from './components/PreRegistrationForm';
 import PreRegistrationTab from './components/PreRegistrationTab';
 import KioskPreRegLookup from './components/KioskPreRegLookup';
+import { QRCheckOutScanner } from './components/QRCheckOutScanner';
 import InquiryTracker from './components/InquiryTracker';
 import LegalAcceptanceModal from './components/LegalAcceptanceModal';
 import { geminiService } from './services/geminiService';
@@ -693,6 +696,7 @@ export default function App() {
   const [showBugReport, setShowBugReport] = useState(false);
   const [showTermsAcceptance, setShowTermsAcceptance] = useState(false);
   const [showPassForVisitor, setShowPassForVisitor] = useState<any | null>(null);
+  const [showPrintablePass, setShowPrintablePass] = useState<Visitor | null>(null);
 
   const [newPurpose, setNewPurpose] = useState('');
   const [newCategory, setNewCategory] = useState('');
@@ -1449,8 +1453,17 @@ export default function App() {
               });
               addToast('Check-out successful! Please rate your experience.', 'success');
             } else {
-              const errorData = await response.json();
-              throw new Error(errorData.error || 'Checkout failed');
+              const contentType = response.headers.get("content-type");
+              if (contentType && contentType.includes("application/json")) {
+                const errorData = await response.json();
+                throw new Error(errorData?.error || 'Checkout failed');
+              } else {
+                const text = await response.text();
+                if (response.status === 404) {
+                   throw new Error('Already checked out or not found');
+                }
+                throw new Error('A server error occurred during checkout.');
+              }
             }
           } catch (error: any) {
             console.error('Auto-checkout error:', error);
@@ -3839,9 +3852,55 @@ export default function App() {
       phone: visitor.phone || visitor.visitorPhone,
       purpose: visitor.purpose,
       checkInTime: visitor.checkInTime,
+      category: visitor.category,
       date: visitor.date
     };
     setShowPassForVisitor(passData);
+  };
+
+  const handlePrintPass = (visitor: any) => {
+    const passData: any = {
+      ...visitor,
+      visitorId: visitor.visitorId || visitor.visitId || visitor.id,
+      visitId: visitor.visitId || visitor.visitorId || visitor.id,
+      organizationId: visitor.organizationId || user?.organizationId,
+      name: visitor.name || visitor.visitorName,
+      visitorName: visitor.name || visitor.visitorName,
+      category: visitor.category,
+    };
+    setShowPrintablePass(passData);
+  };
+
+  const handleScanCheckOut = async (passId: string) => {
+    const activeVisit = visitors.find(v => (v.visitorId === passId || v.preRegistrationId === passId) && v.status === 'INSIDE');
+    if (activeVisit) {
+      await checkOutVisitor(activeVisit.visitorId, false);
+      return;
+    }
+    
+    // Check if it's an approved PreRegistration (for fast check-in)
+    if (organization?.id) {
+      try {
+        const preRegRef = doc(db, 'organizations', organization.id, 'preRegistrations', passId);
+        const preRegSnap = await getDoc(preRegRef);
+        if (preRegSnap.exists()) {
+          const req = { id: preRegSnap.id, ...preRegSnap.data() } as PreRegistration;
+          if (req.status === 'APPROVED') {
+            await handleKioskPreRegCheckIn(req, '');
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to check preRegistration for QR code:', err);
+      }
+    }
+
+    Swal.fire({
+      title: kioskLang === 'HI' ? 'नहीं मिला' : 'Not Found',
+      text: kioskLang === 'HI' ? 'इस QR कोड के लिए कोई सक्रिय विज़िट या स्वीकृत पंजीकरण नहीं मिला।' : 'No active visit or approved registration found for this QR code.',
+      icon: 'error',
+      confirmButtonColor: '#ef4444',
+    });
   };
 
   const checkOutVisitor = async (visitorId: string, skipConfirm: boolean = false) => {
@@ -4789,7 +4848,7 @@ export default function App() {
                   className="flex-1 flex flex-col p-12 max-w-[1400px] mx-auto w-full gap-12"
                 >
                   {/* Action Cards */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                     <motion.button
                       whileHover={{ y: -10, scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
@@ -4815,6 +4874,28 @@ export default function App() {
                       <h3 className="text-3xl font-black text-gray-900 mb-2 italic uppercase">{kioskLang === 'EN' ? 'Pre-registered' : 'पूर्व-पंजीकृत'}</h3>
                       <p className="text-gray-400 font-bold text-xs uppercase tracking-widest">{kioskLang === 'EN' ? 'Quick Check-In' : 'त्वरित चेक-इन'}</p>
                     </motion.button>
+
+                    <QRCheckOutScanner
+                      onScan={handleScanCheckOut}
+                      lang={kioskLang}
+                      className="w-full h-full"
+                      customTrigger={
+                        <motion.button
+                          whileHover={{ y: -10, scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={(e) => {
+                            // Let the QRScanner's onClick handle it
+                          }}
+                          className="w-full h-full bg-white rounded-[3rem] p-12 shadow-xl border border-gray-100 flex flex-col items-center text-center group hover:shadow-2xl transition-all duration-500"
+                        >
+                          <div className="w-24 h-24 bg-purple-50 rounded-[2rem] flex items-center justify-center mb-8 shadow-inner group-hover:bg-purple-500 transition-colors duration-500">
+                            <Camera className="h-12 w-12 text-purple-500 group-hover:text-white transition-colors" />
+                          </div>
+                          <h3 className="text-3xl font-black text-gray-900 mb-2 italic uppercase">{kioskLang === 'EN' ? 'Scan Out' : 'स्कैन आउट'}</h3>
+                          <p className="text-gray-400 font-bold text-xs uppercase tracking-widest">{kioskLang === 'EN' ? 'Scan QR Pass to Exit' : 'बाहर जाने के लिए QR स्कैन करें'}</p>
+                        </motion.button>
+                      }
+                    />
 
                     <motion.button
                       whileHover={{ y: -10, scale: 1.02 }}
@@ -5530,6 +5611,7 @@ export default function App() {
                       onAddReview={(v) => setReviewVisitor(v)}
                       onAddDonation={handleAddDonationRecord}
                       onGeneratePass={handleGeneratePass}
+                      onPrintPass={handlePrintPass}
                       onWhatsAppSent={handleWhatsAppSent}
                       userRole={user.role}
                       loadingStates={loadingStates}
@@ -5689,13 +5771,16 @@ export default function App() {
                   <h2 className="text-4xl font-black text-slate-900 tracking-tighter uppercase italic">Active Visitors</h2>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">Operational Personnel Deployment</p>
                 </div>
-                <button
-                  onClick={() => setShowForm(true)}
-                  className="flex items-center justify-center gap-3 px-8 py-4 bg-brand-blue text-white font-black rounded-2xl hover:bg-brand-blue/90 transition-all shadow-xl shadow-blue-200/50 hover:shadow-lg active:scale-95 uppercase tracking-widest text-[10px]"
-                >
-                  <UserPlus className="h-4 w-4" />
-                  Register New Arrival
-                </button>
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  <QRCheckOutScanner onScan={handleScanCheckOut} lang="EN" />
+                  <button
+                    onClick={() => setShowForm(true)}
+                    className="flex items-center justify-center gap-3 px-8 py-4 bg-brand-blue text-white font-black rounded-2xl hover:bg-brand-blue/90 transition-all shadow-xl shadow-blue-200/50 hover:shadow-lg active:scale-95 uppercase tracking-widest text-[10px]"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    Register New Arrival
+                  </button>
+                </div>
               </div>
 
               <div className="bg-white/60 backdrop-blur-xl rounded-[2.5rem] shadow-2xl shadow-slate-100/50 border border-slate-100 overflow-hidden">
@@ -5742,6 +5827,7 @@ export default function App() {
                   onAddReview={(v) => setReviewVisitor(v)}
                   onAddDonation={handleAddDonationRecord}
                   onGeneratePass={handleGeneratePass}
+                  onPrintPass={handlePrintPass}
                   onWhatsAppSent={handleWhatsAppSent}
                   userRole={user.role}
                   loadingStates={loadingStates}
@@ -5837,6 +5923,7 @@ export default function App() {
                   onAddReview={(v) => setReviewVisitor(v)}
                   onAddDonation={handleAddDonationRecord}
                   onGeneratePass={handleGeneratePass}
+                  onPrintPass={handlePrintPass}
                   onWhatsAppSent={handleWhatsAppSent}
                   userRole={user.role}
                   loadingStates={loadingStates}
@@ -7273,9 +7360,20 @@ export default function App() {
             <VisitorPass 
               visitor={showPassForVisitor} 
               organization={organization}
-              onClose={() => setShowPassForVisitor(null)} 
+              onClose={() => setShowPassForVisitor(null)}
+              onCheckOut={async () => {
+                 setShowPassForVisitor(null);
+                 await checkOutVisitor(showPassForVisitor.visitorId || showPassForVisitor.visitId);
+              }}
             />
           </div>
+        )}
+        {showPrintablePass && organization && (
+          <PrintablePassModal
+            visitor={showPrintablePass}
+            organization={organization}
+            onClose={() => setShowPrintablePass(null)}
+          />
         )}
       </AnimatePresence>
 
