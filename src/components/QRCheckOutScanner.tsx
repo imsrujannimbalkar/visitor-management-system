@@ -12,6 +12,7 @@ interface QRCheckOutScannerProps {
 
 export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, lang = 'EN', className, customTrigger }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const isScanningRef = useRef(false);
 
@@ -21,6 +22,7 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, la
     const startScanner = async () => {
       if (isOpen && !scannerRef.current) {
          try {
+           setCameraError(null);
            scannerRef.current = new Html5Qrcode("qr-reader");
            await scannerRef.current.start(
              { facingMode: "environment" },
@@ -56,8 +58,12 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, la
              scannerRef.current = null;
              isScanningRef.current = false;
            }
-         } catch (err) {
+         } catch (err: any) {
            console.error("Failed to start QR scanner:", err);
+           if (!unmounted) {
+             const errMsg = err?.message || String(err);
+             setCameraError(errMsg);
+           }
          }
       }
     };
@@ -90,6 +96,20 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, la
       }
     };
   }, [isOpen, onScan]);
+
+  const handleRetry = async () => {
+    if (scannerRef.current) {
+      try {
+        await scannerRef.current.clear();
+      } catch (e) {}
+      scannerRef.current = null;
+    }
+    isScanningRef.current = false;
+    setCameraError(null);
+    // Restart scanner
+    setIsOpen(false);
+    setTimeout(() => setIsOpen(true), 150);
+  };
 
   return (
     <>
@@ -136,13 +156,74 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, la
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="aspect-square bg-black relative">
-                 <div id="qr-reader" className="w-full h-full"></div>
-                 <div className="absolute inset-x-0 bottom-8 text-center pointer-events-none">
-                     <p className="bg-black/50 text-white inline-block px-4 py-2 rounded-full font-medium text-sm backdrop-blur-sm">
-                       {lang === 'HI' ? 'पास के QR पर कैमरा केंद्रित करें' : 'Point camera at visitor pass QR'}
-                     </p>
-                 </div>
+              <div className="aspect-square bg-slate-950 relative overflow-hidden flex flex-col items-center justify-center">
+                 {!cameraError ? (
+                   <>
+                     <div id="qr-reader" className="w-full h-full"></div>
+                     <div className="absolute inset-x-0 bottom-8 text-center pointer-events-none z-10">
+                         <p className="bg-black/60 text-white inline-block px-4 py-2 rounded-full font-bold text-xs uppercase tracking-wider backdrop-blur-md">
+                           {lang === 'HI' ? 'पास के QR पर कैमरा केंद्रित करें' : 'Point camera at visitor pass QR'}
+                         </p>
+                     </div>
+                   </>
+                 ) : (
+                   <div className="absolute inset-0 bg-slate-900 border border-red-500/20 p-6 flex flex-col justify-between overflow-y-auto text-left">
+                     <div className="space-y-4">
+                       <div className="flex items-center gap-3">
+                         <div className="w-10 h-10 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center animate-pulse">
+                           <Camera className="w-5 h-5 text-red-400" />
+                         </div>
+                         <div>
+                           <h4 className="text-sm font-black text-red-400 uppercase tracking-wider">
+                             {lang === 'HI' ? 'कैमरा एक्सेस अवरुद्ध' : 'Camera Blocked / Restricted'}
+                           </h4>
+                           <span className="text-[10px] font-mono text-slate-500">
+                             NotAllowedError / Dismissed
+                           </span>
+                         </div>
+                       </div>
+
+                       <div className="space-y-2.5 text-xs text-slate-300 font-medium leading-relaxed">
+                         <p>
+                           {lang === 'HI'
+                             ? 'सैंडबॉक्स पूर्वावलोकन फ्रेम के अंदर कैमरा अनुमति अस्वीकार या अवरुद्ध है।'
+                             : 'Camera permission was dismissed, blocked, or is restricted inside this preview framing:'}
+                         </p>
+                         
+                         <ul className="list-disc pl-5 text-slate-400 space-y-1 text-[11px]">
+                           <li>
+                             {lang === 'HI' 
+                               ? 'अपने ब्राउज़र की एड्रेस बार पर लॉक (ताला) आइकन पर क्लिक करें और कैमरा को Allow / अनुमति दें।' 
+                               : 'Click the padlock or settings icon in your browser\'s address bar and set Camera to "Allow".'}
+                           </li>
+                           <li>
+                             {lang === 'HI'
+                               ? 'नीचे दिए गए बटन का उपयोग करके एप्लिकेशन को एक नए टैब में खोलें।'
+                               : 'Open this application in a new dedicated window/tab to bypass nested iframe restrictions.'}
+                           </li>
+                         </ul>
+                       </div>
+                     </div>
+
+                     <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-slate-800">
+                       <button
+                         onClick={handleRetry}
+                         className="w-full py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-center text-xs uppercase tracking-widest transition-all shadow-lg shadow-red-900/30"
+                       >
+                         {lang === 'HI' ? 'पुनः प्रयास करें' : 'Grant & Retry Scan'}
+                       </button>
+
+                       <a
+                         href={window.location.href}
+                         target="_blank"
+                         rel="noopener noreferrer"
+                         className="w-full py-3 bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 font-bold rounded-xl text-center text-xs uppercase tracking-widest transition-all block"
+                       >
+                         {lang === 'HI' ? 'नए टैब में खोलें ↗' : 'Open in New Tab ↗'}
+                       </a>
+                     </div>
+                   </div>
+                 )}
               </div>
             </motion.div>
           </motion.div>
