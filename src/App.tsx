@@ -1429,6 +1429,34 @@ export default function App() {
           // Check if we already tried this in this session to avoid race with VisitorPass
           const sessionKey = `checkout_${passId}`;
           if (sessionStorage.getItem(sessionKey)) return;
+
+          // Before attempting automatic check-out API call, fetch and verify the status of the visitor from Firestore
+          // If the visitor's current status is PENDING or APPROVED, they are checking IN or just viewing their pass,
+          // so we should bypass the checkout PUT call to avoid throwing an error.
+          try {
+            const visitRef = doc(db, 'organizations', orgId, 'visits', passId);
+            const visitSnap = await getDoc(visitRef);
+            
+            let currentStatus = '';
+            if (visitSnap.exists()) {
+              currentStatus = visitSnap.data()?.status;
+            } else {
+              const preRegRef = doc(db, 'organizations', orgId, 'preRegistrations', passId);
+              const preRegSnap = await getDoc(preRegRef);
+              if (preRegSnap.exists()) {
+                const preData = preRegSnap.data();
+                currentStatus = preData?.status === 'APPROVED' ? 'PENDING' : preData?.status === 'CHECKED_IN' ? 'INSIDE' : 'PENDING';
+              }
+            }
+
+            if (currentStatus === 'PENDING') {
+              // Bypass checking out as they are not inside yet
+              return;
+            }
+          } catch (e) {
+            console.warn('Error verifying status before auto-checkout:', e);
+          }
+
           sessionStorage.setItem(sessionKey, 'processing');
 
           try {
@@ -3872,10 +3900,33 @@ export default function App() {
   };
 
   const handleScanCheckOut = async (passId: string) => {
+    if (!organization?.id) return;
     const activeVisit = visitors.find(v => (v.visitorId === passId || v.preRegistrationId === passId) && v.status === 'INSIDE');
     if (activeVisit) {
       await checkOutVisitor(activeVisit.visitorId, false);
     } else {
+       try {
+         // Query checking if this passId corresponds to an approved pre-registration
+         const preRegRef = doc(db, 'organizations', organization.id, 'preRegistrations', passId);
+         const preRegSnap = await getDoc(preRegRef);
+         if (preRegSnap.exists()) {
+           const preRegData = { id: preRegSnap.id, ...preRegSnap.data() } as PreRegistration;
+           if (preRegData.status === 'APPROVED') {
+             // Let's check them in immediately! Using empty/placeholder signature as digital QR scan is highly authenticated
+             await handleKioskPreRegCheckIn(preRegData, "");
+             return;
+           } else if (preRegData.status === 'CHECKED_IN' || preRegData.status === 'COMPLETED') {
+             const correlatedVisit = visitors.find(v => v.preRegistrationId === passId && v.status === 'INSIDE');
+             if (correlatedVisit) {
+               await checkOutVisitor(correlatedVisit.visitorId, false);
+               return;
+             }
+           }
+         }
+       } catch (err) {
+         console.error('Error in QR scan helper check-in fallback:', err);
+       }
+
        Swal.fire({
           title: kioskLang === 'HI' ? 'नहीं मिला' : 'Not Found',
           text: kioskLang === 'HI' ? 'इस QR कोड के लिए कोई सक्रिय विज़िट नहीं मिली।' : 'No active visit found for this QR code.',

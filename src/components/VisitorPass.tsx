@@ -393,8 +393,9 @@ export default function VisitorPass({
   }
 
   const vid = visitor.visitId || visitor.visitorId;
-  const passUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization?.id}&mode=checkout`;
   const isCheckedOut = visitor.status === 'CHECKED OUT';
+  const isPending = visitor.status === 'PENDING';
+  const passUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization?.id}${isPending ? '' : '&mode=checkout'}`;
 
   return (
     <div className={`relative w-full flex items-center justify-center overflow-x-hidden ${standalone ? 'min-h-screen bg-slate-50 dark:bg-slate-950 p-2 sm:p-4' : 'p-0'}`}>
