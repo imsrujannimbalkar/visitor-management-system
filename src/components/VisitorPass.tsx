@@ -44,7 +44,25 @@ export default function VisitorPass({
   organization: initialOrg,
   standalone = false 
 }: VisitorPassProps) {
-  const [visitor, setVisitor] = useState<Visitor | null>(initialVisitor);
+  const [visitRecord, setVisitRecord] = useState<Visitor | null>(
+    initialVisitor && (initialVisitor as any).status !== 'APPROVED' ? initialVisitor : null
+  );
+  const [preRegRecord, setPreRegRecord] = useState<any | null>(
+    initialVisitor && (initialVisitor as any).status === 'APPROVED' ? {
+      ...initialVisitor,
+      visitorId: initialVisitor.visitorId || initialVisitor.visitId,
+      visitId: initialVisitor.visitId || initialVisitor.visitorId,
+      name: initialVisitor.name || initialVisitor.visitorName,
+      visitorName: initialVisitor.name || initialVisitor.visitorName,
+      visitorPhone: initialVisitor.phone || initialVisitor.visitorPhone,
+      phone: initialVisitor.phone || initialVisitor.visitorPhone,
+      date: initialVisitor.date || (initialVisitor as any).visitDate,
+      checkInTime: initialVisitor.checkInTime || 'Pending Check-In',
+      status: 'PENDING'
+    } : null
+  );
+
+  const visitor = visitRecord || preRegRecord;
   const [organization, setOrganization] = useState<Organization | null>(initialOrg || null);
   const [loading, setLoading] = useState(true);
   const [checkingOut, setCheckingOut] = useState(false);
@@ -81,15 +99,15 @@ export default function VisitorPass({
       const effectiveVisitorId = visitorId || initialVisitor?.visitId || initialVisitor?.visitorId;
       
       if (effectiveVisitorId && orgIdToFetch) {
-        let hasVisitData = false;
+        const isDirectVisit = { current: false };
 
         // Listener 1: Using direct visit document ID
         const visitRef = doc(db, 'organizations', orgIdToFetch, 'visits', effectiveVisitorId);
         unsubs.push(onSnapshot(visitRef, async (snapshot) => {
           if (snapshot.exists()) {
-            hasVisitData = true;
+            isDirectVisit.current = true;
             const data = snapshot.data();
-            setVisitor({ ...data, visitorId: snapshot.id, visitId: snapshot.id } as Visitor);
+            setVisitRecord({ ...data, visitorId: snapshot.id, visitId: snapshot.id } as Visitor);
             setError(null);
             setLoading(false);
           }
@@ -102,12 +120,13 @@ export default function VisitorPass({
         const q = query(visitsCollRef, where('preRegistrationId', '==', effectiveVisitorId));
         unsubs.push(onSnapshot(q, (snapshot) => {
           if (!snapshot.empty) {
-            hasVisitData = true;
             const visitDoc = snapshot.docs[0];
             const data = visitDoc.data();
-            setVisitor({ ...data, visitorId: visitDoc.id, visitId: visitDoc.id } as Visitor);
+            setVisitRecord({ ...data, visitorId: visitDoc.id, visitId: visitDoc.id } as Visitor);
             setError(null);
             setLoading(false);
+          } else if (!isDirectVisit.current) {
+            setVisitRecord(null);
           }
         }, (err) => {
           console.error('Real-time pass error (visit query):', err);
@@ -116,16 +135,17 @@ export default function VisitorPass({
         // Listener 3: Fallback PreRegistration document
         const preRegRef = doc(db, 'organizations', orgIdToFetch, 'preRegistrations', effectiveVisitorId);
         unsubs.push(onSnapshot(preRegRef, (snapshot) => {
-          // Only update from preReg if we haven't already found a checked-in visit
-          if (snapshot.exists() && !hasVisitData) {
+          if (snapshot.exists()) {
             const preData = snapshot.data();
             if (preData.status === 'APPROVED' || preData.status === 'CHECKED_IN' || preData.status === 'COMPLETED') {
-              setVisitor({ 
+              setPreRegRecord({ 
                 ...preData, 
                 visitorId: snapshot.id, 
                 visitId: snapshot.id,
+                name: preData.name,
                 visitorName: preData.name,
                 visitorPhone: preData.phone,
+                phone: preData.phone,
                 date: preData.visitDate,
                 checkInTime: preData.status === 'APPROVED' ? 'Pending Check-In' : 'Checked In',
                 status: preData.status === 'APPROVED' ? 'PENDING' : (preData.status === 'COMPLETED' ? 'CHECKED OUT' : 'INSIDE')
@@ -215,7 +235,11 @@ export default function VisitorPass({
       if (onCheckOut) {
         await onCheckOut();
         // Fallback for internal state if the modal is not destroyed
-        setVisitor({ ...visitor, status: 'CHECKED OUT' } as any);
+        if (visitRecord) {
+          setVisitRecord({ ...visitRecord, status: 'CHECKED OUT' } as any);
+        } else if (preRegRecord) {
+          setPreRegRecord({ ...preRegRecord, status: 'CHECKED OUT' } as any);
+        }
         return;
       }
 
@@ -431,7 +455,12 @@ export default function VisitorPass({
 
           <div className="mt-8 sm:mt-10 flex items-center justify-between relative z-10">
             <div className="flex flex-wrap gap-2">
-              {!isCheckedOut ? (
+              {visitor.status === 'PENDING' ? (
+                <div className="flex items-center gap-2 sm:gap-3 bg-amber-500/20 backdrop-blur-md px-3 sm:px-5 py-2 sm:py-2.5 rounded-2xl border border-amber-500/30">
+                  <div className="h-2 w-2 sm:h-2.5 sm:w-2.5 bg-amber-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(251,191,36,0.5)]" />
+                  <span className="text-[9px] sm:text-[11px] font-black uppercase tracking-widest text-amber-100">Pending Entry</span>
+                </div>
+              ) : visitor.status === 'INSIDE' ? (
                 <div className="flex items-center gap-2 sm:gap-3 bg-emerald-500/20 backdrop-blur-md px-3 sm:px-5 py-2 sm:py-2.5 rounded-2xl border border-emerald-500/30">
                   <div className="h-2 w-2 sm:h-2.5 sm:w-2.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
                   <span className="text-[9px] sm:text-[11px] font-black uppercase tracking-widest text-emerald-100">Inside Now</span>
@@ -531,7 +560,7 @@ export default function VisitorPass({
               <div className="flex items-center justify-center gap-1.5 px-6">
                 <span className="h-0.5 sm:h-1 w-4 sm:w-8 bg-brand-blue/20 rounded-full" />
                 <p className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none whitespace-nowrap">
-                  {isCheckedOut ? 'Departure confirmed' : 'Scan to check-out'}
+                  {visitor.status === 'PENDING' ? 'Scan at kiosk to check-in' : isCheckedOut ? 'Departure confirmed' : 'Scan to check-out'}
                 </p>
                 <span className="h-0.5 sm:h-1 w-4 sm:w-8 bg-brand-blue/20 rounded-full" />
               </div>
