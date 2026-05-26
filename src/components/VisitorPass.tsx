@@ -30,7 +30,7 @@ interface VisitorPassProps {
   visitorId?: string;
   organizationId?: string;
   onClose?: () => void;
-  onCheckOut?: () => void;
+  onCheckOut?: () => Promise<void> | void;
   organization?: Organization | null;
   standalone?: boolean;
 }
@@ -194,13 +194,9 @@ export default function VisitorPass({
   }, [visitor, loading, checkingOut, language]);
 
   const handleCheckOut = async () => {
-    if (onCheckOut) {
-      onCheckOut();
-      return;
-    }
-
     const vid = visitor?.visitId || visitor?.visitorId || visitorId;
-    if (!visitor || !organization?.id || checkingOut) return;
+    if (!visitor || checkingOut) return;
+
     if (visitor.status === 'CHECKED OUT') {
       setShowReviewModal(true);
       const reviewPromptMsg = language === 'HI'
@@ -216,6 +212,14 @@ export default function VisitorPass({
 
     setCheckingOut(true);
     try {
+      if (onCheckOut) {
+        await onCheckOut();
+        // Fallback for internal state if the modal is not destroyed
+        setVisitor({ ...visitor, status: 'CHECKED OUT' } as any);
+        return;
+      }
+
+      if (!organization?.id) throw new Error('Missing Organization');
       if (!vid) throw new Error('Missing visitor ID');
 
       // Use API for reliable checkout even if anonymous
@@ -386,7 +390,7 @@ export default function VisitorPass({
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          className="w-full max-w-[380px] sm:max-w-[440px] bg-white dark:bg-slate-900 rounded-[2rem] sm:rounded-[3rem] shadow-[0_40px_100px_-20px_rgba(0,0,0,0.25)] border border-slate-100 dark:border-slate-800 overflow-hidden relative mx-auto"
+          className={`w-full max-w-[380px] sm:max-w-[440px] bg-white dark:bg-slate-900 rounded-[2rem] sm:rounded-[3rem] shadow-[0_40px_100px_-20px_rgba(0,0,0,0.25)] border border-slate-100 dark:border-slate-800 overflow-hidden relative mx-auto ${showReviewModal ? 'hidden' : 'block'}`}
         >
         {/* Pass Top Section */}
         <div className="bg-gradient-to-br from-brand-blue via-indigo-600 to-violet-700 p-6 sm:p-10 text-white relative overflow-hidden">
@@ -536,7 +540,26 @@ export default function VisitorPass({
 
           {/* Actions */}
           <div className="grid grid-cols-1 gap-4 sm:gap-5 mt-6 sm:mt-10">
-            {!isCheckedOut && visitor.status !== 'PENDING' ? (
+            {visitor.status === 'PENDING' ? (
+              <div className="w-full py-4 sm:py-6 bg-slate-50 dark:bg-slate-800 text-brand-blue dark:text-brand-blue rounded-3xl font-black uppercase tracking-[0.3em] text-[10px] sm:text-[12px] flex items-center justify-center gap-2 border border-brand-blue/20 shadow-xl relative">
+                <div className="flex items-center gap-3 relative z-10">
+                  <div className="w-5 h-5 border-3 border-brand-blue border-t-transparent rounded-full animate-spin" />
+                  Pending Check-In
+                </div>
+              </div>
+            ) : isCheckedOut ? (
+              <div className="w-full py-4 sm:py-6 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-3xl font-black uppercase tracking-[0.3em] text-[10px] sm:text-[12px] flex flex-col items-center justify-center gap-2 border border-emerald-100 dark:border-emerald-500/20 shadow-xl overflow-hidden relative">
+                <motion.div 
+                  initial={{ scale: 0.5, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="flex items-center gap-3 relative z-10"
+                >
+                  <CheckCircle2 className="h-6 w-6" />
+                  Departure Confirmed
+                </motion.div>
+                <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500" />
+              </div>
+            ) : (
               <div className="space-y-4">
                  <div className="relative h-16 sm:h-20 bg-slate-100 dark:bg-slate-800 rounded-3xl p-1.5 flex items-center overflow-hidden border border-slate-200 dark:border-slate-700 shadow-inner group">
                    {/* Animated Track Overlay */}
@@ -580,18 +603,6 @@ export default function VisitorPass({
                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest text-center">
                     Authorized Exit Protocol Required
                  </p>
-              </div>
-            ) : (
-              <div className="w-full py-4 sm:py-6 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-3xl font-black uppercase tracking-[0.3em] text-[10px] sm:text-[12px] flex flex-col items-center justify-center gap-2 border border-emerald-100 dark:border-emerald-500/20 shadow-xl overflow-hidden relative">
-                <motion.div 
-                  initial={{ scale: 0.5, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  className="flex items-center gap-3 relative z-10"
-                >
-                  <CheckCircle2 className="h-6 w-6" />
-                  Departure Confirmed
-                </motion.div>
-                <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500" />
               </div>
             )}
             
