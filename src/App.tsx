@@ -1486,44 +1486,7 @@ export default function App() {
             }
           } catch (error: any) {
             console.error('Auto-checkout error:', error);
-            let errorTitle = 'Check-out Status';
-            let errorText = error.message || 'We could not complete your automatic check-out.';
-            
-            const errMsg = error.message?.toLowerCase() || '';
-            if (errMsg.includes('not found') || errMsg.includes('already checked out')) {
-              errorTitle = 'Check-out Already Complete';
-              errorText = 'We couldn\'t find an active visit for this link. You may have already checked out or the session has expired.';
-              
-              // No need to show error for "already complete" as it's not really an error for the user
-              Swal.fire({
-                title: errorTitle,
-                text: errorText,
-                icon: 'info',
-                background: theme === 'dark' ? '#1e293b' : '#ffffff',
-                color: theme === 'dark' ? '#ffffff' : '#000000',
-                confirmButtonText: 'OK',
-                confirmButtonColor: '#3b82f6',
-                customClass: {
-                  popup: 'rounded-[2rem]',
-                  confirmButton: 'rounded-xl px-10 py-3 font-bold'
-                }
-              });
-              return;
-            }
-
-            Swal.fire({
-              title: errorTitle,
-              text: errorText,
-              icon: 'error',
-              background: theme === 'dark' ? '#1e293b' : '#ffffff',
-              color: theme === 'dark' ? '#ffffff' : '#000000',
-              confirmButtonText: 'OK',
-              confirmButtonColor: '#3b82f6',
-              customClass: {
-                popup: 'rounded-[2rem]',
-                confirmButton: 'rounded-xl px-10 py-3 font-bold'
-              }
-            });
+            // Quietly handle errors in auto-checkout without flashing intrusive error popup alerts to the user
           }
         }
       } else {

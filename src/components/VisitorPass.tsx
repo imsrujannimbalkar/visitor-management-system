@@ -137,7 +137,7 @@ export default function VisitorPass({
         unsubs.push(onSnapshot(preRegRef, (snapshot) => {
           if (snapshot.exists()) {
             const preData = snapshot.data();
-            if (preData.status === 'APPROVED' || preData.status === 'CHECKED_IN' || preData.status === 'COMPLETED') {
+            if (preData.status === 'APPROVED') {
               setPreRegRecord({ 
                 ...preData, 
                 visitorId: snapshot.id, 
@@ -147,11 +147,15 @@ export default function VisitorPass({
                 visitorPhone: preData.phone,
                 phone: preData.phone,
                 date: preData.visitDate,
-                checkInTime: preData.status === 'APPROVED' ? 'Pending Check-In' : 'Checked In',
-                status: preData.status === 'APPROVED' ? 'PENDING' : (preData.status === 'COMPLETED' ? 'CHECKED OUT' : 'INSIDE')
+                checkInTime: 'Pending Check-In',
+                status: 'PENDING'
               } as any);
               setError(null);
               setLoading(false);
+            } else {
+              // If already checked in or completed, we must use the official visits collection record (Listener 2)
+              // This ensures we only use the official active visit document and visitId as the single source of truth.
+              setPreRegRecord(null);
             }
           }
         }, (err) => {
