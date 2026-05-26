@@ -30,7 +30,7 @@ interface VisitorPassProps {
   visitorId?: string;
   organizationId?: string;
   onClose?: () => void;
-  onCheckOut?: () => Promise<void> | void;
+  onCheckOut?: () => void;
   organization?: Organization | null;
   standalone?: boolean;
 }
@@ -44,25 +44,7 @@ export default function VisitorPass({
   organization: initialOrg,
   standalone = false 
 }: VisitorPassProps) {
-  const [visitRecord, setVisitRecord] = useState<Visitor | null>(
-    initialVisitor && (initialVisitor as any).status !== 'APPROVED' ? initialVisitor : null
-  );
-  const [preRegRecord, setPreRegRecord] = useState<any | null>(
-    initialVisitor && (initialVisitor as any).status === 'APPROVED' ? {
-      ...initialVisitor,
-      visitorId: initialVisitor.visitorId || initialVisitor.visitId,
-      visitId: initialVisitor.visitId || initialVisitor.visitorId,
-      name: initialVisitor.name || initialVisitor.visitorName,
-      visitorName: initialVisitor.name || initialVisitor.visitorName,
-      visitorPhone: initialVisitor.phone || initialVisitor.visitorPhone,
-      phone: initialVisitor.phone || initialVisitor.visitorPhone,
-      date: initialVisitor.date || (initialVisitor as any).visitDate,
-      checkInTime: initialVisitor.checkInTime || 'Pending Check-In',
-      status: 'PENDING'
-    } : null
-  );
-
-  const visitor = visitRecord || preRegRecord;
+  const [visitor, setVisitor] = useState<Visitor | null>(initialVisitor);
   const [organization, setOrganization] = useState<Organization | null>(initialOrg || null);
   const [loading, setLoading] = useState(true);
   const [checkingOut, setCheckingOut] = useState(false);
@@ -99,15 +81,15 @@ export default function VisitorPass({
       const effectiveVisitorId = visitorId || initialVisitor?.visitId || initialVisitor?.visitorId;
       
       if (effectiveVisitorId && orgIdToFetch) {
-        const isDirectVisit = { current: false };
+        let hasVisitData = false;
 
         // Listener 1: Using direct visit document ID
         const visitRef = doc(db, 'organizations', orgIdToFetch, 'visits', effectiveVisitorId);
         unsubs.push(onSnapshot(visitRef, async (snapshot) => {
           if (snapshot.exists()) {
-            isDirectVisit.current = true;
+            hasVisitData = true;
             const data = snapshot.data();
-            setVisitRecord({ ...data, visitorId: snapshot.id, visitId: snapshot.id } as Visitor);
+            setVisitor({ ...data, visitorId: snapshot.id, visitId: snapshot.id } as Visitor);
             setError(null);
             setLoading(false);
           }
@@ -120,13 +102,12 @@ export default function VisitorPass({
         const q = query(visitsCollRef, where('preRegistrationId', '==', effectiveVisitorId));
         unsubs.push(onSnapshot(q, (snapshot) => {
           if (!snapshot.empty) {
+            hasVisitData = true;
             const visitDoc = snapshot.docs[0];
             const data = visitDoc.data();
-            setVisitRecord({ ...data, visitorId: visitDoc.id, visitId: visitDoc.id } as Visitor);
+            setVisitor({ ...data, visitorId: visitDoc.id, visitId: visitDoc.id } as Visitor);
             setError(null);
             setLoading(false);
-          } else if (!isDirectVisit.current) {
-            setVisitRecord(null);
           }
         }, (err) => {
           console.error('Real-time pass error (visit query):', err);
@@ -135,27 +116,22 @@ export default function VisitorPass({
         // Listener 3: Fallback PreRegistration document
         const preRegRef = doc(db, 'organizations', orgIdToFetch, 'preRegistrations', effectiveVisitorId);
         unsubs.push(onSnapshot(preRegRef, (snapshot) => {
-          if (snapshot.exists()) {
+          // Only update from preReg if we haven't already found a checked-in visit
+          if (snapshot.exists() && !hasVisitData) {
             const preData = snapshot.data();
-            if (preData.status === 'APPROVED') {
-              setPreRegRecord({ 
+            if (preData.status === 'APPROVED' || preData.status === 'CHECKED_IN' || preData.status === 'COMPLETED') {
+              setVisitor({ 
                 ...preData, 
                 visitorId: snapshot.id, 
                 visitId: snapshot.id,
-                name: preData.name,
                 visitorName: preData.name,
                 visitorPhone: preData.phone,
-                phone: preData.phone,
                 date: preData.visitDate,
-                checkInTime: 'Pending Check-In',
-                status: 'PENDING'
+                checkInTime: preData.status === 'APPROVED' ? 'Pending Check-In' : 'Checked In',
+                status: preData.status === 'APPROVED' ? 'PENDING' : (preData.status === 'COMPLETED' ? 'CHECKED OUT' : 'INSIDE')
               } as any);
               setError(null);
               setLoading(false);
-            } else {
-              // If already checked in or completed, we must use the official visits collection record (Listener 2)
-              // This ensures we only use the official active visit document and visitId as the single source of truth.
-              setPreRegRecord(null);
             }
           }
         }, (err) => {
@@ -218,9 +194,13 @@ export default function VisitorPass({
   }, [visitor, loading, checkingOut, language]);
 
   const handleCheckOut = async () => {
-    const vid = visitor?.visitId || visitor?.visitorId || visitorId;
-    if (!visitor || checkingOut) return;
+    if (onCheckOut) {
+      onCheckOut();
+      return;
+    }
 
+    const vid = visitor?.visitId || visitor?.visitorId || visitorId;
+    if (!visitor || !organization?.id || checkingOut) return;
     if (visitor.status === 'CHECKED OUT') {
       setShowReviewModal(true);
       const reviewPromptMsg = language === 'HI'
@@ -236,18 +216,6 @@ export default function VisitorPass({
 
     setCheckingOut(true);
     try {
-      if (onCheckOut) {
-        await onCheckOut();
-        // Fallback for internal state if the modal is not destroyed
-        if (visitRecord) {
-          setVisitRecord({ ...visitRecord, status: 'CHECKED OUT' } as any);
-        } else if (preRegRecord) {
-          setPreRegRecord({ ...preRegRecord, status: 'CHECKED OUT' } as any);
-        }
-        return;
-      }
-
-      if (!organization?.id) throw new Error('Missing Organization');
       if (!vid) throw new Error('Missing visitor ID');
 
       // Use API for reliable checkout even if anonymous
@@ -397,18 +365,28 @@ export default function VisitorPass({
   }
 
   const vid = visitor.visitId || visitor.visitorId;
+  const passUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization?.id}&mode=checkout`;
   const isCheckedOut = visitor.status === 'CHECKED OUT';
-  const isPending = visitor.status === 'PENDING';
-  const passUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization?.id}${isPending ? '' : '&mode=checkout'}`;
 
   return (
     <div className={`relative w-full flex items-center justify-center overflow-x-hidden ${standalone ? 'min-h-screen bg-slate-50 dark:bg-slate-950 p-2 sm:p-4' : 'p-0'}`}>
+      {standalone && (
+        <div className="absolute top-4 left-4 z-50">
+          <button 
+            onClick={() => window.location.href = '/'}
+            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-900 shadow-xl rounded-xl border border-slate-100 dark:border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-brand-blue transition-all active:scale-95"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            VMS Home
+          </button>
+        </div>
+      )}
       
       <div className="w-full flex items-center justify-center py-2 sm:py-6">
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          className={`w-full max-w-[380px] sm:max-w-[440px] bg-white dark:bg-slate-900 rounded-[2rem] sm:rounded-[3rem] shadow-[0_40px_100px_-20px_rgba(0,0,0,0.25)] border border-slate-100 dark:border-slate-800 overflow-hidden relative mx-auto ${showReviewModal ? 'hidden' : 'block'}`}
+          className="w-full max-w-[380px] sm:max-w-[440px] bg-white dark:bg-slate-900 rounded-[2rem] sm:rounded-[3rem] shadow-[0_40px_100px_-20px_rgba(0,0,0,0.25)] border border-slate-100 dark:border-slate-800 overflow-hidden relative mx-auto"
         >
         {/* Pass Top Section */}
         <div className="bg-gradient-to-br from-brand-blue via-indigo-600 to-violet-700 p-6 sm:p-10 text-white relative overflow-hidden">
@@ -449,12 +427,7 @@ export default function VisitorPass({
 
           <div className="mt-8 sm:mt-10 flex items-center justify-between relative z-10">
             <div className="flex flex-wrap gap-2">
-              {visitor.status === 'PENDING' ? (
-                <div className="flex items-center gap-2 sm:gap-3 bg-amber-500/20 backdrop-blur-md px-3 sm:px-5 py-2 sm:py-2.5 rounded-2xl border border-amber-500/30">
-                  <div className="h-2 w-2 sm:h-2.5 sm:w-2.5 bg-amber-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(251,191,36,0.5)]" />
-                  <span className="text-[9px] sm:text-[11px] font-black uppercase tracking-widest text-amber-100">Pending Entry</span>
-                </div>
-              ) : visitor.status === 'INSIDE' ? (
+              {!isCheckedOut ? (
                 <div className="flex items-center gap-2 sm:gap-3 bg-emerald-500/20 backdrop-blur-md px-3 sm:px-5 py-2 sm:py-2.5 rounded-2xl border border-emerald-500/30">
                   <div className="h-2 w-2 sm:h-2.5 sm:w-2.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
                   <span className="text-[9px] sm:text-[11px] font-black uppercase tracking-widest text-emerald-100">Inside Now</span>
@@ -554,7 +527,7 @@ export default function VisitorPass({
               <div className="flex items-center justify-center gap-1.5 px-6">
                 <span className="h-0.5 sm:h-1 w-4 sm:w-8 bg-brand-blue/20 rounded-full" />
                 <p className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none whitespace-nowrap">
-                  {visitor.status === 'PENDING' ? 'Scan at kiosk to check-in' : isCheckedOut ? 'Departure confirmed' : 'Scan to check-out'}
+                  {isCheckedOut ? 'Departure confirmed' : 'Scan to check-out'}
                 </p>
                 <span className="h-0.5 sm:h-1 w-4 sm:w-8 bg-brand-blue/20 rounded-full" />
               </div>
@@ -563,26 +536,7 @@ export default function VisitorPass({
 
           {/* Actions */}
           <div className="grid grid-cols-1 gap-4 sm:gap-5 mt-6 sm:mt-10">
-            {visitor.status === 'PENDING' ? (
-              <div className="w-full py-4 sm:py-6 bg-slate-50 dark:bg-slate-800 text-brand-blue dark:text-brand-blue rounded-3xl font-black uppercase tracking-[0.3em] text-[10px] sm:text-[12px] flex items-center justify-center gap-2 border border-brand-blue/20 shadow-xl relative">
-                <div className="flex items-center gap-3 relative z-10">
-                  <div className="w-5 h-5 border-3 border-brand-blue border-t-transparent rounded-full animate-spin" />
-                  Pending Check-In
-                </div>
-              </div>
-            ) : isCheckedOut ? (
-              <div className="w-full py-4 sm:py-6 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-3xl font-black uppercase tracking-[0.3em] text-[10px] sm:text-[12px] flex flex-col items-center justify-center gap-2 border border-emerald-100 dark:border-emerald-500/20 shadow-xl overflow-hidden relative">
-                <motion.div 
-                  initial={{ scale: 0.5, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  className="flex items-center gap-3 relative z-10"
-                >
-                  <CheckCircle2 className="h-6 w-6" />
-                  Departure Confirmed
-                </motion.div>
-                <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500" />
-              </div>
-            ) : (
+            {!isCheckedOut && visitor.status !== 'PENDING' ? (
               <div className="space-y-4">
                  <div className="relative h-16 sm:h-20 bg-slate-100 dark:bg-slate-800 rounded-3xl p-1.5 flex items-center overflow-hidden border border-slate-200 dark:border-slate-700 shadow-inner group">
                    {/* Animated Track Overlay */}
@@ -626,6 +580,18 @@ export default function VisitorPass({
                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest text-center">
                     Authorized Exit Protocol Required
                  </p>
+              </div>
+            ) : (
+              <div className="w-full py-4 sm:py-6 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-3xl font-black uppercase tracking-[0.3em] text-[10px] sm:text-[12px] flex flex-col items-center justify-center gap-2 border border-emerald-100 dark:border-emerald-500/20 shadow-xl overflow-hidden relative">
+                <motion.div 
+                  initial={{ scale: 0.5, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="flex items-center gap-3 relative z-10"
+                >
+                  <CheckCircle2 className="h-6 w-6" />
+                  Departure Confirmed
+                </motion.div>
+                <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500" />
               </div>
             )}
             
