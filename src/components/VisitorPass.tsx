@@ -399,17 +399,6 @@ export default function VisitorPass({
 
   return (
     <div className={`relative w-full flex items-center justify-center overflow-x-hidden ${standalone ? 'min-h-screen bg-slate-50 dark:bg-slate-950 p-2 sm:p-4' : 'p-0'}`}>
-      {standalone && (
-        <div className="absolute top-4 left-4 z-50">
-          <button 
-            onClick={() => window.location.href = '/'}
-            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-900 shadow-xl rounded-xl border border-slate-100 dark:border-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-brand-blue transition-all active:scale-95"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            VMS Home
-          </button>
-        </div>
-      )}
       
       <div className="w-full flex items-center justify-center py-2 sm:py-6">
         <motion.div

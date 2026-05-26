@@ -1430,28 +1430,19 @@ export default function App() {
           const sessionKey = `checkout_${passId}`;
           if (sessionStorage.getItem(sessionKey)) return;
 
-          // Before attempting automatic check-out API call, fetch and verify the status of the visitor from Firestore
+          // Before attempting automatic check-out API call, fetch and verify the status of the visitor from the server securely.
           // If the visitor's current status is PENDING or APPROVED, they are checking IN or just viewing their pass,
           // so we should bypass the checkout PUT call to avoid throwing an error.
           try {
-            const visitRef = doc(db, 'organizations', orgId, 'visits', passId);
-            const visitSnap = await getDoc(visitRef);
-            
-            let currentStatus = '';
-            if (visitSnap.exists()) {
-              currentStatus = visitSnap.data()?.status;
-            } else {
-              const preRegRef = doc(db, 'organizations', orgId, 'preRegistrations', passId);
-              const preRegSnap = await getDoc(preRegRef);
-              if (preRegSnap.exists()) {
-                const preData = preRegSnap.data();
-                currentStatus = preData?.status === 'APPROVED' ? 'PENDING' : preData?.status === 'CHECKED_IN' ? 'INSIDE' : 'PENDING';
+            const statusRes = await fetch(`/api/organizations/${orgId}/visitor-status/${passId}`);
+            if (statusRes.ok) {
+              const statusData = await statusRes.json();
+              const currentStatus = statusData.status; // e.g., PENDING, APPROVED, CHECKED_IN, INSIDE, CHECKED OUT
+              
+              if (currentStatus === 'PENDING' || currentStatus === 'APPROVED') {
+                // Bypass checking out as they are not inside yet
+                return;
               }
-            }
-
-            if (currentStatus === 'PENDING') {
-              // Bypass checking out as they are not inside yet
-              return;
             }
           } catch (e) {
             console.warn('Error verifying status before auto-checkout:', e);
@@ -3906,19 +3897,27 @@ export default function App() {
       await checkOutVisitor(activeVisit.visitorId, false);
     } else {
        try {
-         // Query checking if this passId corresponds to an approved pre-registration
-         const preRegRef = doc(db, 'organizations', organization.id, 'preRegistrations', passId);
-         const preRegSnap = await getDoc(preRegRef);
-         if (preRegSnap.exists()) {
-           const preRegData = { id: preRegSnap.id, ...preRegSnap.data() } as PreRegistration;
-           if (preRegData.status === 'APPROVED') {
-             // Let's check them in immediately! Using empty/placeholder signature as digital QR scan is highly authenticated
-             await handleKioskPreRegCheckIn(preRegData, "");
-             return;
-           } else if (preRegData.status === 'CHECKED_IN' || preRegData.status === 'COMPLETED') {
-             const correlatedVisit = visitors.find(v => v.preRegistrationId === passId && v.status === 'INSIDE');
-             if (correlatedVisit) {
-               await checkOutVisitor(correlatedVisit.visitorId, false);
+         // Check with secure server-side API to determine status
+         const statusRes = await fetch(`/api/organizations/${organization.id}/visitor-status/${passId}`);
+         if (statusRes.ok) {
+           const statusData = await statusRes.json();
+           if (statusData.type === 'preRegistration') {
+             const preRegData = { id: statusData.data.id, ...statusData.data } as PreRegistration;
+             if (preRegData.status === 'APPROVED') {
+               // Let's check them in immediately! Using empty/placeholder signature as digital QR scan is highly authenticated
+               await handleKioskPreRegCheckIn(preRegData, "");
+               return;
+             } else if (preRegData.status === 'CHECKED_IN' || preRegData.status === 'COMPLETED') {
+               const correlatedVisit = visitors.find(v => v.preRegistrationId === passId && v.status === 'INSIDE');
+               if (correlatedVisit) {
+                 await checkOutVisitor(correlatedVisit.visitorId, false);
+                 return;
+               }
+             }
+           } else if (statusData.type === 'visit') {
+             // If they are inside, check them out
+             if (statusData.status === 'INSIDE') {
+               await checkOutVisitor(statusData.data.visitId || statusData.data.visitorId || statusData.data.id, false);
                return;
              }
            }
@@ -3937,7 +3936,7 @@ export default function App() {
   };
 
   const checkOutVisitor = async (visitorId: string, skipConfirm: boolean = false) => {
-    const orgId = user?.organizationId;
+    const orgId = user?.organizationId || organization?.id;
     const visitor = visitors.find(v => v.visitorId === visitorId);
     
     if (!skipConfirm) {

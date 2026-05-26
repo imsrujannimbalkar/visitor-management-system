@@ -452,6 +452,70 @@ app.put('/api/visitors/:id/checkout', asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Checked out successfully', visitor: updatedData });
 }));
 
+app.get('/api/organizations/:orgId/visitor-status/:id', asyncHandler(async (req, res) => {
+  const { orgId, id } = req.params;
+  if (!orgId || !id) {
+    return res.status(400).json({ error: 'orgId and id are required' });
+  }
+
+  if (!adminDb) {
+    return res.status(500).json({ error: 'Database service is disconnected' });
+  }
+
+  // 1. Try visits collection direct ID
+  let visitRef = adminDb.collection('organizations').doc(orgId).collection('visits').doc(id);
+  let visitSnap = await safely(visitRef.get(), getFallback);
+
+  if (visitSnap && visitSnap.exists) {
+    const data = visitSnap.data();
+    return res.json({
+      type: 'visit',
+      status: data?.status || 'UNKNOWN',
+      name: data?.visitorName || data?.name || '',
+      phone: data?.visitorPhone || data?.phone || '',
+      data: { id: visitSnap.id, ...data }
+    });
+  }
+
+  // Else try queries on visits (by visitorId, visitId, or preRegistrationId)
+  const visitsColl = adminDb.collection('organizations').doc(orgId).collection('visits');
+  let q = await safely(visitsColl.where('visitId', '==', id).limit(1).get(), getFallback);
+  if (!q || q.empty) {
+    q = await safely(visitsColl.where('visitorId', '==', id).limit(1).get(), getFallback);
+  }
+  if (!q || q.empty) {
+    q = await safely(visitsColl.where('preRegistrationId', '==', id).limit(1).get(), getFallback);
+  }
+
+  if (q && !q.empty) {
+    const docData = q.docs[0].data();
+    return res.json({
+      type: 'visit',
+      status: docData?.status || 'UNKNOWN',
+      name: docData?.visitorName || docData?.name || '',
+      phone: docData?.visitorPhone || docData?.phone || '',
+      data: { id: q.docs[0].id, ...docData }
+    });
+  }
+
+  // 2. Try preRegistrations collection
+  const preRegRef = adminDb.collection('organizations').doc(orgId).collection('preRegistrations').doc(id);
+  const preRegSnap = await safely(preRegRef.get(), getFallback);
+
+  if (preRegSnap && preRegSnap.exists) {
+    const data = preRegSnap.data();
+    return res.json({
+      type: 'preRegistration',
+      status: data?.status || 'UNKNOWN',
+      name: data?.name || '',
+      phone: data?.phone || '',
+      data: { id: preRegSnap.id, ...data }
+    });
+  }
+
+  res.status(404).json({ error: 'Record not found' });
+}));
+
 app.post('/api/visitors/:id/review', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { organizationId, rating, comment } = req.body;
