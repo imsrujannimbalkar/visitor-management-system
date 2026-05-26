@@ -663,7 +663,7 @@ export default function App() {
   // Terms Acceptance Check
   useEffect(() => {
     if (!showSplash && !showLoader && isAuthReady && organization) {
-      if (organization.legalAccepted === false && (user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN' || isSuperAdminValue)) {
+      if (!organization.legalAccepted && (user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN' || isSuperAdminValue)) {
         setShowTermsAcceptance(true);
       } else {
         setShowTermsAcceptance(false);
@@ -1429,6 +1429,25 @@ export default function App() {
           // Check if we already tried this in this session to avoid race with VisitorPass
           const sessionKey = `checkout_${passId}`;
           if (sessionStorage.getItem(sessionKey)) return;
+
+          // Before attempting automatic check-out API call, fetch and verify the status of the visitor from the server securely.
+          // If the visitor's current status is PENDING or APPROVED, they are checking IN or just viewing their pass,
+          // so we should bypass the checkout PUT call to avoid throwing an error.
+          try {
+            const statusRes = await fetch(`/api/organizations/${orgId}/visitor-status/${passId}`);
+            if (statusRes.ok) {
+              const statusData = await statusRes.json();
+              const currentStatus = statusData.status; // e.g., PENDING, APPROVED, CHECKED_IN, INSIDE, CHECKED OUT
+              
+              if (currentStatus === 'PENDING' || currentStatus === 'APPROVED') {
+                // Bypass checking out as they are not inside yet
+                return;
+              }
+            }
+          } catch (e) {
+            console.warn('Error verifying status before auto-checkout:', e);
+          }
+
           sessionStorage.setItem(sessionKey, 'processing');
 
           try {
@@ -1467,44 +1486,7 @@ export default function App() {
             }
           } catch (error: any) {
             console.error('Auto-checkout error:', error);
-            let errorTitle = 'Check-out Status';
-            let errorText = error.message || 'We could not complete your automatic check-out.';
-            
-            const errMsg = error.message?.toLowerCase() || '';
-            if (errMsg.includes('not found') || errMsg.includes('already checked out')) {
-              errorTitle = 'Check-out Already Complete';
-              errorText = 'We couldn\'t find an active visit for this link. You may have already checked out or the session has expired.';
-              
-              // No need to show error for "already complete" as it's not really an error for the user
-              Swal.fire({
-                title: errorTitle,
-                text: errorText,
-                icon: 'info',
-                background: theme === 'dark' ? '#1e293b' : '#ffffff',
-                color: theme === 'dark' ? '#ffffff' : '#000000',
-                confirmButtonText: 'OK',
-                confirmButtonColor: '#3b82f6',
-                customClass: {
-                  popup: 'rounded-[2rem]',
-                  confirmButton: 'rounded-xl px-10 py-3 font-bold'
-                }
-              });
-              return;
-            }
-
-            Swal.fire({
-              title: errorTitle,
-              text: errorText,
-              icon: 'error',
-              background: theme === 'dark' ? '#1e293b' : '#ffffff',
-              color: theme === 'dark' ? '#ffffff' : '#000000',
-              confirmButtonText: 'OK',
-              confirmButtonColor: '#3b82f6',
-              customClass: {
-                popup: 'rounded-[2rem]',
-                confirmButton: 'rounded-xl px-10 py-3 font-bold'
-              }
-            });
+            // Quietly handle errors in auto-checkout without flashing intrusive error popup alerts to the user
           }
         }
       } else {
@@ -3872,10 +3854,41 @@ export default function App() {
   };
 
   const handleScanCheckOut = async (passId: string) => {
+    if (!organization?.id) return;
     const activeVisit = visitors.find(v => (v.visitorId === passId || v.preRegistrationId === passId) && v.status === 'INSIDE');
     if (activeVisit) {
       await checkOutVisitor(activeVisit.visitorId, false);
     } else {
+       try {
+         // Check with secure server-side API to determine status
+         const statusRes = await fetch(`/api/organizations/${organization.id}/visitor-status/${passId}`);
+         if (statusRes.ok) {
+           const statusData = await statusRes.json();
+           if (statusData.type === 'preRegistration') {
+             const preRegData = { id: statusData.data.id, ...statusData.data } as PreRegistration;
+             if (preRegData.status === 'APPROVED') {
+               // Let's check them in immediately! Using empty/placeholder signature as digital QR scan is highly authenticated
+               await handleKioskPreRegCheckIn(preRegData, "");
+               return;
+             } else if (preRegData.status === 'CHECKED_IN' || preRegData.status === 'COMPLETED') {
+               const correlatedVisit = visitors.find(v => v.preRegistrationId === passId && v.status === 'INSIDE');
+               if (correlatedVisit) {
+                 await checkOutVisitor(correlatedVisit.visitorId, false);
+                 return;
+               }
+             }
+           } else if (statusData.type === 'visit') {
+             // If they are inside, check them out
+             if (statusData.status === 'INSIDE') {
+               await checkOutVisitor(statusData.data.visitId || statusData.data.visitorId || statusData.data.id, false);
+               return;
+             }
+           }
+         }
+       } catch (err) {
+         console.error('Error in QR scan helper check-in fallback:', err);
+       }
+
        Swal.fire({
           title: kioskLang === 'HI' ? 'नहीं मिला' : 'Not Found',
           text: kioskLang === 'HI' ? 'इस QR कोड के लिए कोई सक्रिय विज़िट नहीं मिली।' : 'No active visit found for this QR code.',
@@ -3886,7 +3899,7 @@ export default function App() {
   };
 
   const checkOutVisitor = async (visitorId: string, skipConfirm: boolean = false) => {
-    const orgId = user?.organizationId;
+    const orgId = user?.organizationId || organization?.id;
     const visitor = visitors.find(v => v.visitorId === visitorId);
     
     if (!skipConfirm) {
@@ -5372,7 +5385,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4">
+                  <div className="flex flex-wrap items-center gap-4">
                     <button
                       onClick={() => setActiveTab('visitors')}
                       className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-[0_20px_40px_-10px_rgba(37,99,235,0.3)] hover:bg-blue-700 transition-all active:scale-95 flex items-center gap-2"
@@ -5380,6 +5393,18 @@ export default function App() {
                       <LayoutDashboard className="h-5 w-5" />
                       Open Dashboard
                     </button>
+                    <QRCheckOutScanner
+                      onScan={handleScanCheckOut}
+                      lang="EN"
+                      customTrigger={
+                        <button
+                          className="px-8 py-4 bg-purple-600 text-white rounded-2xl font-bold shadow-[0_20px_40px_-10px_rgba(147,51,234,0.3)] hover:bg-purple-700 transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
+                        >
+                          <Camera className="h-5 w-5" />
+                          Scan QR Pass
+                        </button>
+                      }
+                    />
                     <button
                       onClick={() => setActiveTab('records')}
                       className="px-8 py-4 bg-white border border-slate-200 text-slate-900 rounded-2xl font-bold hover:bg-slate-50 transition-all active:scale-95 flex items-center gap-2"
