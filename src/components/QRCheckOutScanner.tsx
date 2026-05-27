@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Camera, X, Flashlight, FlashlightOff } from 'lucide-react';
+import { Camera, X, Flashlight, FlashlightOff, RefreshCw } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 
 interface QRCheckOutScannerProps {
@@ -14,6 +14,7 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, la
   const [isOpen, setIsOpen] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [flashEnabled, setFlashEnabled] = useState(false);
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [scanSuccess, setScanSuccess] = useState(false);
   const [scanFail, setScanFail] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
@@ -32,7 +33,7 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, la
            startTimeRef.current = Date.now();
            scannerRef.current = new Html5Qrcode("qr-reader");
            await scannerRef.current.start(
-             { facingMode: "environment" },
+             { facingMode: facingMode },
              { fps: 10, qrbox: { width: 250, height: 250 } },
              (decodedText) => {
                 if (unmounted) return;
@@ -136,7 +137,7 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, la
         }
       }
     };
-  }, [isOpen, onScan]);
+  }, [isOpen, onScan, facingMode]);
 
   const toggleTorch = async () => {
     if (scannerRef.current && isScanningRef.current) {
@@ -149,6 +150,11 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, la
         console.error("Torch toggle failed:", err);
       }
     }
+  };
+
+  const toggleCamera = async () => {
+    setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
+    setFlashEnabled(false);
   };
 
   const handleRetry = async () => {
@@ -249,16 +255,25 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, la
                      </div>
 
                      <div className="absolute inset-x-0 bottom-8 flex flex-col items-center gap-4 pointer-events-none z-30">
-                         <p className="bg-black/60 text-white inline-block px-4 py-2 rounded-full font-bold text-xs uppercase tracking-wider backdrop-blur-md pointer-events-auto shadow-xl">
-                           {lang === 'HI' ? 'पास के QR पर कैमरा केंद्रित करें' : 'Point camera at visitor pass QR'}
-                         </p>
-                         <button
-                           onClick={toggleTorch}
-                           className="pointer-events-auto p-3 rounded-full bg-black/60 text-white hover:bg-black/80 backdrop-blur-md transition-all shadow-xl flex items-center justify-center border border-white/20 hover:scale-105 active:scale-95"
-                           title={lang === 'HI' ? 'फ्लैशलाइट टॉगल करें' : 'Toggle Flashlight'}
-                         >
-                           {flashEnabled ? <Flashlight className="w-5 h-5 text-yellow-400" /> : <FlashlightOff className="w-5 h-5" />}
-                         </button>
+                          <p className="bg-black/60 text-white inline-block px-4 py-2 rounded-full font-bold text-xs uppercase tracking-wider backdrop-blur-md pointer-events-auto shadow-xl">
+                            {lang === 'HI' ? 'पास के QR पर कैमरा केंद्रित करें' : 'Point camera at visitor pass QR'}
+                          </p>
+                          <div className="flex gap-4 pointer-events-auto">
+                            <button
+                              onClick={toggleTorch}
+                              className="p-3 rounded-full bg-black/60 text-white hover:bg-black/80 backdrop-blur-md transition-all shadow-xl flex items-center justify-center border border-white/20 hover:scale-105 active:scale-95"
+                              title={lang === 'HI' ? 'फ्लैशलाइट टॉगल करें' : 'Toggle Flashlight'}
+                            >
+                              {flashEnabled ? <Flashlight className="w-5 h-5 text-yellow-400" /> : <FlashlightOff className="w-5 h-5" />}
+                            </button>
+                            <button
+                              onClick={toggleCamera}
+                              className="p-3 rounded-full bg-black/60 text-white hover:bg-black/80 backdrop-blur-md transition-all shadow-xl flex items-center justify-center border border-white/20 hover:scale-105 active:scale-95"
+                              title={lang === 'HI' ? 'कैमरा बदलें' : 'Switch Camera'}
+                            >
+                              <RefreshCw className={`w-5 h-5 ${facingMode === 'user' ? 'text-blue-400' : ''}`} />
+                            </button>
+                          </div>
                      </div>
                    </>
                  ) : (
