@@ -11,7 +11,11 @@
         "role": { "type": "string", "enum": ["ADMIN", "STAFF"] },
         "organizationId": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
-        "lastLogin": { "type": "string", "format": "date-time" }
+        "lastLogin": { "type": "string", "format": "date-time" },
+        "termsAccepted": { "type": "boolean" },
+        "privacyAccepted": { "type": "boolean" },
+        "acceptedAt": { "type": "string", "format": "date-time" },
+        "policyVersion": { "type": "string" }
       },
       "required": ["uid", "email", "role"]
     },
@@ -78,6 +82,7 @@
         "createdBy": { "type": "string" },
         "recordedBy": { "type": "string" },
         "isEmergency": { "type": "boolean" },
+        "passPrintedAt": { "type": "string", "format": "date-time" },
         "whatsappStatus": { "type": "string", "enum": ["PENDING", "SENT", "FAILED"] },
         "whatsappSentAt": { "type": "string", "format": "date-time" },
         "review": { 

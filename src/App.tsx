@@ -112,7 +112,7 @@ import { QRCheckOutScanner } from './components/QRCheckOutScanner';
 import InquiryTracker from './components/InquiryTracker';
 import LegalAcceptanceModal from './components/LegalAcceptanceModal';
 import { geminiService } from './services/geminiService';
-import { Visitor, User, VisitorStatus, UserRole, Organization, Notification, Profile, Visit, Donation, DonationAuditEntry, PreRegistration, Inquiry } from './types';
+import { Visitor, User, VisitorStatus, UserRole, Organization, Notification, Profile, Visit, Donation, DonationAuditEntry, PreRegistration, Inquiry, ScanEvent } from './types';
 import { useToast } from './components/Toast';
 import { savePendingProfile, savePendingVisit, getPendingProfiles, getPendingVisits, clearPendingProfile, clearPendingVisit } from './lib/offline';
 import { createBackup, getBackups } from './services/backupService';
@@ -664,14 +664,20 @@ export default function App() {
   // Terms Acceptance Check
   useEffect(() => {
     if (!showSplash && !showLoader && isAuthReady && organization && user) {
+      // Prioritize Firestore professional storage, fallback to local cache for UX consistency
+      const hasAcceptedInFireStore = user.termsAccepted && user.privacyAccepted;
       const hasAcceptedLocally = localStorage.getItem(`vms_legal_accepted_${user.uid}`) === 'true';
-      if (!organization.legalAccepted || !hasAcceptedLocally) {
+      
+      const POLICY_VERSION = '2024.1'; // Internal policy tracker
+      const isOutdated = user.policyVersion && user.policyVersion !== POLICY_VERSION;
+
+      if ((!hasAcceptedInFireStore || isOutdated) && !hasAcceptedLocally) {
         setShowTermsAcceptance(true);
       } else {
         setShowTermsAcceptance(false);
       }
     }
-  }, [showSplash, showLoader, isAuthReady, organization?.legalAccepted, user?.uid]);
+  }, [showSplash, showLoader, isAuthReady, organization?.legalAccepted, user]);
 
   // Handle Kiosk Assistance Approval
   useEffect(() => {
@@ -1523,9 +1529,21 @@ export default function App() {
   }, [theme]);
 
   const [kioskSessionEntries, setKioskSessionEntries] = useState<Visitor[]>([]);
+  const [kioskScanHistory, setKioskScanHistory] = useState<ScanEvent[]>([]);
+
+  const addKioskScanEvent = useCallback((event: Omit<ScanEvent, 'id' | 'timestamp'>) => {
+    const newEvent: ScanEvent = {
+      ...event,
+      id: `SCAN-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      timestamp: new Date().toISOString()
+    };
+    setKioskScanHistory(prev => [newEvent, ...prev].slice(0, 10));
+  }, []);
+
   const [isScreenSaver, setIsScreenSaver] = useState(false);
   const [lastActivity, setLastActivity] = useState(Date.now());
   const [kioskLang, setKioskLang] = useState<'EN' | 'HI'>('EN');
+  const [kioskTappings, setKioskTappings] = useState<'ACTIONS' | 'HISTORY'>('ACTIONS');
   const [isSyncingOffline, setIsSyncingOffline] = useState(false);
 
   // Auto-sync function
@@ -3876,6 +3894,35 @@ export default function App() {
     setShowPrintablePass(passData);
   };
 
+  const handlePassPrinted = async (visitorId: string) => {
+    if (!organization?.id) return;
+    try {
+      const now = new Date().toISOString();
+      await updateDoc(doc(db, 'organizations', organization.id, 'visits', visitorId), {
+        passPrintedAt: now
+      });
+      addToast('Pass marked as printed', 'success');
+    } catch (err) {
+      console.error('Failed to mark pass as printed:', err);
+    }
+  };
+
+  const handleBulkPassPrinted = async (visitorIds: string[]) => {
+    if (!organization?.id) return;
+    try {
+      const now = new Date().toISOString();
+      const batch = writeBatch(db);
+      visitorIds.forEach(id => {
+        const ref = doc(db, 'organizations', organization!.id, 'visits', id);
+        batch.update(ref, { passPrintedAt: now });
+      });
+      await batch.commit();
+      addToast(`Batch of ${visitorIds.length} passes recorded as printed`, 'success');
+    } catch (err) {
+      console.error('Bulk print recording failed:', err);
+    }
+  };
+
   const handleBulkPrintPass = (selectedVisitors: any[]) => {
     const passesData = selectedVisitors.map(visitor => ({
       ...visitor,
@@ -3893,7 +3940,10 @@ export default function App() {
     if (!organization?.id) return;
     const activeVisit = visitors.find(v => (v.visitorId === passId || v.preRegistrationId === passId) && v.status === 'INSIDE');
     if (activeVisit) {
-      await checkOutVisitor(activeVisit.visitorId, false);
+      const success = await checkOutVisitor(activeVisit.visitorId, false);
+      if (success) {
+        addKioskScanEvent({ visitorName: activeVisit.visitorName, type: 'CHECK_OUT' });
+      }
     } else {
        try {
          // Check if this pass corresponds to a pre-registration
@@ -3904,11 +3954,15 @@ export default function App() {
              if (preRegData.status === 'APPROVED' || preRegData.status === 'PENDING') {
                // Let's check them in immediately! Using empty/placeholder signature as digital QR scan is highly authenticated
                await handleKioskPreRegCheckIn(preRegData, "");
+               addKioskScanEvent({ visitorName: preRegData.name, type: 'CHECK_IN' });
                return;
              } else if (preRegData.status === 'CHECKED_IN' || preRegData.status === 'COMPLETED') {
                const correlatedVisit = visitors.find(v => v.preRegistrationId === passId && v.status === 'INSIDE');
                if (correlatedVisit) {
-                 await checkOutVisitor(correlatedVisit.visitorId, false);
+                 const success = await checkOutVisitor(correlatedVisit.visitorId, false);
+                 if (success) {
+                   addKioskScanEvent({ visitorName: correlatedVisit.visitorName, type: 'CHECK_OUT' });
+                 }
                  return;
                }
              }
@@ -3917,7 +3971,10 @@ export default function App() {
              const visitRef = doc(db, 'organizations', organization.id, 'visits', passId);
              const visitSnap = await getDoc(visitRef);
              if (visitSnap.exists() && visitSnap.data().status === 'INSIDE') {
-                 await checkOutVisitor(passId, false);
+                 const success = await checkOutVisitor(passId, false);
+                 if (success) {
+                   addKioskScanEvent({ visitorName: visitSnap.data().visitorName, type: 'CHECK_OUT' });
+                 }
                  return;
              }
          }
@@ -3934,7 +3991,7 @@ export default function App() {
     }
   };
 
-  const checkOutVisitor = async (visitorId: string, skipConfirm: boolean = false) => {
+  const checkOutVisitor = async (visitorId: string, skipConfirm: boolean = false): Promise<boolean> => {
     const orgId = user?.organizationId || organization?.id;
     const visitor = visitors.find(v => v.visitorId === visitorId);
     
@@ -3956,13 +4013,13 @@ export default function App() {
         }
       });
 
-      if (!result.isConfirmed) return;
+      if (!result.isConfirmed) return false;
     }
 
     setIsCheckingOut(visitorId);
     setLoadingStates(prev => ({ ...prev, [visitorId]: true }));
     try {
-      if (!orgId) return;
+      if (!orgId) return false;
       
       const checkOutTime = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
       const visitorRef = doc(db, 'organizations', orgId, 'visits', visitorId);
@@ -3988,11 +4045,11 @@ export default function App() {
 
       // Sync to backend via API
       try {
-        const visitor = visits.find(v => v.visitId === visitorId);
+        const fullVisitor = visits.find(v => v.visitId === visitorId);
         await fetch(`/api/visitors/${visitorId}/checkout`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ checkOutTime, visitor, organizationId: orgId })
+          body: JSON.stringify({ checkOutTime, visitor: fullVisitor, organizationId: orgId })
         });
       } catch (apiErr) {
         console.error('Failed to sync checkout to backend:', apiErr);
@@ -4010,9 +4067,11 @@ export default function App() {
           visitId: visitorId
         });
       }
+      return true;
     } catch (error) {
       console.error('Failed to check out visitor:', error);
       addToast('Failed to check out visitor', 'error');
+      return false;
     } finally {
       setIsCheckingOut(null);
       setLoadingStates(prev => ({ ...prev, [visitorId]: false }));
@@ -4945,60 +5004,109 @@ export default function App() {
 
                   {/* Bottom Row */}
                   <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-                    {/* Recent Activity */}
+                    {/* Recent Activity / Scan History */}
                     <div className="lg:col-span-3 bg-white rounded-[3rem] p-10 shadow-lg border border-gray-50 flex flex-col min-h-[400px]">
                       <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-50">
-                        <div className="flex items-center gap-4">
-                          <div className="h-10 w-10 bg-slate-50 rounded-xl flex items-center justify-center">
-                            <History className="h-5 w-5 text-slate-400" />
-                          </div>
-                          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-800">{kioskLang === 'EN' ? 'Recent Activity' : 'हाल की गतिविधि'}</h3>
+                        <div className="flex items-center gap-4 bg-gray-100 rounded-2xl p-1 shadow-inner">
+                          <button 
+                            onClick={() => setKioskTappings('ACTIONS')}
+                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${kioskTappings === 'ACTIONS' ? 'bg-white text-brand-blue shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                          >
+                            <History className="h-3 w-3" />
+                            {kioskLang === 'EN' ? 'Entries' : 'प्रविष्टियां'}
+                          </button>
+                          <button 
+                            onClick={() => setKioskTappings('HISTORY')}
+                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${kioskTappings === 'HISTORY' ? 'bg-white text-brand-blue shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                          >
+                            <Camera className="h-3 w-3" />
+                            {kioskLang === 'EN' ? 'Scan History' : 'स्कैन इतिहास'}
+                          </button>
                         </div>
                         <span className="px-3 py-1 bg-blue-50 text-brand-blue rounded-lg text-[10px] font-black tracking-widest uppercase">
-                          {kioskSessionEntries.length} {kioskLang === 'EN' ? 'In Session' : 'सत्र में'}
+                          {kioskTappings === 'ACTIONS' ? kioskSessionEntries.length : kioskScanHistory.length} {kioskLang === 'EN' ? (kioskTappings === 'ACTIONS' ? 'In Session' : 'Saved') : (kioskTappings === 'ACTIONS' ? 'सत्र में' : 'सुरक्षित')}
                         </span>
                       </div>
 
                       <div className="flex-1 overflow-y-auto no-scrollbar space-y-4">
-                        {kioskSessionEntries.length > 0 ? (
-                          kioskSessionEntries.map((entry, idx) => (
-                            <motion.div
-                              key={idx}
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              className="p-4 bg-gray-50 rounded-2xl flex items-center justify-between group hover:bg-brand-blue/5 transition-colors border border-transparent hover:border-brand-blue/10"
-                            >
-                              <div className="flex items-center gap-4">
-                                <div className="h-12 w-12 bg-white rounded-xl flex items-center justify-center font-bold text-brand-blue border border-gray-100 shadow-sm">
-                                  {(entry.name || entry.visitorName || 'V').charAt(0)}
+                        {kioskTappings === 'ACTIONS' ? (
+                          kioskSessionEntries.length > 0 ? (
+                            kioskSessionEntries.map((entry, idx) => (
+                              <motion.div
+                                key={idx}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="p-4 bg-gray-50 rounded-2xl flex items-center justify-between group hover:bg-brand-blue/5 transition-colors border border-transparent hover:border-brand-blue/10"
+                              >
+                                <div className="flex items-center gap-4">
+                                  <div className="h-12 w-12 bg-white rounded-xl flex items-center justify-center font-bold text-brand-blue border border-gray-100 shadow-sm text-lg">
+                                    {(entry.name || entry.visitorName || 'V').charAt(0)}
+                                  </div>
+                                  <div className="text-left">
+                                    <p className="font-bold text-gray-900">{entry.name || entry.visitorName}</p>
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{entry.purpose}</p>
+                                  </div>
                                 </div>
-                                <div>
-                                  <p className="font-bold text-gray-900">{entry.name || entry.visitorName}</p>
-                                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{entry.purpose}</p>
+                                <div className="text-right">
+                                  <p className="text-[10px] font-black text-brand-blue">{entry.checkInTime}</p>
+                                  <div className="flex flex-col items-end gap-1">
+                                    {entry.isEmergency && (
+                                      <span className="px-3 py-1 bg-red-600 text-white rounded-lg text-[8px] font-black uppercase shadow-lg shadow-red-500/20 border border-red-400 animate-pulse tracking-tighter flex items-center gap-1 leading-none">
+                                        <AlertTriangle className="h-2 w-2" />
+                                        EMERGENCY
+                                      </span>
+                                    )}
+                                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-md text-[8px] font-bold uppercase">{kioskLang === 'EN' ? 'Success' : 'सफल'}</span>
+                                  </div>
                                 </div>
+                              </motion.div>
+                            ))
+                          ) : (
+                            <div className="h-full flex flex-col items-center justify-center opacity-30 text-center py-12">
+                              <div className="h-20 w-20 bg-gray-50 rounded-full flex items-center justify-center mb-6 border border-gray-100">
+                                <History className="h-10 w-10 text-gray-300" />
                               </div>
-                              <div className="text-right">
-                                <p className="text-[10px] font-black text-brand-blue">{entry.checkInTime}</p>
-                                <div className="flex flex-col items-end gap-1">
-                                  {entry.isEmergency && (
-                                    <span className="px-3 py-1 bg-red-600 text-white rounded-lg text-[8px] font-black uppercase shadow-lg shadow-red-500/20 border border-red-400 animate-pulse tracking-tighter flex items-center gap-1 leading-none">
-                                      <AlertTriangle className="h-2 w-2" />
-                                      EMERGENCY
-                                    </span>
-                                  )}
-                                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-md text-[8px] font-bold uppercase">{kioskLang === 'EN' ? 'Success' : 'सफल'}</span>
-                                </div>
-                              </div>
-                            </motion.div>
-                          ))
-                        ) : (
-                          <div className="h-full flex flex-col items-center justify-center opacity-30 text-center py-12">
-                            <div className="h-20 w-20 bg-gray-50 rounded-full flex items-center justify-center mb-6 border border-gray-100">
-                              <History className="h-10 w-10 text-gray-300" />
+                              <p className="text-lg font-black text-gray-900 italic uppercase">{kioskLang === 'EN' ? 'No Recent Entries' : 'कोई हालिया प्रविष्टि नहीं'}</p>
+                              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-2">{kioskLang === 'EN' ? 'Activity resets when kiosk is re-opened' : 'कियोस्क को फिर से खोलने पर गतिविधि रीसेट हो जाती है'}</p>
                             </div>
-                            <p className="text-lg font-black text-gray-900 italic uppercase">{kioskLang === 'EN' ? 'No Recent Entries' : 'कोई हालिया प्रविष्टि नहीं'}</p>
-                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-2">{kioskLang === 'EN' ? 'Activity resets when kiosk is re-opened' : 'कियोस्क को फिर से खोलने पर गतिविधि रीसेट हो जाती है'}</p>
-                          </div>
+                          )
+                        ) : (
+                          kioskScanHistory.length > 0 ? (
+                            kioskScanHistory.map((scan, idx) => (
+                              <motion.div
+                                key={scan.id}
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                className="p-4 bg-white border border-gray-100 rounded-2xl flex items-center justify-between group hover:shadow-md transition-all"
+                              >
+                                <div className="flex items-center gap-4">
+                                  <div className={`h-12 w-12 rounded-xl flex items-center justify-center font-bold shadow-sm ${scan.type === 'CHECK_IN' ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                                    {scan.type === 'CHECK_IN' ? <UserPlus className="h-6 w-6" /> : <LogOut className="h-6 w-6" />}
+                                  </div>
+                                  <div className="text-left">
+                                    <p className="font-bold text-gray-900 uppercase italic leading-tight">{scan.visitorName}</p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${scan.type === 'CHECK_IN' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                        {scan.type}
+                                      </span>
+                                      <span className="text-[10px] font-medium text-gray-400">{new Date(scan.timestamp).toLocaleTimeString()}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="p-2 bg-slate-50 rounded-lg group-hover:bg-brand-blue group-hover:text-white transition-colors">
+                                  <CheckCircle2 className="h-5 w-5" />
+                                </div>
+                              </motion.div>
+                            ))
+                          ) : (
+                            <div className="h-full flex flex-col items-center justify-center opacity-30 text-center py-12">
+                              <div className="h-20 w-20 bg-gray-50 rounded-full flex items-center justify-center mb-6 border border-gray-100">
+                                <Camera className="h-10 w-10 text-gray-300" />
+                              </div>
+                              <p className="text-lg font-black text-gray-900 italic uppercase">{kioskLang === 'EN' ? 'No Scan Records' : 'कोई स्कैन रिकॉर्ड नहीं'}</p>
+                              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-2">{kioskLang === 'EN' ? 'Scan history is kept for the current session' : 'स्कैन इतिहास वर्तमान सत्र के लिए रखा जाता है'}</p>
+                            </div>
+                          )
                         )}
                       </div>
                     </div>
@@ -7423,8 +7531,32 @@ export default function App() {
             organizationName={organization?.name}
             onAccept={async () => {
               if (user?.uid) {
+                // 1. Local Cache for instant UI feedback
                 localStorage.setItem(`vms_legal_accepted_${user.uid}`, 'true');
+                
+                // 2. Professional Archive in User Profile
+                try {
+                  const policyVersion = '2024.1';
+                  const acceptanceFields = {
+                    termsAccepted: true,
+                    privacyAccepted: true,
+                    acceptedAt: new Date().toISOString(),
+                    policyVersion
+                  };
+
+                  // Update root user profile
+                  await updateDoc(doc(db, 'users', user.uid), acceptanceFields);
+
+                  // Also update org-nested user profile if applicable
+                  if (organization?.id) {
+                    await updateDoc(doc(db, 'organizations', organization.id, 'users', user.uid), acceptanceFields);
+                  }
+                } catch (userErr) {
+                  console.warn('Profile documentation update failed:', userErr);
+                }
               }
+
+              // 3. Mark Organization-wide if admin
               if (organization?.id && (user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN' || isSuperAdminValue)) {
                 try {
                   await updateDoc(doc(db, 'organizations', organization.id), {
@@ -7458,6 +7590,7 @@ export default function App() {
             visitor={showPrintablePass}
             organization={organization}
             onClose={() => setShowPrintablePass(null)}
+            onPrinted={handlePassPrinted}
           />
         )}
         {showPrintableBatchPass && organization && (
@@ -7465,6 +7598,7 @@ export default function App() {
             visitors={showPrintableBatchPass}
             organization={organization}
             onClose={() => setShowPrintableBatchPass(null)}
+            onPrinted={handleBulkPassPrinted}
           />
         )}
       </AnimatePresence>

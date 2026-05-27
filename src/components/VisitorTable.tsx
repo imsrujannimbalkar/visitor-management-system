@@ -465,6 +465,12 @@ export default function VisitorTable({
                                {label.text}
                              </span>
                            ))}
+                           {visitor.passPrintedAt && (
+                             <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-600 border border-blue-200 text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 shadow-sm" title={`Pass Printed: ${new Date(visitor.passPrintedAt).toLocaleString()}`}>
+                               <Printer className="h-2 w-2" />
+                               Printed
+                             </span>
+                           )}
                            {visitor.isEmergency && (
                               <div className="flex flex-col gap-1 items-start">
                                 <span className="px-3 py-1 rounded bg-red-600 text-white text-[9px] font-black uppercase tracking-tighter animate-pulse shadow-md shadow-red-200 border border-white/20 flex items-center gap-1.5">

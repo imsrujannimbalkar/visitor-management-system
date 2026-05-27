@@ -8,9 +8,10 @@ interface PrintableBatchPassModalProps {
   visitors: Visitor[];
   organization: Organization;
   onClose: () => void;
+  onPrinted?: (visitorIds: string[]) => void;
 }
 
-export default function PrintableBatchPassModal({ visitors, organization, onClose }: PrintableBatchPassModalProps) {
+export default function PrintableBatchPassModal({ visitors, organization, onClose, onPrinted }: PrintableBatchPassModalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const handlePrint = () => {
@@ -128,6 +129,9 @@ export default function PrintableBatchPassModal({ visitors, organization, onClos
     setTimeout(() => {
       printWindow.print();
       printWindow.close();
+      if (onPrinted) {
+        onPrinted(visitors.map(v => v.visitId || v.visitorId || ''));
+      }
     }, 250);
   };
 

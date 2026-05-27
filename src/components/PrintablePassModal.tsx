@@ -8,9 +8,10 @@ interface PrintablePassModalProps {
   visitor: Visitor;
   organization: Organization;
   onClose: () => void;
+  onPrinted?: (visitorId: string) => void;
 }
 
-export default function PrintablePassModal({ visitor, organization, onClose }: PrintablePassModalProps) {
+export default function PrintablePassModal({ visitor, organization, onClose, onPrinted }: PrintablePassModalProps) {
   const passRef = useRef<HTMLDivElement>(null);
 
   const handlePrint = () => {
@@ -111,6 +112,9 @@ export default function PrintablePassModal({ visitor, organization, onClose }: P
     setTimeout(() => {
       printWindow.print();
       printWindow.close();
+      if (onPrinted) {
+        onPrinted(visitor.visitId || visitor.visitorId || '');
+      }
     }, 250);
   };
 

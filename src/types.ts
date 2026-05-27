@@ -69,6 +69,7 @@ export interface Visit {
   visitorAddress?: string;
   signature?: string;
   isEmergency?: boolean;
+  passPrintedAt?: string;
   preRegistrationId?: string;
   deleted?: boolean;
   whatsappStatus?: 'PENDING' | 'SENT' | 'FAILED';
@@ -162,6 +163,10 @@ export interface User {
   organizationId?: string | null;
   createdAt: string;
   lastLogin: string;
+  termsAccepted?: boolean;
+  privacyAccepted?: boolean;
+  acceptedAt?: string;
+  policyVersion?: string;
   emailVerified?: boolean;
   deleted?: boolean;
   photoURL?: string;
@@ -317,4 +322,11 @@ export interface SystemBackup {
     inquiriesCount: number;
     size: number;
   };
+}
+
+export interface ScanEvent {
+  id: string;
+  visitorName: string;
+  type: 'CHECK_IN' | 'CHECK_OUT';
+  timestamp: string;
 }
