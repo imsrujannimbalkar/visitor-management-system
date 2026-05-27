@@ -627,21 +627,32 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
                   </div>
                   
                   <div className="flex items-center gap-1 p-1 bg-slate-50 rounded-xl border border-slate-100">
-                    {(['PENDING', 'IN_PROGRESS', 'COMPLETED'] as const).map(status => (
+                    {(['PENDING', 'IN_PROGRESS', 'COMPLETED'] as const).map(status => {
+                      const isActive = inquiry.status === status;
+                      return (
                       <button
                         key={status}
                         onClick={() => updateStatus(inquiry.id, status)}
-                        className={`flex-1 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${
-                          inquiry.status === status
-                            ? status === 'COMPLETED' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-100' :
-                              status === 'IN_PROGRESS' ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-100' :
-                              'bg-amber-500 text-white shadow-lg shadow-amber-100'
+                        className={`relative z-10 flex-1 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-colors duration-300 ${
+                          isActive
+                            ? 'text-white'
                             : 'text-slate-400 hover:text-slate-600 px-1'
                         }`}
                       >
+                        {isActive && (
+                          <motion.div
+                            layoutId={`active-status-${inquiry.id}`}
+                            className={`absolute inset-0 rounded-lg -z-10 shadow-lg ${
+                              status === 'COMPLETED' ? 'bg-emerald-500 shadow-emerald-100' :
+                              status === 'IN_PROGRESS' ? 'bg-indigo-500 shadow-indigo-100' :
+                              'bg-amber-500 shadow-amber-100'
+                            }`}
+                            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                          />
+                        )}
                         {status === 'IN_PROGRESS' ? 'WORKING' : status}
                       </button>
-                    ))}
+                    )})}
                   </div>
                 </div>
               </div>

@@ -14,6 +14,7 @@ interface VisitorTableProps {
   onDelete?: (visitorId: string) => void;
   onBulkCheckOut?: (visitorIds: string[]) => void;
   onBulkDelete?: (visitorIds: string[]) => void;
+  onBulkPrintPass?: (visitors: Visitor[]) => void;
   onAddReview?: (visitor: Visitor) => void;
   onAddDonation?: (visitor: Visitor) => void;
   onGeneratePass?: (visitor: Visitor) => void;
@@ -36,6 +37,7 @@ export default function VisitorTable({
   onDelete, 
   onBulkCheckOut,
   onBulkDelete,
+  onBulkPrintPass,
   onAddReview,
   onAddDonation,
   onGeneratePass,
@@ -48,6 +50,78 @@ export default function VisitorTable({
 }: VisitorTableProps) {
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'yesterday'>('all');
+
+  const isExtendedVisit = React.useCallback((visitor: Visitor): boolean => {
+    if (visitor.status !== 'INSIDE') return false;
+    if (!visitor.date || !visitor.checkInTime) return false;
+    
+    const datePart = visitor.date.split(' ')[0];
+    let checkInDate = new Date(`${datePart} ${visitor.checkInTime}`);
+    
+    if (isNaN(checkInDate.getTime())) {
+      const dateMatch = datePart.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (!dateMatch) return false;
+      const year = parseInt(dateMatch[1], 10);
+      const month = parseInt(dateMatch[2], 10) - 1;
+      const day = parseInt(dateMatch[3], 10);
+      
+      let hours = 0;
+      let minutes = 0;
+      const timeClean = visitor.checkInTime.trim().toUpperCase();
+      const is12Hour = timeClean.includes('AM') || timeClean.includes('PM');
+      
+      if (is12Hour) {
+        const ampmMatch = timeClean.match(/(\d+):(\d+)\s*(AM|PM)/);
+        if (ampmMatch) {
+          hours = parseInt(ampmMatch[1], 10);
+          minutes = parseInt(ampmMatch[2], 10);
+          const ampm = ampmMatch[3];
+          if (ampm === 'PM' && hours < 12) hours += 12;
+          if (ampm === 'AM' && hours === 12) hours = 0;
+        } else {
+          return false;
+        }
+      } else {
+        const timeMatch = timeClean.match(/(\d+):(\d+)/);
+        if (timeMatch) {
+          hours = parseInt(timeMatch[1], 10);
+          minutes = parseInt(timeMatch[2], 10);
+        } else {
+          return false;
+        }
+      }
+      checkInDate = new Date(year, month, day, hours, minutes, 0, 0);
+    }
+    
+    if (isNaN(checkInDate.getTime())) return false;
+    
+    const diffMs = Date.now() - checkInDate.getTime();
+    const diffHours = diffMs / (1000 * 60 * 60);
+    return diffHours > 8;
+  }, []);
+
+  const filteredVisitors = React.useMemo(() => {
+    if (dateFilter === 'all') return visitors;
+    
+    const todayStr = new Date().toISOString().split('T')[0];
+    
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    
+    return visitors.filter((v) => {
+      if (!v.date) return false;
+      const visitorDate = v.date.split(' ')[0];
+      if (dateFilter === 'today') {
+        return visitorDate === todayStr;
+      }
+      if (dateFilter === 'yesterday') {
+        return visitorDate === yesterdayStr;
+      }
+      return true;
+    });
+  }, [visitors, dateFilter]);
 
   const toggleRow = (visitorId: string) => {
     if (expandedRow === visitorId) {
@@ -95,10 +169,10 @@ export default function VisitorTable({
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === visitors.length) {
+    if (selectedIds.length === filteredVisitors.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(visitors.map(v => v.visitorId));
+      setSelectedIds(filteredVisitors.map(v => v.visitorId));
     }
   };
 
@@ -228,6 +302,18 @@ export default function VisitorTable({
               </button>
             </div>
             <div className="flex items-center gap-4">
+              {onBulkPrintPass && (
+                <button
+                  onClick={() => {
+                    const selectedVisitors = filteredVisitors.filter(v => selectedIds.includes(v.visitorId));
+                    onBulkPrintPass(selectedVisitors);
+                  }}
+                  className="flex items-center gap-2 px-6 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-xl text-sm font-black transition-all shadow-lg active:scale-95"
+                >
+                  <Printer className="h-4 w-4" />
+                  Print Batch
+                </button>
+              )}
               {onBulkCheckOut && (
                 <button
                   onClick={handleBulkCheckOut}
@@ -251,6 +337,33 @@ export default function VisitorTable({
         )}
       </AnimatePresence>
 
+      {/* Date Filter Toolbar */}
+      <div className="px-8 py-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4 bg-slate-50/30">
+        <div className="flex items-center gap-3">
+          <Calendar className="h-5 w-5 text-slate-400" />
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Scope Controls</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor="date-filter-select" className="text-xs font-bold text-slate-500 mr-2">Filter by Date:</label>
+          <div className="relative">
+            <select
+              id="date-filter-select"
+              value={dateFilter}
+              onChange={(e) => {
+                setDateFilter(e.target.value as 'all' | 'today' | 'yesterday');
+                setSelectedIds([]);
+              }}
+              className="appearance-none pl-4 pr-10 py-2 bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl focus:border-brand-blue focus:ring-1 focus:ring-brand-blue outline-none cursor-pointer transition-all shadow-sm"
+            >
+              <option value="all">All Time</option>
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+            </select>
+            <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+          </div>
+        </div>
+      </div>
+
       <div className="overflow-x-auto custom-scrollbar-horizontal">
         <table className="w-full text-left border-collapse min-w-[1400px]">
           <thead>
@@ -260,7 +373,7 @@ export default function VisitorTable({
                   onClick={toggleSelectAll}
                   className="text-slate-300 hover:text-brand-blue transition-colors"
                 >
-                  {selectedIds.length === visitors.length && visitors.length > 0 ? (
+                  {selectedIds.length === filteredVisitors.length && filteredVisitors.length > 0 ? (
                     <CheckSquare className="h-5 w-5 text-brand-blue" />
                   ) : (
                     <Square className="h-5 w-5" />
@@ -280,7 +393,7 @@ export default function VisitorTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {visitors.length === 0 ? (
+            {filteredVisitors.length === 0 ? (
               <tr>
                 <td colSpan={14} className="px-6 py-20 text-center">
                   <div className="flex flex-col items-center justify-center gap-4">
@@ -297,14 +410,16 @@ export default function VisitorTable({
                 </td>
               </tr>
             ) : (
-              visitors.map((visitor, idx) => (
-                <React.Fragment key={visitor.visitorId}>
-                  <motion.tr
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className={`hover:bg-slate-50 transition-all duration-300 group cursor-pointer border-b border-slate-50 last:border-0 ${expandedRow === visitor.visitorId ? 'bg-ngo-surface underline-offset-4' : ''} ${selectedIds.includes(visitor.visitorId) ? 'bg-slate-50' : ''}`}
-                    onClick={() => toggleRow(visitor.visitorId)}
-                  >
+              filteredVisitors.map((visitor, idx) => {
+                const isExtended = isExtendedVisit(visitor);
+                return (
+                  <React.Fragment key={visitor.visitorId}>
+                    <motion.tr
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={`hover:bg-slate-50 transition-all duration-300 group cursor-pointer border-b border-slate-50 last:border-0 ${expandedRow === visitor.visitorId ? 'bg-ngo-surface underline-offset-4' : ''} ${selectedIds.includes(visitor.visitorId) ? 'bg-slate-50' : ''} ${isExtended ? 'bg-amber-50/50 hover:bg-amber-100/40 border-amber-200/50 dark:bg-amber-950/10' : ''}`}
+                      onClick={() => toggleRow(visitor.visitorId)}
+                    >
                     <td className="px-8 py-6" onClick={(e) => toggleSelect(e, visitor.visitorId)}>
                       <div className="flex items-center justify-center">
                         <button className="text-slate-300 hover:text-ngo-accent transition-colors">
@@ -405,16 +520,24 @@ export default function VisitorTable({
                       </div>
                     </td>
                     <td className="px-8 py-6 text-center">
-                      <span className={`inline-flex items-center px-4 py-2 rounded-xl text-[9px] font-black tracking-[0.1em] uppercase border ${
-                        visitor.status === 'INSIDE'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm shadow-emerald-100/50'
-                          : 'bg-slate-50 text-slate-500 border-slate-100'
-                      }`}>
-                        <div className={`w-1.5 h-1.5 rounded-full mr-2 ${
-                          visitor.status === 'INSIDE' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
-                        }`} />
-                        {visitor.status}
-                      </span>
+                      <div className="flex flex-col items-center gap-1.5 justify-center">
+                        <span className={`inline-flex items-center px-4 py-2 rounded-xl text-[9px] font-black tracking-[0.1em] uppercase border ${
+                          visitor.status === 'INSIDE'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm shadow-emerald-100/50'
+                            : 'bg-slate-50 text-slate-500 border-slate-100'
+                        }`}>
+                          <div className={`w-1.5 h-1.5 rounded-full mr-2 ${
+                            visitor.status === 'INSIDE' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
+                          }`} />
+                          {visitor.status}
+                        </span>
+                        {isExtended && (
+                          <span className="text-[8px] font-black tracking-[0.05em] uppercase text-amber-600 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                            <Clock className="w-2.5 h-2.5 text-amber-500" />
+                            Extended Visit
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-8 py-6 text-right">
                       <div className="inline-flex items-center gap-2">
@@ -802,7 +925,8 @@ export default function VisitorTable({
                   )}
                 </AnimatePresence>
               </React.Fragment>
-              ))
+              );
+              })
             )}
           </tbody>
         </table>

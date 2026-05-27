@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Camera, X } from 'lucide-react';
+import { Camera, X, Flashlight, FlashlightOff } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 
 interface QRCheckOutScannerProps {
@@ -13,8 +13,14 @@ interface QRCheckOutScannerProps {
 export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, lang = 'EN', className, customTrigger }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [flashEnabled, setFlashEnabled] = useState(false);
+  const [scanSuccess, setScanSuccess] = useState(false);
+  const [scanFail, setScanFail] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const isScanningRef = useRef(false);
+  const scanFailRef = useRef(false);
+  const scanSuccessRef = useRef(false);
+  const startTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
     let unmounted = false;
@@ -23,27 +29,62 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, la
       if (isOpen && !scannerRef.current) {
          try {
            setCameraError(null);
+           startTimeRef.current = Date.now();
            scannerRef.current = new Html5Qrcode("qr-reader");
            await scannerRef.current.start(
              { facingMode: "environment" },
              { fps: 10, qrbox: { width: 250, height: 250 } },
              (decodedText) => {
                 if (unmounted) return;
+                
+                const handleScanSuccess = (result: string) => {
+                  setScanSuccess(true);
+                  scanSuccessRef.current = true;
+                  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                    navigator.vibrate([100, 50, 100]);
+                  }
+                  setTimeout(() => {
+                    if (!unmounted) {
+                      onScan(result);
+                      setIsOpen(false);
+                      setScanSuccess(false);
+                      scanSuccessRef.current = false;
+                      setFlashEnabled(false);
+                    }
+                  }, 400);
+                };
+
                 try {
                   const url = new URL(decodedText);
                   const passId = url.searchParams.get('passId');
                   if (passId) {
-                    onScan(passId);
-                    setIsOpen(false);
+                    handleScanSuccess(passId);
                   }
                 } catch (e) {
                   if (decodedText && decodedText.length > 5) {
-                    onScan(decodedText);
-                    setIsOpen(false);
+                    handleScanSuccess(decodedText);
                   }
                 }
              },
-             () => {}
+             () => {
+               if (unmounted) return;
+               if (!scanSuccessRef.current && !scanFailRef.current) {
+                 if (startTimeRef.current && Date.now() - startTimeRef.current > 5000) {
+                   setScanFail(true);
+                   scanFailRef.current = true;
+                   if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                     navigator.vibrate(50);
+                   }
+                   setTimeout(() => {
+                     if (!unmounted) {
+                       setScanFail(false);
+                       scanFailRef.current = false;
+                       startTimeRef.current = Date.now();
+                     }
+                   }, 500);
+                 }
+               }
+             }
            );
            
            if (!unmounted) {
@@ -96,6 +137,19 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, la
       }
     };
   }, [isOpen, onScan]);
+
+  const toggleTorch = async () => {
+    if (scannerRef.current && isScanningRef.current) {
+      try {
+        await scannerRef.current.applyVideoConstraints({
+          advanced: [{ torch: !flashEnabled } as any]
+        });
+        setFlashEnabled(!flashEnabled);
+      } catch (err) {
+        console.error("Torch toggle failed:", err);
+      }
+    }
+  };
 
   const handleRetry = async () => {
     if (scannerRef.current) {
@@ -160,10 +214,51 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, la
                  {!cameraError ? (
                    <>
                      <div id="qr-reader" className="w-full h-full"></div>
-                     <div className="absolute inset-x-0 bottom-8 text-center pointer-events-none z-10">
-                         <p className="bg-black/60 text-white inline-block px-4 py-2 rounded-full font-bold text-xs uppercase tracking-wider backdrop-blur-md">
+                     <motion.div
+                       initial={false}
+                       animate={{
+                         backgroundColor: scanSuccess ? 'rgba(34, 197, 94, 0.2)' : 'rgba(34, 197, 94, 0)',
+                         boxShadow: scanSuccess ? 'inset 0 0 0 8px #22c55e' : 'inset 0 0 0 0px #22c55e'
+                       }}
+                       className="absolute inset-0 z-20 pointer-events-none"
+                     />
+                     
+                     {/* Scanner Guide Overlay */}
+                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                       <motion.div 
+                         className="w-[250px] h-[250px] relative"
+                         animate={scanFail ? { x: [-10, 10, -10, 10, 0] } : {}}
+                         transition={{ duration: 0.4 }}
+                       >
+                         {/* Corner brackets */}
+                         <div className="absolute top-0 left-0 w-10 h-10 border-t-4 border-l-4 rounded-tl-xl transition-colors duration-300 shadow-[inset_0_0_0_0px_rgba(0,0,0,0)]" style={{ borderColor: scanSuccess ? '#22c55e' : scanFail ? '#ef4444' : 'rgba(255,255,255,0.8)' }}></div>
+                         <div className="absolute top-0 right-0 w-10 h-10 border-t-4 border-r-4 rounded-tr-xl transition-colors duration-300" style={{ borderColor: scanSuccess ? '#22c55e' : scanFail ? '#ef4444' : 'rgba(255,255,255,0.8)' }}></div>
+                         <div className="absolute bottom-0 left-0 w-10 h-10 border-b-4 border-l-4 rounded-bl-xl transition-colors duration-300" style={{ borderColor: scanSuccess ? '#22c55e' : scanFail ? '#ef4444' : 'rgba(255,255,255,0.8)' }}></div>
+                         <div className="absolute bottom-0 right-0 w-10 h-10 border-b-4 border-r-4 rounded-br-xl transition-colors duration-300" style={{ borderColor: scanSuccess ? '#22c55e' : scanFail ? '#ef4444' : 'rgba(255,255,255,0.8)' }}></div>
+
+                         {/* Animated Scan Line */}
+                         {!scanSuccess && (
+                           <motion.div 
+                             animate={{ top: ['0%', '100%', '0%'] }}
+                             transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+                             className={`absolute left-0 right-0 h-0.5 z-30 pointer-events-none ${scanFail ? 'bg-red-500/80 shadow-[0_0_10px_2px_rgba(239,68,68,0.6)]' : 'bg-blue-500/80 shadow-[0_0_10px_2px_rgba(59,130,246,0.6)]'}`}
+                             style={{ top: '0%' }}
+                           />
+                         )}
+                       </motion.div>
+                     </div>
+
+                     <div className="absolute inset-x-0 bottom-8 flex flex-col items-center gap-4 pointer-events-none z-30">
+                         <p className="bg-black/60 text-white inline-block px-4 py-2 rounded-full font-bold text-xs uppercase tracking-wider backdrop-blur-md pointer-events-auto shadow-xl">
                            {lang === 'HI' ? 'पास के QR पर कैमरा केंद्रित करें' : 'Point camera at visitor pass QR'}
                          </p>
+                         <button
+                           onClick={toggleTorch}
+                           className="pointer-events-auto p-3 rounded-full bg-black/60 text-white hover:bg-black/80 backdrop-blur-md transition-all shadow-xl flex items-center justify-center border border-white/20 hover:scale-105 active:scale-95"
+                           title={lang === 'HI' ? 'फ्लैशलाइट टॉगल करें' : 'Toggle Flashlight'}
+                         >
+                           {flashEnabled ? <Flashlight className="w-5 h-5 text-yellow-400" /> : <FlashlightOff className="w-5 h-5" />}
+                         </button>
                      </div>
                    </>
                  ) : (

@@ -96,6 +96,7 @@ import AppFeedbackModal from './components/AppFeedbackModal';
 import BugReportModal from './components/BugReportModal';
 import VisitorPass from './components/VisitorPass';
 import PrintablePassModal from './components/PrintablePassModal';
+import PrintableBatchPassModal from './components/PrintableBatchPassModal';
 import LegalCenter from './components/LegalPages';
 import ClockComponent from './components/Clock';
 import ProfileTab from './components/ProfileTab';
@@ -662,14 +663,15 @@ export default function App() {
 
   // Terms Acceptance Check
   useEffect(() => {
-    if (!showSplash && !showLoader && isAuthReady && organization) {
-      if (!organization.legalAccepted && (user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN' || isSuperAdminValue)) {
+    if (!showSplash && !showLoader && isAuthReady && organization && user) {
+      const hasAcceptedLocally = localStorage.getItem(`vms_legal_accepted_${user.uid}`) === 'true';
+      if (!organization.legalAccepted || !hasAcceptedLocally) {
         setShowTermsAcceptance(true);
       } else {
         setShowTermsAcceptance(false);
       }
     }
-  }, [showSplash, showLoader, isAuthReady, organization?.legalAccepted, user?.role, isSuperAdminValue]);
+  }, [showSplash, showLoader, isAuthReady, organization?.legalAccepted, user?.uid]);
 
   // Handle Kiosk Assistance Approval
   useEffect(() => {
@@ -697,6 +699,10 @@ export default function App() {
   const [showTermsAcceptance, setShowTermsAcceptance] = useState(false);
   const [showPassForVisitor, setShowPassForVisitor] = useState<any | null>(null);
   const [showPrintablePass, setShowPrintablePass] = useState<Visitor | null>(null);
+  const [showPrintableBatchPass, setShowPrintableBatchPass] = useState<Visitor[] | null>(null);
+
+  const [dashboardPage, setDashboardPage] = useState(0);
+  const DASHBOARD_ITEMS_PER_PAGE = 5;
 
   const [newPurpose, setNewPurpose] = useState('');
   const [newCategory, setNewCategory] = useState('');
@@ -1425,68 +1431,85 @@ export default function App() {
         setStandalonePassData({ visitorId: passId, orgId });
         setShowPublicRegister(null);
         
-        if (mode === 'checkout') {
-          // Check if we already tried this in this session to avoid race with VisitorPass
-          const sessionKey = `checkout_${passId}`;
-          if (sessionStorage.getItem(sessionKey)) return;
-
-          // Before attempting automatic check-out API call, fetch and verify the status of the visitor from the server securely.
-          // If the visitor's current status is PENDING or APPROVED, they are checking IN or just viewing their pass,
-          // so we should bypass the checkout PUT call to avoid throwing an error.
+        // AUTO-ACTION LOGIC: Make the same QR code support both actions based on visitor status automatically.
+        // It requires a specific action explicit query parameter in the URL.
+        const sessionKey = `auto_action_${passId}_${mode}`;
+        if ((mode === 'checkin' || mode === 'checkout') && !sessionStorage.getItem(sessionKey)) {
+          sessionStorage.setItem(sessionKey, 'processing');
+          
           try {
+            // First fetch current status securely
             const statusRes = await fetch(`/api/organizations/${orgId}/visitor-status/${passId}`);
             if (statusRes.ok) {
               const statusData = await statusRes.json();
-              const currentStatus = statusData.status; // e.g., PENDING, APPROVED, CHECKED_IN, INSIDE, CHECKED OUT
-              
-              if (currentStatus === 'PENDING' || currentStatus === 'APPROVED') {
-                // Bypass checking out as they are not inside yet
-                return;
-              }
-            }
-          } catch (e) {
-            console.warn('Error verifying status before auto-checkout:', e);
-          }
+              const currentStatus = statusData.status;
 
-          sessionStorage.setItem(sessionKey, 'processing');
+              if (mode === 'checkin' && (currentStatus === 'PENDING' || currentStatus === 'APPROVED')) {
+                // Auto Check-in logic!
+                Swal.fire({
+                  title: 'Checking In...',
+                  text: 'Please wait while we record your entry.',
+                  allowOutsideClick: false,
+                  didOpen: () => { Swal.showLoading(); }
+                });
 
-          try {
-            const response = await fetch(`/api/visitors/${passId}/checkout`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                checkOutTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-                organizationId: orgId 
-              })
-            });
-            
-            if (response.ok) {
-              Swal.fire({
-                title: 'Check-out Successful',
-                text: 'Your exit has been recorded automatically. Please rate your experience.',
-                icon: 'success',
-                timer: 4000,
-                showConfirmButton: false,
-                background: theme === 'dark' ? '#1e293b' : '#ffffff',
-                color: theme === 'dark' ? '#ffffff' : '#000000',
-              });
-              addToast('Check-out successful! Please rate your experience.', 'success');
-            } else {
-              const contentType = response.headers.get("content-type");
-              if (contentType && contentType.includes("application/json")) {
-                const errorData = await response.json();
-                throw new Error(errorData?.error || 'Checkout failed');
-              } else {
-                const text = await response.text();
-                if (response.status === 404) {
-                   throw new Error('Already checked out or not found');
+                const checkInRes = await fetch(`/api/visitors/${passId}/checkin`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ organizationId: orgId })
+                });
+
+                if (checkInRes.ok) {
+                  Swal.fire({
+                    title: 'Check-in Successful',
+                    text: 'Your entry has been recorded. Welcome!',
+                    icon: 'success',
+                    timer: 3000,
+                    showConfirmButton: false,
+                    background: document.documentElement.classList.contains('dark') ? '#1e293b' : '#ffffff',
+                    color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000',
+                  });
+                  addToast('Check-in successful!', 'success');
+                } else {
+                  throw new Error('Checkin API failed');
                 }
-                throw new Error('A server error occurred during checkout.');
+              } else if (mode === 'checkout' && currentStatus === 'INSIDE') {
+                // Auto Check-out logic!
+                Swal.fire({
+                  title: 'Checking Out...',
+                  text: 'Please wait while we record your exit.',
+                  allowOutsideClick: false,
+                  didOpen: () => { Swal.showLoading(); }
+                });
+
+                const checkOutRes = await fetch(`/api/visitors/${passId}/checkout`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                    checkOutTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+                    organizationId: orgId 
+                  })
+                });
+
+                if (checkOutRes.ok) {
+                  Swal.fire({
+                    title: 'Check-out Successful',
+                    text: 'Your exit has been recorded automatically. Please rate your experience.',
+                    icon: 'success',
+                    timer: 4000,
+                    showConfirmButton: false,
+                    background: document.documentElement.classList.contains('dark') ? '#1e293b' : '#ffffff',
+                    color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000',
+                  });
+                  addToast('Check-out successful! Please rate your experience.', 'success');
+                } else {
+                  throw new Error('Checkout API failed');
+                }
               }
             }
-          } catch (error: any) {
-            console.error('Auto-checkout error:', error);
-            // Quietly handle errors in auto-checkout without flashing intrusive error popup alerts to the user
+          } catch (error) {
+            console.error('Auto-action encountered an issue:', error);
+            Swal.close();
           }
         }
       } else {
@@ -3853,6 +3876,19 @@ export default function App() {
     setShowPrintablePass(passData);
   };
 
+  const handleBulkPrintPass = (selectedVisitors: any[]) => {
+    const passesData = selectedVisitors.map(visitor => ({
+      ...visitor,
+      visitorId: visitor.visitorId || visitor.visitId || visitor.id,
+      visitId: visitor.visitId || visitor.visitorId || visitor.id,
+      organizationId: visitor.organizationId || user?.organizationId,
+      name: visitor.name || visitor.visitorName,
+      visitorName: visitor.name || visitor.visitorName,
+      category: visitor.category,
+    }));
+    setShowPrintableBatchPass(passesData);
+  };
+
   const handleScanCheckOut = async (passId: string) => {
     if (!organization?.id) return;
     const activeVisit = visitors.find(v => (v.visitorId === passId || v.preRegistrationId === passId) && v.status === 'INSIDE');
@@ -3860,13 +3896,12 @@ export default function App() {
       await checkOutVisitor(activeVisit.visitorId, false);
     } else {
        try {
-         // Check with secure server-side API to determine status
-         const statusRes = await fetch(`/api/organizations/${organization.id}/visitor-status/${passId}`);
-         if (statusRes.ok) {
-           const statusData = await statusRes.json();
-           if (statusData.type === 'preRegistration') {
-             const preRegData = { id: statusData.data.id, ...statusData.data } as PreRegistration;
-             if (preRegData.status === 'APPROVED') {
+         // Check if this pass corresponds to a pre-registration
+         const preRegRef = doc(db, 'organizations', organization.id, 'preRegistrations', passId);
+         const preRegSnap = await getDoc(preRegRef);
+         if (preRegSnap.exists()) {
+             const preRegData = { id: preRegSnap.id, ...preRegSnap.data() } as PreRegistration;
+             if (preRegData.status === 'APPROVED' || preRegData.status === 'PENDING') {
                // Let's check them in immediately! Using empty/placeholder signature as digital QR scan is highly authenticated
                await handleKioskPreRegCheckIn(preRegData, "");
                return;
@@ -3877,16 +3912,17 @@ export default function App() {
                  return;
                }
              }
-           } else if (statusData.type === 'visit') {
-             // If they are inside, check them out
-             if (statusData.status === 'INSIDE') {
-               await checkOutVisitor(statusData.data.visitId || statusData.data.visitorId || statusData.data.id, false);
-               return;
+         } else {
+             // Maybe it's a generic visit document ID that just wasn't in our active activeVisit filter
+             const visitRef = doc(db, 'organizations', organization.id, 'visits', passId);
+             const visitSnap = await getDoc(visitRef);
+             if (visitSnap.exists() && visitSnap.data().status === 'INSIDE') {
+                 await checkOutVisitor(passId, false);
+                 return;
              }
-           }
          }
        } catch (err) {
-         console.error('Error in QR scan helper check-in fallback:', err);
+         console.error('Error securely verifying pass status:', err);
        }
 
        Swal.fire({
@@ -4287,8 +4323,8 @@ export default function App() {
       const dateA = new Date(`${a.date} ${a.checkInTime}`);
       const dateB = new Date(`${b.date} ${b.checkInTime}`);
       return dateB.getTime() - dateA.getTime();
-    }).slice(0, 5);
-  }, [visitors]);
+    }).slice(dashboardPage * DASHBOARD_ITEMS_PER_PAGE, (dashboardPage + 1) * DASHBOARD_ITEMS_PER_PAGE);
+  }, [visitors, dashboardPage]);
 
   useEffect(() => {
     if (organization?.brandColor) {
@@ -4605,6 +4641,7 @@ export default function App() {
 
       const visitData = {
         visitId,
+        visitorId: visitId,
         visitorPhone: req.phone,
         visitorName: req.name,
         visitorEmail: req.email || '',
@@ -5393,18 +5430,6 @@ export default function App() {
                       <LayoutDashboard className="h-5 w-5" />
                       Open Dashboard
                     </button>
-                    <QRCheckOutScanner
-                      onScan={handleScanCheckOut}
-                      lang="EN"
-                      customTrigger={
-                        <button
-                          className="px-8 py-4 bg-purple-600 text-white rounded-2xl font-bold shadow-[0_20px_40px_-10px_rgba(147,51,234,0.3)] hover:bg-purple-700 transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
-                        >
-                          <Camera className="h-5 w-5" />
-                          Scan QR Pass
-                        </button>
-                      }
-                    />
                     <button
                       onClick={() => setActiveTab('records')}
                       className="px-8 py-4 bg-white border border-slate-200 text-slate-900 rounded-2xl font-bold hover:bg-slate-50 transition-all active:scale-95 flex items-center gap-2"
@@ -5513,6 +5538,7 @@ export default function App() {
                   icon={<UserIcon className="h-6 w-6" />}
                   color="blue"
                   trend={`${stats.allTime.unique > 10 ? '↑ 12%' : '0%'} from yesterday`}
+                  delay={0.1}
                 />
                 <StatCard
                   title="Donors"
@@ -5520,6 +5546,7 @@ export default function App() {
                   icon={<Heart className="h-6 w-6" />}
                   color="rose"
                   trend="0% from yesterday"
+                  delay={0.2}
                 />
                 <StatCard
                   title="Volunteers"
@@ -5527,6 +5554,7 @@ export default function App() {
                   icon={<Users2 className="h-6 w-6" />}
                   color="emerald"
                   trend="0% from yesterday"
+                  delay={0.3}
                 />
                 <StatCard
                   title="Active Now"
@@ -5534,6 +5562,7 @@ export default function App() {
                   icon={<ClipboardList className="h-6 w-6" />}
                   color="amber"
                   trend="Currently Inside"
+                  delay={0.4}
                 />
               </div>
 
@@ -5553,9 +5582,9 @@ export default function App() {
 
                 <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4">
                     {[
-                      { icon: <UserPlus />, label: 'New Entry', color: 'blue', tab: 'visitors', action: () => { setEditingVisitor(null); setShowForm(true); } },
+                      { icon: <UserPlus />, label: 'New Entry', color: 'blue', tab: 'visitors', action: () => { setActiveTab('visitors'); setEditingVisitor(null); setShowForm(true); } },
                       { icon: <Calendar />, label: 'Pre-Register', color: 'rose', tab: 'pre-registrations', action: () => setActiveTab('pre-registrations') },
-                      { icon: <LayoutDashboard />, label: 'Scan Visitor', color: 'emerald', tab: 'visitors', action: () => setActiveTab('visitors') },
+                      { icon: <Camera />, label: 'Scan QR Pass', color: 'emerald', tab: 'visitors', isScanner: true },
                       { icon: <History />, label: 'Manage Logs', color: 'purple', tab: 'logs', action: () => setActiveTab('logs') },
                       { icon: <Search />, label: 'Search Node', color: 'slate', tab: 'records', action: () => setActiveTab('records') },
                       { icon: <Monitor />, label: 'Kiosk Mode', color: 'amber', tab: 'dashboard', action: handleEnterKiosk },
@@ -5564,28 +5593,43 @@ export default function App() {
                     ].filter(btn => {
                       if (btn.tab === 'settings') return user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN' || isSuperAdmin;
                       return isTabVisible(btn.tab);
-                    }).map((btn, i) => (
-                    <motion.button
-                      key={i}
-                      whileHover={{ scale: 1.02, y: -2 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={btn.action}
-                      className="flex flex-col items-center justify-center p-6 bg-white border border-slate-50 rounded-[2rem] shadow-[0_10px_25px_-5px_rgba(0,0,0,0.03)] hover:shadow-[0_15px_35px_-5px_rgba(0,0,0,0.05)] transition-all group"
-                    >
-                      <div className={`h-12 w-12 rounded-2xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110
-                        ${btn.color === 'blue' ? 'bg-blue-50 text-blue-600' : 
-                          btn.color === 'rose' ? 'bg-rose-50 text-rose-600' : 
-                          btn.color === 'emerald' ? 'bg-emerald-50 text-emerald-600' :
-                          btn.color === 'purple' ? 'bg-purple-50 text-purple-600' :
-                          btn.color === 'slate' ? 'bg-slate-50 text-slate-600' :
-                          btn.color === 'orange' ? 'bg-orange-50 text-orange-600' :
-                          'bg-indigo-50 text-indigo-600'}`}
-                      >
-                         {btn.icon}
-                      </div>
-                      <span className="text-[10px] font-bold text-slate-900 uppercase tracking-widest text-center">{btn.label}</span>
-                    </motion.button>
-                  ))}
+                    }).map((btn, i) => {
+                      const buttonEl = (
+                        <motion.button
+                          whileHover={{ scale: 1.02, y: -2 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={btn.action}
+                          className="flex flex-col items-center justify-center p-6 bg-white border border-slate-50 rounded-[2rem] shadow-[0_10px_25px_-5px_rgba(0,0,0,0.03)] hover:shadow-[0_15px_35px_-5px_rgba(0,0,0,0.05)] transition-all group w-full h-full cursor-pointer"
+                        >
+                          <div className={`h-12 w-12 rounded-2xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110
+                            ${btn.color === 'blue' ? 'bg-blue-50 text-blue-600' : 
+                              btn.color === 'rose' ? 'bg-rose-50 text-rose-600' : 
+                              btn.color === 'emerald' ? 'bg-emerald-50 text-emerald-600' :
+                              btn.color === 'purple' ? 'bg-purple-50 text-purple-600' :
+                              btn.color === 'slate' ? 'bg-slate-50 text-slate-600' :
+                              btn.color === 'orange' ? 'bg-orange-50 text-orange-600' :
+                              btn.color === 'amber' ? 'bg-amber-50 text-amber-600' :
+                              'bg-indigo-50 text-indigo-600'}`}
+                          >
+                             {btn.icon}
+                          </div>
+                          <span className="text-[10px] font-bold text-slate-900 uppercase tracking-widest text-center">{btn.label}</span>
+                        </motion.button>
+                      );
+
+                      if (btn.isScanner) {
+                        return (
+                          <QRCheckOutScanner
+                            key={i}
+                            onScan={handleScanCheckOut}
+                            lang="EN"
+                            customTrigger={buttonEl}
+                          />
+                        );
+                      }
+
+                      return <React.Fragment key={i}>{buttonEl}</React.Fragment>;
+                    })}
                 </div>
               </div>
 
@@ -5615,6 +5659,7 @@ export default function App() {
                       onDelete={deleteVisitor}
                       onBulkCheckOut={handleBulkCheckOut}
                       onBulkDelete={handleBulkDelete}
+                      onBulkPrintPass={handleBulkPrintPass}
                       onAddReview={(v) => setReviewVisitor(v)}
                       onAddDonation={handleAddDonationRecord}
                       onGeneratePass={handleGeneratePass}
@@ -5626,16 +5671,41 @@ export default function App() {
                       templates={organization?.preRegSettings?.templates}
                     />
                     
-                    {/* Fake Pagination for design match */}
-                    <div className="px-8 py-6 flex items-center justify-between bg-slate-50/50 border-t border-slate-100">
-                      <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><ChevronLeft size={20} /></button>
-                      <div className="flex-1 max-w-xs h-1 px-4">
-                        <div className="w-full h-full bg-slate-200 rounded-full overflow-hidden">
-                           <div className="w-1/3 h-full bg-blue-600 rounded-full" />
+                    {/* Dashboard Pagination */}
+                    {Math.ceil(visitors.length / DASHBOARD_ITEMS_PER_PAGE) > 1 && (() => {
+                      const totalPages = Math.ceil(visitors.length / DASHBOARD_ITEMS_PER_PAGE);
+                      const progressWidth = `${((dashboardPage + 1) / totalPages) * 100}%`;
+                      return (
+                        <div className="px-8 py-6 flex items-center justify-between bg-slate-50/50 border-t border-slate-100">
+                          <button 
+                            onClick={() => setDashboardPage(prev => Math.max(0, prev - 1))}
+                            disabled={dashboardPage === 0}
+                            className={`p-2 rounded-lg transition-colors ${dashboardPage === 0 ? 'text-slate-300 cursor-not-allowed' : 'hover:bg-slate-200 text-slate-700'}`}
+                          >
+                            <ChevronLeft size={20} />
+                          </button>
+                          
+                          <div className="flex-1 max-w-xs px-4" title={`Page ${dashboardPage + 1} of ${totalPages}`}>
+                            <div className="w-full h-1 bg-slate-200 rounded-full overflow-hidden">
+                                <motion.div 
+                                  className="h-full bg-blue-600 rounded-full"
+                                  initial={{ width: 0 }}
+                                  animate={{ width: progressWidth }}
+                                  transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
+                                />
+                            </div>
+                          </div>
+
+                          <button 
+                            onClick={() => setDashboardPage(prev => Math.min(totalPages - 1, prev + 1))}
+                            disabled={dashboardPage === totalPages - 1}
+                            className={`p-2 rounded-lg transition-colors ${dashboardPage === totalPages - 1 ? 'text-slate-300 cursor-not-allowed' : 'hover:bg-slate-200 text-slate-700'}`}
+                          >
+                            <ChevronRight size={20} />
+                          </button>
                         </div>
-                      </div>
-                      <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><ChevronRight size={20} /></button>
-                    </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -5831,6 +5901,7 @@ export default function App() {
                   onDelete={deleteVisitor}
                   onBulkCheckOut={handleBulkCheckOut}
                   onBulkDelete={handleBulkDelete}
+                  onBulkPrintPass={handleBulkPrintPass}
                   onAddReview={(v) => setReviewVisitor(v)}
                   onAddDonation={handleAddDonationRecord}
                   onGeneratePass={handleGeneratePass}
@@ -5927,6 +5998,7 @@ export default function App() {
                   onDelete={deleteVisitor}
                   onBulkCheckOut={handleBulkCheckOut}
                   onBulkDelete={handleBulkDelete}
+                  onBulkPrintPass={handleBulkPrintPass}
                   onAddReview={(v) => setReviewVisitor(v)}
                   onAddDonation={handleAddDonationRecord}
                   onGeneratePass={handleGeneratePass}
@@ -6093,6 +6165,7 @@ export default function App() {
                   icon={<Users />}
                   color="blue"
                   trend={stats.today.trend}
+                  delay={0.1}
                 />
                 <StatCard
                   title="Current Occupancy"
@@ -6100,6 +6173,7 @@ export default function App() {
                   icon={<UserCheck />}
                   color="emerald"
                   trend={`${activeVisitors.length} nodes active`}
+                  delay={0.2}
                 />
                 <StatCard
                   title="Check-Out Delta"
@@ -6107,6 +6181,7 @@ export default function App() {
                   icon={<LogOut />}
                   color="indigo"
                   trend={`${stats.today.total - activeVisitors.length} sessions closed`}
+                  delay={0.3}
                 />
               </div>
 
@@ -7343,11 +7418,14 @@ export default function App() {
             organizationId={user?.organizationId}
           />
         )}
-        {showTermsAcceptance && (
+         {showTermsAcceptance && (
           <LegalAcceptanceModal
             organizationName={organization?.name}
             onAccept={async () => {
-              if (organization?.id) {
+              if (user?.uid) {
+                localStorage.setItem(`vms_legal_accepted_${user.uid}`, 'true');
+              }
+              if (organization?.id && (user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN' || isSuperAdminValue)) {
                 try {
                   await updateDoc(doc(db, 'organizations', organization.id), {
                     legalAccepted: true
@@ -7382,6 +7460,13 @@ export default function App() {
             onClose={() => setShowPrintablePass(null)}
           />
         )}
+        {showPrintableBatchPass && organization && (
+          <PrintableBatchPassModal
+            visitors={showPrintableBatchPass}
+            organization={organization}
+            onClose={() => setShowPrintableBatchPass(null)}
+          />
+        )}
       </AnimatePresence>
 
       {/* Toast Notifications */}
@@ -7393,7 +7478,7 @@ export default function App() {
           onClose={() => setReviewVisitor(null)}
           onSave={handleSaveReview}
           lang={isKioskMode ? kioskLang : 'EN'}
-          isMandatory={!!reviewVisitor.preRegistrationId}
+          isMandatory={false}
         />
       )}
 
@@ -7423,7 +7508,7 @@ function FilterButton({ active, onClick, label }: { active: boolean; onClick: ()
   );
 }
 
-function StatCard({ title, value, icon, trend, color = 'blue' }: { title: string; value: string | number; icon: React.ReactNode; trend?: string; color?: 'blue' | 'indigo' | 'emerald' | 'purple' | 'amber' | 'rose' }) {
+function StatCard({ title, value, icon, trend, color = 'blue', delay = 0 }: { title: string; value: string | number; icon: React.ReactNode; trend?: string; color?: 'blue' | 'indigo' | 'emerald' | 'purple' | 'amber' | 'rose'; delay?: number }) {
   const accentColors = {
     blue: 'text-blue-500 bg-blue-50/50',
     indigo: 'text-indigo-500 bg-indigo-50/50',
@@ -7453,6 +7538,9 @@ function StatCard({ title, value, icon, trend, color = 'blue' }: { title: string
 
   return (
     <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay }}
       whileHover={{ y: -5 }}
       className={`glass-card rounded-[2.5rem] p-8 flex flex-col relative group overflow-hidden ${bgStyles[color]}`}
     >

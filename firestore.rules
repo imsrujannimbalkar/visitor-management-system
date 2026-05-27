@@ -248,7 +248,8 @@ service cloud.firestore {
       // =========================================================
 
       match /visitors/{id} {
-        allow read, write: if belongsToOrg(orgId);
+        allow get: if true;
+        allow list, write: if belongsToOrg(orgId);
       }
 
       // =========================================================
@@ -256,7 +257,14 @@ service cloud.firestore {
       // =========================================================
 
       match /visits/{id} {
-        allow read, write: if belongsToOrg(orgId);
+        allow get: if true;
+        allow list: if belongsToOrg(orgId) || request.query.limit <= 5;
+        allow create, delete: if belongsToOrg(orgId);
+        allow update: if belongsToOrg(orgId) || (
+          // Allow anonymous/visitor checkout if they only modify checkout fields to 'CHECKED OUT'
+          (request.resource.data.status == 'CHECKED OUT' || request.resource.data.status == 'CHECKED_OUT') &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'checkOutTime', 'updatedAt'])
+        );
       }
 
       // =========================================================
@@ -302,8 +310,14 @@ service cloud.firestore {
       // =========================================================
 
       match /preRegistrations/{id} {
-        allow read, update, delete: if belongsToOrg(orgId);
+        allow get: if true;
+        allow list, delete: if belongsToOrg(orgId);
         allow create: if true;
+        allow update: if belongsToOrg(orgId) || (
+          // Allow anonymous completion status updates
+          request.resource.data.status == 'COMPLETED' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+        );
       }
 
       // =========================================================

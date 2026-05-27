@@ -396,6 +396,72 @@ app.post('/api/visitors', asyncHandler(async (req, res) => {
   res.status(201).json(result);
 }));
 
+app.post('/api/visitors/:id/checkin', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { organizationId } = req.body;
+
+  if (!organizationId || typeof organizationId !== 'string') {
+    return res.status(400).json({ error: 'organizationId is required for checkin' });
+  }
+
+  // Find the pre-registration doc
+  const preRegRef = adminDb.collection('organizations').doc(organizationId).collection('preRegistrations').doc(id);
+  const preRegSnap = await safely(preRegRef.get(), getFallback);
+
+  if (!preRegSnap || !preRegSnap.exists) {
+    return res.status(404).json({ error: 'Pre-registration not found' });
+  }
+
+  const reqData = preRegSnap.data() || {};
+  
+  if (reqData.status === 'CHECKED_IN' || reqData.status === 'COMPLETED') {
+    return res.status(400).json({ error: 'Already checked in' });
+  }
+
+  const visitId = `v_${Date.now()}`;
+  const timestamp = new Date().toISOString();
+  const date = new Date().toISOString().split('T')[0];
+  const checkInTime = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+  const visitData = {
+    visitId,
+    visitorId: visitId,
+    visitorPhone: reqData.phone || '',
+    visitorName: reqData.name || '',
+    visitorEmail: reqData.email || '',
+    visitorDOB: reqData.dob || '',
+    visitorAddress: reqData.address || '',
+    purpose: reqData.purpose || '',
+    category: reqData.category || 'Guest',
+    notes: reqData.notes || '',
+    occasion: reqData.occasion || '',
+    date,
+    checkInTime,
+    status: 'INSIDE',
+    organizationId,
+    createdBy: 'AUTO_SCAN',
+    recordedBy: 'AUTO_SCAN',
+    recordedByName: 'QR Scan Auto Check-in',
+    signature: '',
+    preRegistrationId: id
+  };
+
+  const visitRef = adminDb.collection('organizations').doc(organizationId).collection('visits').doc(visitId);
+  await safely(visitRef.set(visitData), undefined);
+
+  // Mark pre-registration as CHECKED_IN
+  await safely(preRegRef.update({
+    status: 'CHECKED_IN',
+    processedAt: timestamp,
+    processedBy: 'AUTO_SCAN'
+  }), undefined);
+
+  // Sync to Google
+  syncToGoogle(organizationId, visitData as any, false);
+
+  res.status(200).json(visitData);
+}));
+
 app.put('/api/visitors/:id/checkout', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { organizationId, checkOutTime } = req.body;

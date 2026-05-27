@@ -19,7 +19,7 @@ import {
 import { QRCodeSVG } from 'qrcode.react';
 import { Visitor, Organization } from '../types';
 import { db } from '../firebase';
-import { doc, getDoc, updateDoc, onSnapshot, query, collection, where, getDocs, addDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, onSnapshot, query, collection, where, getDocs, addDoc, limit } from 'firebase/firestore';
 import { DEFAULT_WHATSAPP_TEMPLATES } from '../constants';
 import { useToast } from './Toast';
 import SignatureModal from './SignatureModal';
@@ -117,7 +117,7 @@ export default function VisitorPass({
 
         // Listener 2: Query by preRegistrationId
         const visitsCollRef = collection(db, 'organizations', orgIdToFetch, 'visits');
-        const q = query(visitsCollRef, where('preRegistrationId', '==', effectiveVisitorId));
+        const q = query(visitsCollRef, where('preRegistrationId', '==', effectiveVisitorId), limit(1));
         unsubs.push(onSnapshot(q, (snapshot) => {
           if (!snapshot.empty) {
             const visitDoc = snapshot.docs[0];
@@ -137,7 +137,7 @@ export default function VisitorPass({
         unsubs.push(onSnapshot(preRegRef, (snapshot) => {
           if (snapshot.exists()) {
             const preData = snapshot.data();
-            if (preData.status === 'APPROVED') {
+            if (preData.status === 'APPROVED' || preData.status === 'PENDING') {
               setPreRegRecord({ 
                 ...preData, 
                 visitorId: snapshot.id, 
@@ -250,53 +250,89 @@ export default function VisitorPass({
       if (!organization?.id) throw new Error('Missing Organization');
       if (!vid) throw new Error('Missing visitor ID');
 
-      // Use API for reliable checkout even if anonymous
-      const response = await fetch(`/api/visitors/${vid}/checkout`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          organizationId: organization.id,
-          checkOutTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
-        })
-      });
+      try {
+        // Use API for reliable checkout even if anonymous
+        const response = await fetch(`/api/visitors/${vid}/checkout`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            organizationId: organization.id,
+            checkOutTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+          })
+        });
 
-      if (!response.ok) {
-        // Fallback to direct Firestore if API fails (might work for logged in users)
-        const visitorRef = doc(db, 'organizations', organization.id, 'visits', vid);
+        if (!response.ok) {
+          throw new Error('API request failed');
+        }
+
+        // Update pre-registration if linked (best effort)
+        if (visitor.preRegistrationId) {
+          try {
+            await updateDoc(doc(db, 'organizations', organization.id, 'preRegistrations', visitor.preRegistrationId), {
+              status: 'COMPLETED',
+              updatedAt: new Date().toISOString()
+            });
+          } catch (preRegErr) {
+            console.error('Failed to update pre-registration on checkout:', preRegErr);
+          }
+        }
+
+        // Trigger review/success modal
+        const checkOutSuccessMsg = language === 'HI'
+          ? 'चेक-आउट सफल! कृपया अपना अनुभव साझा करें।'
+          : 'Check-out successful! Please share your feedback in the review panel.';
+        showToast(checkOutSuccessMsg, 'success');
+
+        setTimeout(() => {
+          setShowReviewModal(true);
+        }, 1000);
+
+      } catch (apiErr) {
+        console.warn('API Check-out failed or returned error, triggering direct client Firestore fallback:', apiErr);
+        
+        // Find correct visit document ID if vid is preRegistrationId
+        let targetVisitId = vid;
+        const visitsCollRef = collection(db, 'organizations', organization.id, 'visits');
+        const q = query(visitsCollRef, where('preRegistrationId', '==', vid), limit(1));
+        const querySnap = await getDocs(q);
+        if (!querySnap.empty) {
+          targetVisitId = querySnap.docs[0].id;
+        }
+
+        const visitorRef = doc(db, 'organizations', organization.id, 'visits', targetVisitId);
         const checkOutTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
         
+        // Execute direct client-side checkout
         await updateDoc(visitorRef, {
           status: 'CHECKED OUT',
           checkOutTime: checkOutTime,
           updatedAt: new Date().toISOString()
         });
-      }
 
-      // Update pre-registration if linked (best effort)
-      if (visitor.preRegistrationId) {
-        try {
-          await updateDoc(doc(db, 'organizations', organization.id, 'preRegistrations', visitor.preRegistrationId), {
-            status: 'COMPLETED',
-            updatedAt: new Date().toISOString()
-          });
-        } catch (preRegErr) {
-          console.error('Failed to update pre-registration on checkout:', preRegErr);
+        // Best effort pre-registration update
+        if (visitor.preRegistrationId) {
+          try {
+            await updateDoc(doc(db, 'organizations', organization.id, 'preRegistrations', visitor.preRegistrationId), {
+              status: 'COMPLETED',
+              updatedAt: new Date().toISOString()
+            });
+          } catch (preRegErr) {
+            console.error('Failed to update pre-registration on checkout (fallback):', preRegErr);
+          }
         }
+
+        // Trigger review/success modal
+        const checkOutSuccessMsg = language === 'HI'
+          ? 'चेक-आउट सफल! कृपया अपना अनुभव साझा करें।'
+          : 'Check-out successful! Please share your feedback in the review panel.';
+        showToast(checkOutSuccessMsg, 'success');
+
+        setTimeout(() => {
+          setShowReviewModal(true);
+        }, 1000);
       }
-
-      // Trigger both centered review modal and a toast popup
-      const checkOutSuccessMsg = language === 'HI'
-        ? 'चेक-आउट सफल! कृपया अपना अनुभव साझा करें।'
-        : 'Check-out successful! Please share your feedback in the review panel.';
-      showToast(checkOutSuccessMsg, 'success');
-
-      // Trigger review modal after successful checkout
-      setTimeout(() => {
-        setShowReviewModal(true);
-      }, 1000);
-      
     } catch (err) {
-      console.error('Check-out failed:', err);
+      console.error('Check-out failed overall:', err);
       showToast('Check-out process encountered an issue.', 'error');
     } finally {
       setCheckingOut(false);
@@ -306,7 +342,10 @@ export default function VisitorPass({
   const handleShare = async () => {
     if (!visitor || !organization) return;
     const vid = visitor.visitId || visitor.visitorId;
+    const isPendingForShare = visitor.status === 'PENDING' || visitor.status === 'APPROVED';
+    const isCheckedOutForShare = visitor.status === 'CHECKED OUT' || visitor.status === 'COMPLETED';
     const passUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization.id}`;
+    const targetActionUrlForShare = `${window.location.origin}/?passId=${vid}&orgId=${organization.id}${isPendingForShare ? '&mode=checkin' : (isCheckedOutForShare ? '' : '&mode=checkout')}`;
     const visitorName = visitor.name || visitor.visitorName || 'Visitor';
     const visitDate = visitor.date ? new Date(visitor.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Today';
     
@@ -319,7 +358,7 @@ export default function VisitorPass({
       .replace(/{{url}}/g, passUrl)
       .replace(/{{checkout_url}}/g, checkoutUrl);
       
-    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(passUrl)}`;
+    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(targetActionUrlForShare)}`;
       
     // Fallback if the legacy template doesn't include the checkout_url tag
     if (!template.includes('{{checkout_url}}')) {
@@ -396,10 +435,15 @@ export default function VisitorPass({
     );
   }
 
-  const vid = visitor.visitId || visitor.visitorId;
-  const isCheckedOut = visitor.status === 'CHECKED OUT';
-  const isPending = visitor.status === 'PENDING';
-  const passUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization?.id}${isPending ? '' : '&mode=checkout'}`;
+  const vid = visitor.visitId || visitor.visitorId || visitor.id || '';
+  const isCheckedOut = visitor.status === 'CHECKED OUT' || visitor.status === 'COMPLETED';
+  const isPending = visitor.status === 'PENDING' || visitor.status === 'APPROVED';
+  
+  // The URL meant for direct viewing without triggering actions automatically
+  const viewOnlyUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization?.id}`;
+  
+  // The URL embedded into the QR code - explicitly tells the app what to do when scanned!
+  const targetActionUrl = `${window.location.origin}/?passId=${vid}&orgId=${organization?.id}${isPending ? '&mode=checkin' : (isCheckedOut ? '' : '&mode=checkout')}`;
 
   return (
     <div className={`relative w-full flex items-center justify-center overflow-x-hidden ${standalone ? 'min-h-screen bg-slate-50 dark:bg-slate-950 p-2 sm:p-4' : 'p-0'}`}>
@@ -524,7 +568,7 @@ export default function VisitorPass({
           <div className="flex flex-col items-center justify-center py-6 sm:py-10 border-y border-slate-100 dark:border-slate-800 space-y-6 bg-slate-50/30 dark:bg-slate-900/50 relative overflow-hidden">
             <div className="p-4 sm:p-6 bg-white dark:bg-white rounded-[2rem] sm:rounded-[2.5rem] shadow-[0_20px_50px_-20px_rgba(37,99,235,0.3)] border border-slate-100 group transition-all duration-500 hover:shadow-[0_30px_70px_-20px_rgba(37,99,235,0.4)] hover:scale-[1.02] active:scale-[0.98] relative">
               <QRCodeSVG 
-                value={passUrl} 
+                value={targetActionUrl} 
                 size={typeof window !== 'undefined' && window.innerWidth < 400 ? 200 : 240} 
                 level="H"
                 fgColor={isCheckedOut ? "rgba(15, 23, 42, 0.4)" : "#000000"}
@@ -646,7 +690,7 @@ export default function VisitorPass({
             visitorName={visitor.name || visitor.visitorName}
             visitorId={visitor.visitorId || visitor.visitId}
             googleReviewUrl={organization?.googleReviewUrl}
-            isMandatory={!!visitor.preRegistrationId}
+            isMandatory={false}
             lang={language}
             onClose={() => setShowReviewModal(false)}
             onSave={async (rating, comment) => {
