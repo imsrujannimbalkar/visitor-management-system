@@ -68,7 +68,7 @@ export default function KioskPreRegLookup({ organizationId, onBack, onCheckIn, l
   };
 
   return (
-    <div className="flex-1 flex flex-col p-12 max-w-6xl mx-auto w-full relative">
+    <div className="flex-1 flex flex-col p-6 sm:p-12 max-w-5xl mx-auto w-full relative">
       <AnimatePresence mode="wait">
         {selectedReq ? (
           <motion.div 
@@ -137,29 +137,29 @@ export default function KioskPreRegLookup({ organizationId, onBack, onCheckIn, l
             exit={{ opacity: 0, x: 20 }}
             className="flex-1 flex flex-col"
           >
-            <div className="flex items-center gap-8 mb-12">
+            <div className="flex items-center gap-6 mb-8">
               <button 
                 onClick={onBack}
-                className="w-20 h-20 bg-white rounded-[2rem] shadow-lg flex items-center justify-center hover:bg-gray-50 transition-all active:scale-95 border border-gray-100"
+                className="w-14 h-14 bg-white rounded-2xl shadow-md flex items-center justify-center hover:bg-gray-50 transition-all active:scale-95 border border-gray-100"
               >
-                <ArrowLeft className="w-8 h-8 text-gray-400" />
+                <ArrowLeft className="w-6 h-6 text-gray-400" />
               </button>
               <div className="text-left">
-                <h2 className="text-5xl font-black text-gray-900 italic uppercase mb-2 leading-none">{t.title}</h2>
-                <p className="text-gray-400 font-bold tracking-[0.2em] uppercase">{t.subtitle}</p>
+                <h2 className="text-3xl font-black text-gray-900 italic uppercase mb-1 leading-none">{t.title}</h2>
+                <p className="text-[10px] font-bold text-gray-400 tracking-[0.2em] uppercase">{t.subtitle}</p>
               </div>
             </div>
 
             {/* Search Input */}
-            <div className="relative mb-12">
-              <Search className="absolute left-8 top-1/2 -translate-y-1/2 w-8 h-8 text-gray-300" />
+            <div className="relative mb-8">
+              <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300" />
               <input
                 type="text"
                 autoFocus
                 placeholder={t.placeholder}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-22 pr-8 py-10 bg-white rounded-[3rem] shadow-xl border border-gray-100 text-3xl font-bold focus:ring-4 focus:ring-brand-blue/20 outline-none transition-all placeholder:text-gray-200"
+                className="w-full pl-16 pr-6 py-5 bg-white rounded-2xl shadow-lg border border-gray-100 text-lg font-bold focus:ring-4 focus:ring-brand-blue/20 outline-none transition-all placeholder:text-gray-300"
               />
             </div>
 

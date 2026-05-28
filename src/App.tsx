@@ -70,7 +70,9 @@ import {
   Phone,
   PhoneCall,
   MessageCircle,
-  Camera
+  Camera,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -112,6 +114,9 @@ import { QRCheckOutScanner } from './components/QRCheckOutScanner';
 import InquiryTracker from './components/InquiryTracker';
 import LegalAcceptanceModal from './components/LegalAcceptanceModal';
 import { geminiService } from './services/geminiService';
+import { KioskPinDialog, PinNotSetNotification } from './components/KioskPinDialog';
+import { KioskPhoneDialog } from './components/KioskPhoneDialog';
+import { kioskSpeak } from './lib/speech';
 import { Visitor, User, VisitorStatus, UserRole, Organization, Notification, Profile, Visit, Donation, DonationAuditEntry, PreRegistration, Inquiry, ScanEvent } from './types';
 import { useToast } from './components/Toast';
 import { savePendingProfile, savePendingVisit, getPendingProfiles, getPendingVisits, clearPendingProfile, clearPendingVisit } from './lib/offline';
@@ -620,6 +625,10 @@ export default function App() {
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [isKioskMode, setIsKioskMode] = useState(() => localStorage.getItem('vms_kiosk_mode') === 'true');
+  const [voiceEnabled, setVoiceEnabled] = useState(() => localStorage.getItem('vms_voice_enabled') !== 'false');
+  const [activePinDialog, setActivePinDialog] = useState<'ENTER' | 'EXIT' | 'SETUP' | null>(null);
+  const [isKioskPhoneOpen, setIsKioskPhoneOpen] = useState(false);
+  const [isPinNotSetVisible, setIsPinNotSetVisible] = useState(false);
   const [isKioskFormOpen, setIsKioskFormOpen] = useState(false);
   const [isKioskPreRegLookupOpen, setIsKioskPreRegLookupOpen] = useState(false);
   const [recordsFilter, setRecordsFilter] = useState<'all' | 'inside' | 'checked-out' | 'today'>('all');
@@ -1554,6 +1563,20 @@ export default function App() {
   const [lastActivity, setLastActivity] = useState(Date.now());
   const [kioskLang, setKioskLang] = useState<'EN' | 'HI'>('EN');
   const [kioskTappings, setKioskTappings] = useState<'ACTIONS' | 'HISTORY'>('ACTIONS');
+
+  // Kiosk Voice Navigation Effect
+  useEffect(() => {
+    if (!isKioskMode || !voiceEnabled) return;
+
+    if (isKioskPreRegLookupOpen) {
+      kioskSpeak('PREREG_START', kioskLang);
+    } else if (isKioskFormOpen) {
+      kioskSpeak('CHECK_IN_START', kioskLang);
+    } else {
+      kioskSpeak('WELCOME', kioskLang);
+    }
+  }, [isKioskMode, isKioskFormOpen, isKioskPreRegLookupOpen, kioskLang]);
+
   const [isSyncingOffline, setIsSyncingOffline] = useState(false);
 
   // Auto-sync function
@@ -3732,80 +3755,47 @@ export default function App() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...profileData, ...visitData, visitorId: visitId })
           }).catch(err => console.error('Background sync failed:', err));
+
+          if (isKioskMode) {
+            kioskSpeak('CHECK_IN_SUCCESS', kioskLang, voiceEnabled);
+            setKioskSessionEntries(prev => [visitData as any, ...prev].slice(0, 5));
+            
+            const showThankYou = () => {
+              Swal.fire({
+                title: kioskLang === 'EN' ? 'Thank You!' : 'धन्यवाद!',
+                text: kioskLang === 'EN' ? `Your entry has been recorded, ${data.name}. Welcome to ${organization?.name || 'Visitor Management System'}.` : `आपकी प्रविष्टि दर्ज कर ली गई है, ${data.name}। ${organization?.name || 'Visitor Management System'} में आपका स्वागत है।`,
+                icon: 'success',
+                showConfirmButton: true,
+                confirmButtonText: kioskLang === 'EN' ? 'Close' : 'बंद करें',
+                showDenyButton: true,
+                denyButtonText: kioskLang === 'EN' ? 'Digital Pass' : 'डिजिटल पास',
+                confirmButtonColor: '#2563EB',
+                denyButtonColor: '#0F172A',
+                position: 'center',
+                background: 'rgba(255, 255, 255, 0.95)',
+                color: '#0f172a',
+                backdrop: `rgba(0,0,123,0.1) backdrop-filter: blur(10px)`,
+                customClass: {
+                  popup: 'rounded-[2.5rem] shadow-[0_30px_60px_-12px_rgba(0,0,0,0.25)] border border-emerald-100',
+                  title: 'text-2xl font-black uppercase tracking-tight',
+                  confirmButton: 'px-8 py-3 rounded-2xl font-bold uppercase tracking-widest text-[10px] sm:text-xs transition-transform active:scale-95 mx-2',
+                  denyButton: 'px-8 py-3 rounded-2xl font-bold uppercase tracking-widest text-[10px] sm:text-xs transition-transform active:scale-95 mx-2',
+                  htmlContainer: 'text-lg font-bold text-slate-600'
+                }
+              }).then((result) => {
+                if (result.isDenied) {
+                  setStandalonePassData({ visitorId: savedVisitId, orgId: orgId });
+                }
+              });
+            };
+            showThankYou();
+          }
         }
 
         logActivity('CREATE_VISITOR', `Check-in: ${data.name} (Visit: ${savedVisitId})`);
       }
       setEditingVisitor(null);
       setShowForm(false);
-      
-      if (isKioskMode) {
-        setKioskSessionEntries(prev => [data, ...prev].slice(0, 5));
-        
-        // Show thank you immediately for better UX
-        const showThankYou = () => {
-          Swal.fire({
-            title: kioskLang === 'EN' ? 'Thank You!' : 'धन्यवाद!',
-            text: kioskLang === 'EN' ? `Your entry has been recorded, ${data.name}. Welcome to ${organization?.name || 'Visitor Management System'}.` : `आपकी प्रविष्टि दर्ज कर ली गई है, ${data.name}। ${organization?.name || 'Visitor Management System'} में आपका स्वागत है।`,
-            icon: 'success',
-            showConfirmButton: true,
-            confirmButtonText: kioskLang === 'EN' ? 'Close' : 'बंद करें',
-            showDenyButton: true,
-            denyButtonText: kioskLang === 'EN' ? 'Digital Pass' : 'डिजिटल पास',
-            confirmButtonColor: '#2563EB',
-            denyButtonColor: '#0F172A',
-            position: 'center',
-            background: 'rgba(255, 255, 255, 0.95)',
-            color: '#0f172a',
-            backdrop: `rgba(0,0,123,0.1) backdrop-filter: blur(10px)`,
-            customClass: {
-              popup: 'rounded-[2.5rem] shadow-[0_30px_60px_-12px_rgba(0,0,0,0.25)] border border-emerald-100',
-              title: 'text-2xl font-black uppercase tracking-tight',
-              confirmButton: 'px-8 py-3 rounded-2xl font-bold uppercase tracking-widest text-[10px] sm:text-xs transition-transform active:scale-95 mx-2',
-              denyButton: 'px-8 py-3 rounded-2xl font-bold uppercase tracking-widest text-[10px] sm:text-xs transition-transform active:scale-95 mx-2',
-              htmlContainer: 'text-lg font-bold text-slate-600'
-            },
-            showClass: {
-              popup: 'animate__animated animate__zoomIn'
-            },
-            hideClass: {
-              popup: 'animate__animated animate__zoomOut'
-            }
-          }).then((result) => {
-            if (result.isDenied) {
-              const passData: any = {
-                visitorId: savedVisitId,
-                visitId: savedVisitId,
-                organizationId: orgId,
-                status: 'INSIDE',
-                name: data.name,
-                visitorName: data.name,
-                visitorPhone: data.phone ? `${data.countryCode || ''} ${data.phone}` : effectivePhone,
-                phone: data.phone ? `${data.countryCode || ''} ${data.phone}` : effectivePhone,
-                purpose: data.purpose,
-                checkInTime: data.checkInTime || new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-                date: data.date || new Date().toISOString().split('T')[0]
-              };
-              setShowPassForVisitor(passData);
-            }
-          });
-        };
-
-        if (isOnline) {
-          // Trigger saving in background but show success immediately if possible
-          // Local resolution of setDoc is usually fast enough, but let's make it explicit
-          showThankYou();
-        } else {
-          showThankYou();
-        }
-      } else {
-        Toast.fire({ 
-          icon: 'success', 
-          title: 'Record Saved',
-          text: 'The entry has been successfully recorded.',
-          position: 'center'
-        });
-      }
     } catch (error: any) {
       console.error('Failed to save visitor:', error);
       addToast(error.message || 'Failed to save record', 'error');
@@ -4436,54 +4426,12 @@ export default function App() {
   }, [visitors]);
 
   const handleExitKiosk = async () => {
-    const { value: pin } = await Swal.fire({
-      title: 'Exit Kiosk Mode',
-      html: `
-        <div class="mt-4 flex flex-col items-center gap-4">
-          <div class="h-16 w-16 bg-red-100 rounded-full flex items-center justify-center mb-2">
-            <svg class="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-          </div>
-          <p class="text-sm text-gray-500 font-medium text-center px-4">Enter administrator PIN to transition back to the dashboard.</p>
-        </div>
-      `,
-      input: 'password',
-      inputAttributes: {
-        maxlength: '4',
-        autocapitalize: 'off',
-        autocorrect: 'off'
-      },
-      showCancelButton: true,
-      confirmButtonColor: '#EF4444',
-      confirmButtonText: 'Exit to Dashboard',
-      cancelButtonText: 'Stay in Kiosk',
-      background: '#ffffff',
-      customClass: {
-        popup: 'rounded-3xl border-none shadow-2xl',
-        input: '!text-center !text-2xl !tracking-[0.3em] !w-48 !mx-auto',
-        confirmButton: 'rounded-xl px-10 py-3 font-bold uppercase tracking-widest text-xs',
-        cancelButton: 'rounded-xl px-10 py-3 font-bold uppercase tracking-widest text-xs'
-      },
-      inputValidator: (value) => {
-        if (!kioskPin) return null; // If no PIN for some reason, maybe allow or enforce? Assume kioskPin set if enforced elsewhere.
-        if (!value) return 'PIN is required';
-        if (value !== kioskPin) return 'Access Denied: Incorrect PIN';
-        return null;
-      }
-    });
-
-    if (pin || !kioskPin) {
-      localStorage.setItem('vms_kiosk_mode', 'false');
-      setIsKioskMode(false);
-      setIsKioskFormOpen(false);
-      setKioskSessionEntries([]);
-      addToast('Exited Kiosk Mode', 'success');
-    }
+    setActivePinDialog('EXIT');
   };
 
   const handleCallStaff = async () => {
     try {
+      kioskSpeak('CALL_STAFF', kioskLang, voiceEnabled);
       await addDoc(collection(db, 'organizations', user?.organizationId || '', 'notifications'), {
           organizationId: user?.organizationId || '',
           title: 'Kiosk Assistance Required',
@@ -4501,31 +4449,47 @@ export default function App() {
 
   const handleEnterKiosk = async () => {
     if (!kioskPin) {
-      addToast('Please set a Kiosk PIN in Settings before entering Kiosk Mode.', 'error');
+      setIsPinNotSetVisible(true);
+      setTimeout(() => setIsPinNotSetVisible(false), 5000);
       return;
     }
-    
-    const { value: pin } = await Swal.fire({
-      title: 'Enter Kiosk PIN',
-      input: 'password',
-      inputPlaceholder: 'PIN',
-      showCancelButton: true,
-      confirmButtonText: 'Enter Kiosk',
-      customClass: {
-        input: '!text-center !text-2xl !tracking-[0.3em] !w-48 !mx-auto'
-      },
-      inputValidator: (value) => {
-        if (!value) return 'PIN is required';
-        if (value !== kioskPin) return 'Access Denied: Incorrect PIN';
-        return null;
+    setActivePinDialog('ENTER');
+  };
+
+  const onKioskPinConfirm = async (enteredPin: string) => {
+    if (activePinDialog === 'ENTER') {
+      localStorage.setItem('vms_kiosk_mode', 'true');
+      setIsKioskMode(true);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      addToast('Kiosk Mode Activated', 'success');
+    } else if (activePinDialog === 'EXIT') {
+      localStorage.setItem('vms_kiosk_mode', 'false');
+      setIsKioskMode(false);
+      setIsKioskFormOpen(false);
+      setKioskSessionEntries([]);
+      addToast('Exited Kiosk Mode', 'success');
+    } else if (activePinDialog === 'SETUP') {
+      if (!organization?.id) return;
+      try {
+        const orgRef = doc(db, 'organizations', organization.id);
+        await updateDoc(orgRef, { kioskPin: enteredPin });
+        setKioskPin(enteredPin);
+        addToast('Kiosk PIN set successfully!', 'success');
+        
+        // Auto-enter kiosk mode since they just set it to use it
+        localStorage.setItem('vms_kiosk_mode', 'true');
+        setIsKioskMode(true);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch (err) {
+        console.error('Failed to set PIN:', err);
+        addToast('Failed to save PIN', 'error');
       }
-    });
-    if (!pin) return;
-    
-    localStorage.setItem('vms_kiosk_mode', 'true');
-    setIsKioskMode(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    addToast('Kiosk Mode Activated', 'success');
+    }
+    setActivePinDialog(null);
+  };
+
+  const onKioskPinCancel = () => {
+    setActivePinDialog(null);
   };
 
   if (showSplash || showLoader || pageLoading || authLoading || !isAuthReady) {
@@ -4628,59 +4592,44 @@ export default function App() {
 
   const handleKioskCheckOut = async () => {
     resetIdle();
-    const { value: phone } = await Swal.fire({
-      title: kioskLang === 'EN' ? 'Check Out' : 'चेक आउट',
-      text: kioskLang === 'EN' ? 'Enter your phone number to check out' : 'चेक आउट करने के लिए अपना फोन नंबर दर्ज करें',
-      input: 'tel',
-      inputPlaceholder: '9876543210',
-      showCancelButton: true,
-      confirmButtonColor: organization?.brandColor || '#2563EB',
-      confirmButtonText: kioskLang === 'EN' ? 'Search' : 'खोजें',
-      cancelButtonText: kioskLang === 'EN' ? 'Cancel' : 'रद्द करें',
-      position: 'center',
-      customClass: {
-        popup: 'rounded-3xl border-none shadow-2xl',
-        confirmButton: 'rounded-xl font-bold px-8 py-3',
-        cancelButton: 'rounded-xl font-bold px-8 py-3',
-        title: 'text-2xl font-black text-slate-900 mb-2 italic uppercase',
-        htmlContainer: 'text-sm font-medium text-slate-500'
-      }
-    });
+    kioskSpeak('CHECK_OUT_START', kioskLang, voiceEnabled);
+    setIsKioskPhoneOpen(true);
+  };
 
-    if (phone) {
-      const activeVisit = visitors.find(v => v.phone.includes(phone) && v.status === 'INSIDE');
-      if (activeVisit) {
-        const result = await Swal.fire({
-          title: kioskLang === 'EN' ? `Check out ${activeVisit.name}?` : `${activeVisit.name} चेक आउट करें?`,
-          text: kioskLang === 'EN' ? `Check-in time: ${activeVisit.checkInTime}` : `चेक-इन समय: ${activeVisit.checkInTime}`,
-          icon: 'question',
-          showCancelButton: true,
-          confirmButtonColor: '#2563EB',
-          confirmButtonText: kioskLang === 'EN' ? 'Yes, Check Out' : 'हाँ, चेक आउट करें',
-          cancelButtonText: kioskLang === 'EN' ? 'No, Stay' : 'नहीं, रुकें',
-          customClass: {
-            popup: 'rounded-[3rem] p-12',
-            confirmButton: 'rounded-2xl px-8 py-4 font-black uppercase italic tracking-widest',
-            cancelButton: 'rounded-2xl px-8 py-4 font-black uppercase italic tracking-widest'
-          }
-        });
-        if (result.isConfirmed) {
-          await checkOutVisitor(activeVisit.visitId, true);
-          addToast(kioskLang === 'EN' ? `${activeVisit.name} checked out successfully` : `${activeVisit.name} सफलतापूर्वक चेक आउट हो गया`, 'success');
-          // Show review modal after checkout in kiosk mode
-          setReviewVisitor(activeVisit);
+  const onKioskPhoneConfirm = async (phone: string) => {
+    setIsKioskPhoneOpen(false);
+    const activeVisit = visitors.find(v => v.phone.includes(phone) && v.status === 'INSIDE');
+    if (activeVisit) {
+      const result = await Swal.fire({
+        title: kioskLang === 'EN' ? `Check out ${activeVisit.name}?` : `${activeVisit.name} चेक आउट करें?`,
+        text: kioskLang === 'EN' ? `Check-in time: ${activeVisit.checkInTime}` : `चेक-इन समय: ${activeVisit.checkInTime}`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#2563EB',
+        confirmButtonText: kioskLang === 'EN' ? 'Yes, Check Out' : 'हाँ, चेक आउट करें',
+        cancelButtonText: kioskLang === 'EN' ? 'No, Stay' : 'नहीं, रुकें',
+        customClass: {
+          popup: 'rounded-[3rem] p-12',
+          confirmButton: 'rounded-2xl px-8 py-4 font-black uppercase italic tracking-widest',
+          cancelButton: 'rounded-2xl px-8 py-4 font-black uppercase italic tracking-widest'
         }
-      } else {
-        Swal.fire({
-          title: kioskLang === 'EN' ? 'Not Found' : 'नहीं मिला',
-          text: kioskLang === 'EN' ? 'No active check-in found for this number.' : 'इस नंबर के लिए कोई सक्रिय चेक-इन नहीं मिला।',
-          icon: 'error',
-          confirmButtonText: kioskLang === 'EN' ? 'OK' : 'ठीक है',
-          customClass: {
-            popup: 'rounded-[3rem] p-12'
-          }
-        });
+      });
+      if (result.isConfirmed) {
+        await checkOutVisitor(activeVisit.visitId, true);
+        kioskSpeak('CHECK_OUT_SUCCESS', kioskLang, voiceEnabled);
+        addToast(kioskLang === 'EN' ? `${activeVisit.name} checked out successfully` : `${activeVisit.name} सफलतापूर्वक चेक आउट हो गया`, 'success');
+        setReviewVisitor(activeVisit);
       }
+    } else {
+      Swal.fire({
+        title: kioskLang === 'EN' ? 'Not Found' : 'नहीं मिला',
+        text: kioskLang === 'EN' ? 'No active check-in found for this number.' : 'इस नंबर के लिए कोई सक्रिय चेक-इन नहीं मिला।',
+        icon: 'error',
+        confirmButtonText: kioskLang === 'EN' ? 'OK' : 'ठीक है',
+        customClass: {
+          popup: 'rounded-[3rem] p-12'
+        }
+      });
     }
   };
 
@@ -4870,6 +4819,25 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-12">
+              <div className="flex items-center gap-4">
+                <button 
+                  onClick={() => {
+                    const newValue = !voiceEnabled;
+                    setVoiceEnabled(newValue);
+                    localStorage.setItem('vms_voice_enabled', String(newValue));
+                    if (!newValue) window.speechSynthesis.cancel();
+                  }}
+                  className={`p-3 rounded-2xl transition-all shadow-sm flex items-center gap-2 group ${voiceEnabled ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-400'}`}
+                >
+                  <motion.div animate={voiceEnabled ? { scale: [1, 1.2, 1] } : {}} transition={{ repeat: Infinity, duration: 2 }}>
+                    {voiceEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+                  </motion.div>
+                  <span className="text-[10px] font-black uppercase tracking-widest pr-1">
+                    Voice {voiceEnabled ? 'On' : 'Off'}
+                  </span>
+                </button>
+              </div>
+
               <div className="flex bg-gray-100 rounded-2xl p-1 border border-gray-200 shadow-inner">
                 <button 
                   onClick={() => setKioskLang('EN')}
@@ -4976,10 +4944,14 @@ export default function App() {
                       <p className="text-gray-400 font-bold text-xs uppercase tracking-widest">{kioskLang === 'EN' ? 'Quick Check-In' : 'त्वरित चेक-इन'}</p>
                     </motion.button>
 
-                    <QRCheckOutScanner
-                      onScan={handleScanCheckOut}
+                      <QRCheckOutScanner
+                      onScan={(data) => {
+                        kioskSpeak('CHECK_OUT_SUCCESS', kioskLang, voiceEnabled);
+                        handleScanCheckOut(data);
+                      }}
+                      onOpen={() => kioskSpeak('SCAN_OUT_START', kioskLang, voiceEnabled)}
                       lang={kioskLang}
-                      className="w-full h-full"
+                        className="w-full h-full"
                       customTrigger={
                         <motion.button
                           whileHover={{ y: -10, scale: 1.02 }}
@@ -7377,6 +7349,33 @@ export default function App() {
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-100/50">
                           <div className="flex items-center gap-4">
                             <div className="h-12 w-12 sm:h-14 sm:w-14 bg-white rounded-2xl flex items-center justify-center shadow-sm shrink-0">
+                               <Volume2 className="h-6 w-6 sm:h-7 sm:w-7 text-indigo-600" />
+                            </div>
+                            <div>
+                              <h3 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">Voice Navigation</h3>
+                              <p className="text-gray-500 text-xs sm:text-sm font-medium">Toggle voice-guided instructions in Kiosk Mode.</p>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={() => {
+                              const newValue = !voiceEnabled;
+                              setVoiceEnabled(newValue);
+                              localStorage.setItem('vms_voice_enabled', String(newValue));
+                              if (!newValue) window.speechSynthesis.cancel();
+                              addToast(`Voice navigation ${newValue ? 'enabled' : 'disabled'}`, 'success');
+                            }}
+                            className={`px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all shadow-lg flex items-center gap-3 ${voiceEnabled ? 'bg-indigo-600 text-white shadow-indigo-100' : 'bg-slate-200 text-slate-500 shadow-slate-100'}`}
+                          >
+                            {voiceEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+                            {voiceEnabled ? 'Voice Enabled' : 'Voice Disabled'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="p-5 sm:p-8 bg-slate-50/50 rounded-3xl border border-slate-100 space-y-6 sm:space-y-8">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-100/50">
+                          <div className="flex items-center gap-4">
+                            <div className="h-12 w-12 sm:h-14 sm:w-14 bg-white rounded-2xl flex items-center justify-center shadow-sm shrink-0">
                                <Lock className="h-6 w-6 sm:h-7 sm:w-7 text-amber-600" />
                             </div>
                             <div>
@@ -7648,6 +7647,29 @@ export default function App() {
         notifications={notifications}
         organizationId={user?.organizationId || ''}
         addToast={addToast}
+      />
+
+      <KioskPinDialog
+        isOpen={activePinDialog !== null}
+        mode={activePinDialog || 'ENTER'}
+        correctPin={kioskPin}
+        onConfirm={onKioskPinConfirm}
+        onCancel={onKioskPinCancel}
+      />
+
+      <KioskPhoneDialog
+        isOpen={isKioskPhoneOpen}
+        onConfirm={onKioskPhoneConfirm}
+        onCancel={() => setIsKioskPhoneOpen(false)}
+        lang={kioskLang}
+      />
+
+      <PinNotSetNotification
+        isVisible={isPinNotSetVisible}
+        onAction={() => {
+          setIsPinNotSetVisible(false);
+          setActivePinDialog('SETUP');
+        }}
       />
     </>
   );

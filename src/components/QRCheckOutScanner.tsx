@@ -1,22 +1,31 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Camera, X, Flashlight, FlashlightOff, RefreshCw } from 'lucide-react';
+import { Camera, X, Flashlight, FlashlightOff, RefreshCw, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 
 interface QRCheckOutScannerProps {
   onScan: (passId: string) => void;
+  onOpen?: () => void;
   lang?: 'EN' | 'HI';
   className?: string;
   customTrigger?: React.ReactNode;
 }
 
-export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, lang = 'EN', className, customTrigger }) => {
+export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, onOpen, lang = 'EN', className, customTrigger }) => {
   const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && onOpen) {
+      onOpen();
+    }
+  }, [isOpen, onOpen]);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [flashEnabled, setFlashEnabled] = useState(false);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [scanSuccess, setScanSuccess] = useState(false);
   const [scanFail, setScanFail] = useState(false);
+  const [showScanAgain, setShowScanAgain] = useState(false);
+  const [scanMessage, setScanMessage] = useState<string | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const isScanningRef = useRef(false);
   const scanFailRef = useRef(false);
@@ -41,6 +50,7 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, la
                 const handleScanSuccess = (result: string) => {
                   setScanSuccess(true);
                   scanSuccessRef.current = true;
+                  setScanMessage(lang === 'HI' ? 'स्कैन सफल!' : 'Scan Successful!');
                   if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
                     navigator.vibrate([100, 50, 100]);
                   }
@@ -49,10 +59,11 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, la
                       onScan(result);
                       setIsOpen(false);
                       setScanSuccess(false);
+                      setScanMessage(null);
                       scanSuccessRef.current = false;
                       setFlashEnabled(false);
                     }
-                  }, 400);
+                  }, 1200);
                 };
 
                 try {
@@ -69,20 +80,14 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, la
              },
              () => {
                if (unmounted) return;
-               if (!scanSuccessRef.current && !scanFailRef.current) {
+               if (!scanSuccessRef.current && !scanFailRef.current && !showScanAgain) {
                  if (startTimeRef.current && Date.now() - startTimeRef.current > 5000) {
+                   setShowScanAgain(true);
                    setScanFail(true);
                    scanFailRef.current = true;
                    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
                      navigator.vibrate(50);
                    }
-                   setTimeout(() => {
-                     if (!unmounted) {
-                       setScanFail(false);
-                       scanFailRef.current = false;
-                       startTimeRef.current = Date.now();
-                     }
-                   }, 500);
                  }
                }
              }
@@ -157,6 +162,13 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, la
     setFlashEnabled(false);
   };
 
+  const handleScanAgain = () => {
+    setShowScanAgain(false);
+    scanFailRef.current = false;
+    setScanFail(false);
+    startTimeRef.current = Date.now();
+  };
+
   const handleRetry = async () => {
     if (scannerRef.current) {
       try {
@@ -228,6 +240,50 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({ onScan, la
                        }}
                        className="absolute inset-0 z-20 pointer-events-none"
                      />
+                     
+                     {/* Success Notification */}
+                     <AnimatePresence>
+                       {scanSuccess && scanMessage && (
+                         <motion.div
+                           initial={{ opacity: 0, scale: 0.8, y: 20 }}
+                           animate={{ opacity: 1, scale: 1, y: 0 }}
+                           exit={{ opacity: 0, scale: 0.8, y: 20 }}
+                           className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none"
+                         >
+                           <div className="bg-green-500 text-white px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-3">
+                             <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                               <ShieldCheck className="w-5 h-5" />
+                             </div>
+                             <span className="font-black uppercase tracking-widest text-sm">{scanMessage}</span>
+                           </div>
+                         </motion.div>
+                       )}
+                     </AnimatePresence>
+
+                     {/* Scan Again Overlay */}
+                     <AnimatePresence>
+                       {showScanAgain && (
+                         <motion.div
+                           initial={{ opacity: 0 }}
+                           animate={{ opacity: 1 }}
+                           exit={{ opacity: 0 }}
+                           className="absolute inset-0 z-40 bg-slate-950/60 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center"
+                         >
+                           <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mb-4">
+                             <ShieldAlert className="w-8 h-8 text-red-500" />
+                           </div>
+                           <h4 className="text-white font-black text-lg mb-2 uppercase tracking-tight">No QR Detected</h4>
+                           <p className="text-slate-400 text-sm mb-6 leading-relaxed">We couldn't detect a valid code in the last 5 seconds. Try adjusting your position or lighting.</p>
+                           <button
+                             onClick={handleScanAgain}
+                             className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-2xl transition-all shadow-xl shadow-blue-900/40 uppercase tracking-widest text-[10px]"
+                           >
+                             <RefreshCw className="w-4 h-4 inline mr-2" />
+                             Scan Again
+                           </button>
+                         </motion.div>
+                       )}
+                     </AnimatePresence>
                      
                      {/* Scanner Guide Overlay */}
                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">

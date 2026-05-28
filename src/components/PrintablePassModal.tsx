@@ -36,22 +36,54 @@ export default function PrintablePassModal({ visitor, organization, onClose, onP
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         margin: 0; padding: 20px;
         display: flex; justify-content: center; align-items: flex-start;
+        background-color: #f8fafc;
       }
       .pass-container {
         width: 320px;
-        border: 2px solid #000;
-        border-radius: 16px;
-        padding: 20px;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 24px;
+        padding: 32px;
         text-align: center;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        position: relative;
+        overflow: hidden;
       }
-      .org-name { font-size: 18px; font-weight: bold; margin-bottom: 5px; text-transform: uppercase; }
-      .org-subtitle { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px; }
-      .qr-code { margin: 20px auto; display: flex; justify-content: center; }
-      .visitor-name { font-size: 24px; font-weight: 900; margin: 10px 0; text-transform: uppercase; }
-      .details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: left; margin-top: 20px; }
-      .detail-label { font-size: 10px; font-weight: bold; text-transform: uppercase; color: #555; }
-      .detail-value { font-size: 14px; font-weight: bold; }
-      .footer { margin-top: 30px; font-size: 10px; color: #777; text-align: center; border-top: 1px dashed #ccc; padding-top: 10px; }
+      .pass-border {
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 6px;
+        background-color: ${organization.brandColor || '#2563EB'};
+      }
+      .org-header {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-bottom: 24px;
+      }
+      .org-logo {
+        height: 48px;
+        width: auto;
+        max-width: 120px;
+        object-fit: contain;
+        margin-bottom: 12px;
+      }
+      .org-name { font-size: 18px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: -0.025em; margin: 0; }
+      .org-subtitle { font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; margin-top: 4px; }
+      .qr-wrapper {
+        margin: 24px auto;
+        padding: 12px;
+        background: white;
+        border: 2px solid ${organization.brandColor || '#2563EB'};
+        border-radius: 20px;
+        display: inline-block;
+      }
+      .qr-code { display: flex; justify-content: center; }
+      .visitor-name { font-size: 26px; font-weight: 900; color: #0f172a; margin: 16px 0; text-transform: uppercase; letter-spacing: -0.05em; line-height: 1; }
+      .details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; text-align: left; margin-top: 24px; padding: 16px; background: #f8fafc; border-radius: 16px; }
+      .detail-label { font-size: 9px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em; margin-bottom: 4px; }
+      .detail-value { font-size: 13px; font-weight: 700; color: #1e293b; text-transform: uppercase; }
+      .footer { margin-top: 32px; font-size: 9px; font-weight: 600; color: #94a3b8; text-align: center; border-top: 1px dashed #e2e8f0; padding-top: 16px; line-height: 1.5; }
     `);
     printWindow.document.write('</style></head><body>');
     
@@ -61,35 +93,41 @@ export default function PrintablePassModal({ visitor, organization, onClose, onP
     // We recreate the pass in raw HTML for the print window
     const printHtml = `
       <div class="pass-container">
-        <div class="org-name">${organization.name || 'VMS'}</div>
-        <div class="org-subtitle">Visitor Pass</div>
+        <div class="pass-border"></div>
+        <div class="org-header">
+          ${organization.logoUrl ? `<img src="${organization.logoUrl}" class="org-logo" alt="logo" />` : ''}
+          <div class="org-name">${organization.name || 'VMS'}</div>
+          <div class="org-subtitle">Official Visitor Pass</div>
+        </div>
         
-        <div class="qr-code" id="qr-container"></div>
+        <div class="qr-wrapper">
+          <div class="qr-code" id="qr-container"></div>
+        </div>
         
         <div class="visitor-name">${visitor.name || visitor.visitorName}</div>
         
         <div class="details-grid">
           <div>
             <div class="detail-label">Purpose</div>
-            <div class="detail-value">${visitor.purpose || '-'}</div>
+            <div class="detail-value">${visitor.purpose || 'Visit'}</div>
           </div>
           <div>
-            <div class="detail-label">Type</div>
+            <div class="detail-label">Category</div>
             <div class="detail-value">${visitor.category || 'Guest'}</div>
           </div>
           <div>
-            <div class="detail-label">Date</div>
+            <div class="detail-label">Entry Date</div>
             <div class="detail-value">${new Date(visitor.date || Date.now()).toLocaleDateString()}</div>
           </div>
           <div>
-            <div class="detail-label">Check-In</div>
+            <div class="detail-label">Time In</div>
             <div class="detail-value">${visitor.checkInTime || '-'}</div>
           </div>
         </div>
         
         <div class="footer">
-          Please wear this badge visibly at all times.<br/>
-          Scan QR code to check out.
+          Valid for today only. Please display this pass at all times while on the premises.<br/>
+          Scan QR to self check-out on exit.
         </div>
       </div>
     `;
@@ -143,13 +181,19 @@ export default function PrintablePassModal({ visitor, organization, onClose, onP
 
           {/* Printable Area - We show a highly stylized version for the screen, but use a raw HTML version for the printer */}
           <div className="p-8 w-full flex flex-col items-center bg-slate-50/50 overflow-y-auto flex-1 min-h-0" ref={passRef}>
-             <div className="bg-white border-2 border-slate-200 rounded-2xl p-6 shadow-sm w-full max-w-[320px] mx-auto text-center relative overflow-hidden shrink-0">
-                <div className="absolute top-0 left-0 w-full h-2 bg-brand-blue" />
+             <div className="bg-white border border-slate-200 rounded-[2rem] p-8 shadow-xl w-full max-w-[320px] mx-auto text-center relative overflow-hidden shrink-0">
+                <div className="absolute top-0 left-0 w-full h-2" style={{ backgroundColor: organization.brandColor || '#2563EB' }} />
                 
-                <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight mt-2">{organization.name || 'Organization'}</h4>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-6">Visitor Badge</p>
+                {organization.logoUrl && (
+                  <img src={organization.logoUrl} alt="Logo" className="h-12 mx-auto mb-4 object-contain" />
+                )}
+                <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight">{organization.name || 'Organization'}</h4>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-6">Official Visitor Pass</p>
                 
-                <div className="bg-white p-2 rounded-xl inline-block border border-slate-100 mb-6">
+                <div 
+                  className="bg-white p-3 rounded-3xl inline-block border-2 mb-6"
+                  style={{ borderColor: organization.brandColor || '#2563EB' }}
+                >
                   <QRCodeSVG 
                     value={passUrl} 
                     size={160} 
@@ -160,25 +204,31 @@ export default function PrintablePassModal({ visitor, organization, onClose, onP
                   />
                 </div>
                 
-                <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-6">{visitor.name || visitor.visitorName}</h2>
+                <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-6 leading-tight">{visitor.name || visitor.visitorName}</h2>
                 
-                <div className="grid grid-cols-2 gap-4 text-left bg-slate-50 rounded-xl p-4">
+                <div className="grid grid-cols-2 gap-4 text-left bg-slate-50 rounded-2xl p-5">
                    <div>
                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><Building2 className="w-3 h-3"/> Purpose</p>
-                     <p className="text-xs font-bold text-slate-900 uppercase">{visitor.purpose || '-'}</p>
+                     <p className="text-xs font-bold text-slate-900 uppercase truncate">{visitor.purpose || 'Visit'}</p>
                    </div>
                    <div>
                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><User className="w-3 h-3"/> Type</p>
-                     <p className="text-xs font-bold text-slate-900 uppercase">{visitor.category || 'Guest'}</p>
+                     <p className="text-xs font-bold text-slate-900 uppercase truncate">{visitor.category || 'Guest'}</p>
                    </div>
                    <div>
                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><Calendar className="w-3 h-3"/> Date</p>
-                     <p className="text-xs font-bold text-slate-900 uppercase">{new Date(visitor.date || Date.now()).toLocaleDateString()}</p>
+                     <p className="text-xs font-bold text-slate-900 uppercase truncate">{new Date(visitor.date || Date.now()).toLocaleDateString()}</p>
                    </div>
                    <div>
-                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><Clock className="w-3 h-3"/> Check-In</p>
-                     <p className="text-xs font-bold text-slate-900 uppercase">{visitor.checkInTime || '-'}</p>
+                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><Clock className="w-3 h-3"/> Time In</p>
+                     <p className="text-xs font-bold text-slate-900 uppercase truncate">{visitor.checkInTime || '-'}</p>
                    </div>
+                </div>
+
+                <div className="mt-8 pt-6 border-t border-dashed border-slate-200">
+                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-loose">
+                     Scan at exit to check out.<br/>Valid only at {organization.name}.
+                   </p>
                 </div>
              </div>
           </div>
