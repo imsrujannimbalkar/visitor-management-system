@@ -364,8 +364,8 @@ export default function VisitorTable({
         </div>
       </div>
 
-      <div className="overflow-x-auto custom-scrollbar-horizontal">
-        <table className="w-full text-left border-collapse min-w-[1400px]">
+      <div className="overflow-x-auto custom-scrollbar-horizontal scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-200">
+        <table className="w-full text-left border-collapse min-w-[1100px]">
           <thead>
             <tr className="bg-slate-50/50 border-b border-slate-100/50">
               <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">

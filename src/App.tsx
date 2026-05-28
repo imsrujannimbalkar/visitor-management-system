@@ -72,7 +72,9 @@ import {
   MessageCircle,
   Camera,
   Volume2,
-  VolumeX
+  VolumeX,
+  Menu,
+  Briefcase
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -105,7 +107,6 @@ import ProfileTab from './components/ProfileTab';
 import Auth from './components/Auth';
 import OrgSetup from './components/OrgSetup';
 import WorkspaceSelector from './components/WorkspaceSelector';
-import { Briefcase } from 'lucide-react';
 import NotificationsCenter from './components/NotificationsCenter';
 import PreRegistrationForm from './components/PreRegistrationForm';
 import PreRegistrationTab from './components/PreRegistrationTab';
@@ -616,6 +617,9 @@ export default function App() {
   const [editingVisitor, setEditingVisitor] = useState<Visitor | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'visitors' | 'records' | 'analysis' | 'profile' | 'settings' | 'birthdays' | 'reviews' | 'users' | 'logs' | 'donations' | 'organizations' | 'legal' | 'pre-registrations' | 'inquiries'>('dashboard');
   const [settingsSubTab, setSettingsSubTab] = useState<'Identity' | 'Visibility' | 'Forms' | 'Security'>('Identity');
   const [preRegFilter, setPreRegFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CHECKED_IN'>('PENDING');
@@ -623,7 +627,14 @@ export default function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [showLoader, setShowLoader] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => localStorage.getItem('vms_sidebar_expanded') !== 'false');
+
+  useEffect(() => {
+    localStorage.setItem('vms_sidebar_expanded', String(isSidebarExpanded));
+  }, [isSidebarExpanded]);
+
+  const toggleSidebar = () => setIsSidebarExpanded(!isSidebarExpanded);
+
   const [isKioskMode, setIsKioskMode] = useState(() => localStorage.getItem('vms_kiosk_mode') === 'true');
   const [voiceEnabled, setVoiceEnabled] = useState(() => localStorage.getItem('vms_voice_enabled') !== 'false');
   const [activePinDialog, setActivePinDialog] = useState<'ENTER' | 'EXIT' | 'SETUP' | null>(null);
@@ -794,6 +805,31 @@ export default function App() {
     if (displayName === 'Donations') return false; // Staff should not see donations unless manually allowed (but prompt says admin only)
     return organization.navigationVisibility[displayName] !== false;
   };
+
+  const sidebarTabs = [
+    { id: 'dashboard', label: 'Home', icon: <LayoutDashboard /> },
+    { id: 'visitors', label: 'Entry', icon: <UserPlus /> },
+    { id: 'inquiries', label: 'Inquiries', icon: <PhoneCall /> },
+    { id: 'pre-registrations', label: 'Pre-Reg', icon: <Calendar /> },
+    { id: 'records', label: 'Records', icon: <ClipboardList /> },
+    { id: 'analysis', label: 'Analytics', icon: <BarChart3 />, adminOnly: true },
+    { id: 'donations', label: 'Donations', icon: <Heart />, adminOnly: true },
+    { id: 'birthdays', label: 'Birthdays', icon: <Gift /> },
+    { id: 'reviews', label: 'Reviews', icon: <Star /> },
+    { id: 'logs', label: 'Logs', icon: <History />, adminOnly: true },
+    { id: 'settings', label: 'Security', icon: <Shield />, adminOnly: true },
+    { id: 'legal', label: 'Support', icon: <HelpCircle /> },
+    { id: 'profile', label: 'Profile', icon: <UserIcon /> },
+  ];
+
+  const visibleTabs = useMemo(() => sidebarTabs.filter(tab => {
+    if (!isTabVisible(tab.id)) return false;
+    if (tab.adminOnly && !(user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN' || isSuperAdmin)) return false;
+    return true;
+  }), [user?.role, isSuperAdmin, organization?.navigationVisibility]);
+
+  const mainMobileTabs = useMemo(() => visibleTabs.slice(0, 4), [visibleTabs]);
+  const moreMobileTabs = useMemo(() => visibleTabs.slice(4), [visibleTabs]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
@@ -3943,6 +3979,19 @@ export default function App() {
       const success = await checkOutVisitor(activeVisit.visitorId, false);
       if (success) {
         addKioskScanEvent({ visitorName: activeVisit.visitorName, type: 'CHECK_OUT' });
+        Swal.fire({
+          title: kioskLang === 'HI' ? 'सफल!' : 'Success!',
+          text: kioskLang === 'HI' ? `${activeVisit.visitorName} को सफलतापूर्वक चेक-आउट किया गया।` : `${activeVisit.visitorName} has been checked out successfully.`,
+          icon: 'success',
+          timer: 3000,
+          showConfirmButton: false,
+          position: 'center',
+          background: document.documentElement.classList.contains('dark') ? '#1e293b' : '#ffffff',
+          color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000',
+          customClass: {
+            popup: 'rounded-[2rem] border-none shadow-2xl',
+          }
+        });
       }
     } else {
        try {
@@ -3955,6 +4004,19 @@ export default function App() {
                // Let's check them in immediately! Using empty/placeholder signature as digital QR scan is highly authenticated
                await handleKioskPreRegCheckIn(preRegData, "");
                addKioskScanEvent({ visitorName: preRegData.name, type: 'CHECK_IN' });
+               Swal.fire({
+                 title: kioskLang === 'HI' ? 'चेक-इन सफल!' : 'Check-In Success!',
+                 text: kioskLang === 'HI' ? `${preRegData.name} का स्वागत है!` : `Welcome, ${preRegData.name}!`,
+                 icon: 'success',
+                 timer: 3000,
+                 showConfirmButton: false,
+                 position: 'center',
+                 background: document.documentElement.classList.contains('dark') ? '#1e293b' : '#ffffff',
+                 color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000',
+                 customClass: {
+                   popup: 'rounded-[2rem] border-none shadow-2xl',
+                 }
+               });
                return;
              } else if (preRegData.status === 'CHECKED_IN' || preRegData.status === 'COMPLETED') {
                const correlatedVisit = visitors.find(v => v.preRegistrationId === passId && v.status === 'INSIDE');
@@ -3962,6 +4024,17 @@ export default function App() {
                  const success = await checkOutVisitor(correlatedVisit.visitorId, false);
                  if (success) {
                    addKioskScanEvent({ visitorName: correlatedVisit.visitorName, type: 'CHECK_OUT' });
+                   Swal.fire({
+                     title: kioskLang === 'HI' ? 'सफल!' : 'Success!',
+                     text: kioskLang === 'HI' ? `${correlatedVisit.visitorName} को सफलतापूर्वक चेक-आउट किया गया।` : `${correlatedVisit.visitorName} has been checked out successfully.`,
+                     icon: 'success',
+                     timer: 3000,
+                     showConfirmButton: false,
+                     position: 'center',
+                     background: document.documentElement.classList.contains('dark') ? '#1e293b' : '#ffffff',
+                     color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000',
+                     customClass: { popup: 'rounded-[2rem] border-none shadow-2xl' }
+                   });
                  }
                  return;
                }
@@ -3974,6 +4047,17 @@ export default function App() {
                  const success = await checkOutVisitor(passId, false);
                  if (success) {
                    addKioskScanEvent({ visitorName: visitSnap.data().visitorName, type: 'CHECK_OUT' });
+                   Swal.fire({
+                     title: kioskLang === 'HI' ? 'सफल!' : 'Success!',
+                     text: kioskLang === 'HI' ? `${visitSnap.data().visitorName} को सफलतापूर्वक चेक-आउट किया गया।` : `${visitSnap.data().visitorName} has been checked out successfully.`,
+                     icon: 'success',
+                     timer: 3000,
+                     showConfirmButton: false,
+                     position: 'center',
+                     background: document.documentElement.classList.contains('dark') ? '#1e293b' : '#ffffff',
+                     color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000',
+                     customClass: { popup: 'rounded-[2rem] border-none shadow-2xl' }
+                   });
                  }
                  return;
              }
@@ -5251,152 +5335,66 @@ export default function App() {
         <div className="max-w-[1600px] mx-auto px-4 sm:px-8">
           <div className="flex justify-between items-center h-20 sm:h-24">
             {/* Branding Container */}
-            <div className="flex items-center gap-5 shrink-0 group cursor-pointer" onClick={() => setActiveTab('dashboard')}>
-              <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl flex items-center justify-center shadow-2xl transition-all duration-500 group-hover:rotate-6 group-hover:scale-105 overflow-hidden" style={{ backgroundColor: organization?.brandColor || '#2563EB' }}>
-                {organization?.logoUrl ? (
-                  <img src={organization.logoUrl} alt="Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                ) : (
-                  <span className="text-white text-xl sm:text-2xl font-black italic tracking-tighter">
-                    {organization?.name ? organization.name.substring(0, 2).toUpperCase() : 'OS'}
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-col">
-                <h1 className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-ngo-primary leading-none mb-1.5 flex items-center gap-2">
-                  {organization?.name || 'Visitor Management System'}
-                  <span className="h-1.5 w-1.5 bg-ngo-accent rounded-full animate-pulse" />
-                  {availableOrgs.length > 1 && (
-                    <button 
-                      onClick={handleSwitchWorkspace}
-                      className="ml-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-150 text-indigo-700 hover:text-indigo-800 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all shadow-sm active:scale-95 cursor-pointer"
-                      title="Switch to another associated organization"
-                    >
-                      <Briefcase className="h-3 w-3" />
-                      Switch
-                    </button>
+            <div className="flex items-center gap-4 shrink-0">
+              <button 
+                onClick={toggleSidebar}
+                className="hidden lg:flex p-2.5 hover:bg-slate-50 text-slate-400 hover:text-slate-900 rounded-xl transition-all active:scale-90"
+                title={isSidebarExpanded ? "Collapse Sidebar" : "Expand Sidebar"}
+              >
+                <Menu className={`h-6 w-6 transition-all duration-300 ${isSidebarExpanded ? 'rotate-90' : 'rotate-0'}`} />
+              </button>
+              
+              <div className="flex items-center gap-5 group cursor-pointer" onClick={() => setActiveTab('dashboard')}>
+                <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl flex items-center justify-center shadow-2xl transition-all duration-500 group-hover:rotate-6 group-hover:scale-105 overflow-hidden" style={{ backgroundColor: organization?.brandColor || '#2563EB' }}>
+                  {organization?.logoUrl ? (
+                    <img src={organization.logoUrl} alt="Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    <span className="text-white text-xl sm:text-2xl font-black italic tracking-tighter">
+                      {organization?.name ? organization.name.substring(0, 2).toUpperCase() : 'OS'}
+                    </span>
                   )}
-                </h1>
-                <div className="flex flex-col gap-0.5">
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">
-                    VMS Intelligence 4.0
-                  </p>
-                  <p className="text-[9px] font-black text-brand-blue uppercase tracking-[0.25em] mt-1">
-                    Visitor Management System
-                  </p>
+                </div>
+                <div className="flex flex-col">
+                  <h1 className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-ngo-primary leading-none mb-1.5 flex items-center gap-2">
+                    {organization?.name || 'Visitor Management System'}
+                    <span className="h-1.5 w-1.5 bg-ngo-accent rounded-full animate-pulse" />
+                    {availableOrgs.length > 1 && (
+                      <button 
+                        onClick={handleSwitchWorkspace}
+                        className="ml-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-150 text-indigo-700 hover:text-indigo-800 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all shadow-sm active:scale-95 cursor-pointer"
+                        title="Switch to another associated organization"
+                      >
+                        <Briefcase className="h-3 w-3" />
+                        Switch
+                      </button>
+                    )}
+                  </h1>
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">
+                      VMS Intelligence 4.0
+                    </p>
+                    <p className="text-[9px] font-black text-brand-blue uppercase tracking-[0.25em] mt-1">
+                      Visitor Management System
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Navigation - High Density Grid */}
-            <nav className="hidden lg:flex items-center justify-center flex-1 mx-4 xl:mx-8 gap-1 overflow-x-auto no-scrollbar">
-              {isTabVisible('dashboard') && (
-                <NavButton 
-                  active={activeTab === 'dashboard'} 
-                  onClick={() => setActiveTab('dashboard')}
-                  icon={<LayoutDashboard />}
-                  label="Home"
-                />
-              )}
-              {isTabVisible('visitors') && (
-                <NavButton 
-                  active={activeTab === 'visitors'} 
-                  onClick={() => setActiveTab('visitors')}
-                  icon={<UserPlus />}
-                  label="Entries"
-                />
-              )}
-              {isTabVisible('pre-registrations') && (
-                <NavButton 
-                  active={activeTab === 'pre-registrations'} 
-                  onClick={() => setActiveTab('pre-registrations')}
-                  icon={<Calendar />}
-                  label="Pre-Register"
-                />
-              )}
-              {isTabVisible('inquiries') && (
-                <NavButton 
-                  active={activeTab === 'inquiries'} 
-                  onClick={() => setActiveTab('inquiries')}
-                  icon={<PhoneCall />}
-                  label="Inquiries"
-                />
-              )}
-              {isTabVisible('records') && (
-                <NavButton 
-                  active={activeTab === 'records'} 
-                  onClick={() => setActiveTab('records')}
-                  icon={<ClipboardList />}
-                  label="Records"
-                />
-              )}
-              {isTabVisible('analysis') && (user.role === 'ADMIN' || user.role === 'MASTER_ADMIN' || isSuperAdmin) && (
-                <NavButton 
-                  active={activeTab === 'analysis'} 
-                  onClick={() => setActiveTab('analysis')}
-                  icon={<BarChart3 />}
-                  label="Analytics"
-                />
-              )}
-              {isTabVisible('donations') && (user.role === 'ADMIN' || user.role === 'MASTER_ADMIN' || isSuperAdmin) && (
-                <NavButton 
-                  active={activeTab === 'donations'} 
-                  onClick={() => setActiveTab('donations')}
-                  icon={<Heart />}
-                  label="Donations"
-                />
-              )}
-              {isTabVisible('birthdays') && (
-                <NavButton 
-                  active={activeTab === 'birthdays'} 
-                  onClick={() => setActiveTab('birthdays')}
-                  icon={<Gift />}
-                  label="Birthdays"
-                />
-              )}
-              {isTabVisible('reviews') && (
-                <NavButton 
-                  active={activeTab === 'reviews'} 
-                  onClick={() => setActiveTab('reviews')}
-                  icon={<Star />}
-                  label="Reviews"
-                />
-              )}
-              {isTabVisible('logs') && (user.role === 'ADMIN' || user.role === 'MASTER_ADMIN' || isSuperAdmin) && (
-                <NavButton 
-                  active={activeTab === 'logs'} 
-                  onClick={() => setActiveTab('logs')}
-                  icon={<History />}
-                  label="Logs"
-                />
-              )}
-              { (user.role === 'ADMIN' || user.role === 'MASTER_ADMIN' || isSuperAdmin) && (
-                <NavButton 
-                  active={activeTab === 'settings'} 
-                  onClick={() => setActiveTab('settings')}
-                  icon={<Shield />}
-                  label="Security"
-                />
-              )}
-              {isTabVisible('legal') && (
-                <NavButton 
-                  active={activeTab === 'legal'} 
-                  onClick={() => { setLegalSubView('support'); setActiveTab('legal'); }}
-                  icon={<HelpCircle />}
-                  label="Support"
-                />
-              )}
-              {isTabVisible('profile') && (
-                <NavButton 
-                  active={activeTab === 'profile'} 
-                  onClick={() => setActiveTab('profile')}
-                  icon={<UserIcon />}
-                  label="Profile"
-                />
-              )}
-            </nav>
+            {/* Empty Spacer to maintain center header balance if needed, but we move nav to sidebar */}
+            <div className="hidden lg:flex flex-1" />
 
             {/* Profile & Notifications */}
             <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+              {/* Desktop Global Scan Button */}
+              <div className="hidden lg:block">
+                <QRCheckOutScanner 
+                  onScan={handleScanCheckOut} 
+                  lang="EN" 
+                  className="mr-2"
+                />
+              </div>
+
               {/* Connection Status Indicator */}
               <div className="hidden sm:flex items-center gap-3">
                 {!isOnline ? (
@@ -5460,26 +5458,158 @@ export default function App() {
         </div>
       </header>
 
-    <div className="lg:hidden fixed bottom-0 left-0 right-0 border-t border-slate-100 py-0.5 flex items-center justify-start overflow-x-auto no-scrollbar scroll-smooth bg-white/95 backdrop-blur-md px-2 z-[100] shadow-[0_-8px_30px_rgba(0,0,0,0.08)] pb-safe-area-bottom gap-1">
-        {isTabVisible('dashboard') && <MobileNavBtn active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard />} label="Home" />}
-        {isTabVisible('visitors') && <MobileNavBtn active={activeTab === 'visitors'} onClick={() => setActiveTab('visitors')} icon={<UserPlus />} label="Entry" />}
-        {isTabVisible('inquiries') && <MobileNavBtn active={activeTab === 'inquiries'} onClick={() => setActiveTab('inquiries')} icon={<PhoneCall />} label="Inquiries" />}
-        {isTabVisible('pre-registrations') && <MobileNavBtn active={activeTab === 'pre-registrations'} onClick={() => setActiveTab('pre-registrations')} icon={<Calendar />} label="Pre-Reg" />}
-        {isTabVisible('records') && <MobileNavBtn active={activeTab === 'records'} onClick={() => setActiveTab('records')} icon={<ClipboardList />} label="Records" />}
-        {isTabVisible('analysis') && (user.role === 'ADMIN' || user.role === 'MASTER_ADMIN' || isSuperAdmin) && <MobileNavBtn active={activeTab === 'analysis'} onClick={() => setActiveTab('analysis')} icon={<BarChart3 />} label="Analytics" />}
-        {isTabVisible('donations') && (user.role === 'ADMIN' || user.role === 'MASTER_ADMIN' || isSuperAdmin) && <MobileNavBtn active={activeTab === 'donations'} onClick={() => setActiveTab('donations')} icon={<Heart />} label="Donations" />}
-        {isTabVisible('birthdays') && <MobileNavBtn active={activeTab === 'birthdays'} onClick={() => setActiveTab('birthdays')} icon={<Gift />} label="Birthdays" />}
-        {isTabVisible('reviews') && <MobileNavBtn active={activeTab === 'reviews'} onClick={() => setActiveTab('reviews')} icon={<Star />} label="Reviews" />}
-        {isTabVisible('logs') && (user.role === 'ADMIN' || user.role === 'MASTER_ADMIN' || isSuperAdmin) && <MobileNavBtn active={activeTab === 'logs'} onClick={() => setActiveTab('logs')} icon={<History />} label="Logs" />}
-        {user.role === 'ADMIN' || user.role === 'MASTER_ADMIN' || isSuperAdmin ? (
-          <MobileNavBtn active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={<Shield />} label="Security" />
-        ) : null}
-        {isTabVisible('legal') && <MobileNavBtn active={activeTab === 'legal'} onClick={() => { setLegalSubView('support'); setActiveTab('legal'); }} icon={<HelpCircle />} label="Support" />}
-        {isTabVisible('profile') && <MobileNavBtn active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} icon={<UserIcon />} label="Profile" />}
+    <div className="lg:hidden fixed bottom-0 left-0 right-0 py-1 flex items-center justify-around bg-white/95 backdrop-blur-md px-2 z-[100] shadow-[0_-8px_30px_rgba(0,0,0,0.08)] pb-safe-area-bottom border-t border-slate-100">
+        {mainMobileTabs.map(tab => (
+          <MobileNavBtn 
+            key={tab.id}
+            active={activeTab === tab.id} 
+            onClick={() => setActiveTab(tab.id as any)} 
+            icon={tab.icon} 
+            label={tab.label} 
+          />
+        ))}
+        <MobileNavBtn 
+          active={isMoreMenuOpen || moreMobileTabs.some(t => activeTab === t.id)} 
+          onClick={() => setIsMoreMenuOpen(true)} 
+          icon={<MoreHorizontal />} 
+          label="More" 
+        />
     </div>
 
-      <main className={`flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 transition-all duration-500 ${user?.preferences?.density ? 'py-2 scale-[0.99] origin-top font-tight' : 'py-8'}`}>
-        <AnimatePresence mode="wait">
+    {/* Mobile More Menu Drawer */}
+    <AnimatePresence>
+      {isMoreMenuOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={() => setIsMoreMenuOpen(false)}
+          className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-[200] lg:hidden flex items-end justify-center"
+        >
+          <motion.div
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white w-full rounded-t-[3rem] p-8 pb-12 shadow-2xl max-h-[70vh] overflow-y-auto no-scrollbar border-t border-white/20"
+          >
+            <div className="w-12 h-1.5 bg-slate-100 rounded-full mx-auto mb-8" />
+            <div className="grid grid-cols-3 gap-4">
+              {moreMobileTabs.map(tab => (
+                <motion.button
+                  key={tab.id}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => {
+                    setActiveTab(tab.id as any);
+                    setIsMoreMenuOpen(false);
+                  }}
+                  className={`flex flex-col items-center gap-3 p-4 rounded-3xl transition-all ${activeTab === tab.id ? 'bg-blue-50 text-brand-blue' : 'text-slate-500 hover:bg-slate-50'}`}
+                >
+                  <div className={`p-3 rounded-2xl ${activeTab === tab.id ? 'bg-white shadow-sm' : 'bg-slate-50'}`}>
+                    {React.cloneElement(tab.icon as any, { className: "w-6 h-6" })}
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-center">{tab.label}</span>
+                </motion.button>
+              ))}
+            </div>
+            
+            <button
+              onClick={() => setIsMoreMenuOpen(false)}
+              className="mt-8 w-full py-4 bg-slate-100 text-slate-500 font-black uppercase tracking-widest rounded-2xl"
+            >
+              Close
+            </button>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+
+    <div className="flex-1 flex flex-col min-h-0 relative">
+      <div className="flex flex-1 min-h-0">
+        {/* Desktop Sidebar */}
+        <aside 
+          className={`hidden lg:flex flex-col bg-white border-r border-slate-100 transition-all duration-500 sticky top-24 h-[calc(100vh-6rem)] z-40 overflow-hidden ${isSidebarExpanded ? 'w-64' : 'w-20'}`}
+        >
+          {/* Sidebar Top Action */}
+          <div className="px-5 py-4 border-b border-slate-50">
+             <QRCheckOutScanner 
+               onScan={handleScanCheckOut} 
+               lang="EN" 
+               variant={isSidebarExpanded ? "secondary" : "icon"}
+               className="w-full"
+               collapsed={!isSidebarExpanded}
+             />
+          </div>
+
+          <div className="flex-1 overflow-y-auto no-scrollbar py-6 flex flex-col gap-1.5 px-3">
+            {visibleTabs.map((tab) => (
+              <motion.button
+                key={tab.id}
+                whileHover={{ x: 4 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  if (tab.id === 'legal') {
+                    setLegalSubView('support');
+                  }
+                  setActiveTab(tab.id as any);
+                }}
+                className={`
+                  flex items-center gap-4 p-3.5 rounded-2xl transition-all duration-300 group relative
+                  ${activeTab === tab.id 
+                    ? 'bg-blue-50 text-brand-blue shadow-sm' 
+                    : 'text-slate-400 hover:bg-slate-50 hover:text-slate-900 font-medium'
+                  }
+                `}
+              >
+                <div className={`transition-all duration-500 shrink-0 ${activeTab === tab.id ? 'scale-110' : 'group-hover:scale-110'}`}>
+                  {React.cloneElement(tab.icon as any, { 
+                    className: `h-5 w-5 ${activeTab === tab.id ? 'text-brand-blue' : ''}` 
+                  })}
+                </div>
+                
+                <AnimatePresence mode="wait">
+                  {isSidebarExpanded && (
+                    <motion.span
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                      className="text-[11px] font-black uppercase tracking-widest whitespace-nowrap overflow-hidden"
+                    >
+                      {tab.label}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+
+                {!isSidebarExpanded && (
+                  <div className="absolute left-[72px] bg-slate-950 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 whitespace-nowrap shadow-xl">
+                    {tab.label}
+                  </div>
+                )}
+                
+                {activeTab === tab.id && (
+                  <motion.div 
+                    layoutId="sidebar-active-indicator"
+                    className="absolute right-2 w-1 h-1 bg-brand-blue rounded-full"
+                  />
+                )}
+              </motion.button>
+            ))}
+          </div>
+
+          {/* Sidebar Footer info */}
+          {isSidebarExpanded && (
+            <div className="p-6 border-t border-slate-50 text-center">
+              <p className="text-[8px] font-black text-slate-200 uppercase tracking-widest">
+                Elite VMS v4.0.2
+              </p>
+            </div>
+          )}
+        </aside>
+
+        <main className={`flex-1 w-full transition-all duration-500 ${user?.preferences?.density ? 'py-2 scale-[0.99] origin-top font-tight' : 'py-8'}`}>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <AnimatePresence mode="wait">
           {activeTab === 'dashboard' && isTabVisible('dashboard') && (
             <motion.div
               key="dashboard"
@@ -7478,8 +7608,11 @@ export default function App() {
               />
             </motion.div>
           )}
-        </AnimatePresence>
-      </main>
+            </AnimatePresence>
+          </div>
+        </main>
+      </div>
+    </div>
 
       <footer className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="border-t border-gray-200 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
