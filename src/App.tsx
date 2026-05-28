@@ -618,8 +618,8 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
-
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [adaptiveMobileTabs, setAdaptiveMobileTabs] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'visitors' | 'records' | 'analysis' | 'profile' | 'settings' | 'birthdays' | 'reviews' | 'users' | 'logs' | 'donations' | 'organizations' | 'legal' | 'pre-registrations' | 'inquiries'>('dashboard');
   const [settingsSubTab, setSettingsSubTab] = useState<'Identity' | 'Visibility' | 'Forms' | 'Security'>('Identity');
   const [preRegFilter, setPreRegFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CHECKED_IN'>('PENDING');
@@ -807,29 +807,74 @@ export default function App() {
   };
 
   const sidebarTabs = [
-    { id: 'dashboard', label: 'Home', icon: <LayoutDashboard /> },
-    { id: 'visitors', label: 'Entry', icon: <UserPlus /> },
-    { id: 'inquiries', label: 'Inquiries', icon: <PhoneCall /> },
-    { id: 'pre-registrations', label: 'Pre-Reg', icon: <Calendar /> },
-    { id: 'records', label: 'Records', icon: <ClipboardList /> },
-    { id: 'analysis', label: 'Analytics', icon: <BarChart3 />, adminOnly: true },
-    { id: 'donations', label: 'Donations', icon: <Heart />, adminOnly: true },
-    { id: 'birthdays', label: 'Birthdays', icon: <Gift /> },
-    { id: 'reviews', label: 'Reviews', icon: <Star /> },
-    { id: 'logs', label: 'Logs', icon: <History />, adminOnly: true },
-    { id: 'settings', label: 'Security', icon: <Shield />, adminOnly: true },
-    { id: 'legal', label: 'Support', icon: <HelpCircle /> },
-    { id: 'profile', label: 'Profile', icon: <UserIcon /> },
+    { section: 'MAIN', tabs: [
+      { id: 'dashboard', label: 'Home', icon: <LayoutDashboard /> },
+      { id: 'visitors', label: 'Entry', icon: <UserPlus /> },
+      { id: 'inquiries', label: 'Inquiries', icon: <PhoneCall /> },
+      { id: 'pre-registrations', label: 'Pre-Registration', icon: <Calendar /> },
+    ]},
+    { section: 'MANAGEMENT', tabs: [
+      { id: 'records', label: 'Records', icon: <ClipboardList /> },
+      { id: 'analysis', label: 'Analytics', icon: <BarChart3 />, adminOnly: true },
+      { id: 'donations', label: 'Donations', icon: <Heart />, adminOnly: true },
+    ]},
+    { section: 'COMMUNITY', tabs: [
+      { id: 'birthdays', label: 'Birthdays', icon: <Gift /> },
+      { id: 'reviews', label: 'Reviews', icon: <Star /> },
+    ]},
+    { section: 'SYSTEM', tabs: [
+      { id: 'logs', label: 'Logs', icon: <History />, adminOnly: true },
+      { id: 'settings', label: 'Security', icon: <Shield />, adminOnly: true },
+      { id: 'profile', label: 'Profile', icon: <UserIcon /> },
+      { id: 'legal', label: 'Support', icon: <HelpCircle /> },
+    ]}
   ];
 
-  const visibleTabs = useMemo(() => sidebarTabs.filter(tab => {
-    if (!isTabVisible(tab.id)) return false;
-    if (tab.adminOnly && !(user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN' || isSuperAdmin)) return false;
-    return true;
-  }), [user?.role, isSuperAdmin, organization?.navigationVisibility]);
+  const visibleGroups = useMemo(() => sidebarTabs.map(group => ({
+    ...group,
+    tabs: group.tabs.filter(tab => {
+      if (!isTabVisible(tab.id)) return false;
+      if (tab.adminOnly && !(user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN' || isSuperAdmin)) return false;
+      return true;
+    })
+  })).filter(group => group.tabs.length > 0), [user?.role, isSuperAdmin, organization?.navigationVisibility]);
 
-  const mainMobileTabs = useMemo(() => visibleTabs.slice(0, 4), [visibleTabs]);
-  const moreMobileTabs = useMemo(() => visibleTabs.slice(4), [visibleTabs]);
+  const visibleTabs = useMemo(() => visibleGroups.flatMap(g => g.tabs), [visibleGroups]);
+
+  // Synchronize adaptive mobile tabs
+  useEffect(() => {
+    if (visibleTabs.length > 0 && adaptiveMobileTabs.length === 0) {
+      setAdaptiveMobileTabs(visibleTabs.slice(0, 4).map(t => t.id));
+    }
+  }, [visibleTabs, adaptiveMobileTabs]);
+
+  const handleTabSelection = (tabId: string) => {
+    setActiveTab(tabId as any);
+    if (tabId === 'legal') setLegalSubView('support');
+    
+    // Adaptive logic for mobile: if a tab from "More" is selected, promote it to main tabs
+    const mainIds = adaptiveMobileTabs;
+    const moreTabs = visibleTabs.filter(t => !mainIds.includes(t.id));
+    const isInMore = moreTabs.some(t => t.id === tabId);
+    
+    if (isInMore) {
+      setAdaptiveMobileTabs(prev => {
+        const next = [...prev];
+        // Replace the 4th item (index 4 is More, slots are 0,1,2,3)
+        next[3] = tabId;
+        return next;
+      });
+    }
+  };
+
+  const mainMobileTabsUI = useMemo(() => {
+    return adaptiveMobileTabs.map(id => visibleTabs.find(t => t.id === id)).filter(Boolean) as typeof visibleTabs;
+  }, [adaptiveMobileTabs, visibleTabs]);
+
+  const moreMobileTabsUI = useMemo(() => {
+    return visibleTabs.filter(t => !adaptiveMobileTabs.includes(t.id));
+  }, [adaptiveMobileTabs, visibleTabs]);
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
@@ -4409,8 +4454,21 @@ export default function App() {
   }, [visitors, selectedDate]);
 
   const activeVisitors = useMemo(() => {
-    return visitors.filter(v => v.status === 'INSIDE');
-  }, [visitors]);
+    const searchLower = searchQuery.toLowerCase().trim();
+    return visitors.filter(v => {
+      const isInside = v.status === 'INSIDE';
+      if (!isInside) return false;
+      
+      const name = (v.name || '').toLowerCase();
+      const visitorId = (v.visitorId || '').toLowerCase();
+      const phone = (v.phone || '').replace(/\s/g, '');
+      
+      return !searchLower || 
+             name.includes(searchLower) ||
+             visitorId.includes(searchLower) ||
+             phone.includes(searchLower.replace(/\s/g, ''));
+    });
+  }, [visitors, searchQuery]);
 
   const historicalVisitors = useMemo(() => {
     const searchLower = searchQuery.toLowerCase().trim();
@@ -4462,12 +4520,26 @@ export default function App() {
   }, [visitors, selectedDate, searchQuery]);
 
   const latestVisitors = useMemo(() => {
-    return [...visitors].sort((a, b) => {
+    const searchLower = searchQuery.toLowerCase().trim();
+    const filtered = visitors.filter(v => {
+      const name = (v.name || '').toLowerCase();
+      const visitorId = (v.visitorId || '').toLowerCase();
+      const phone = (v.phone || '').replace(/\s/g, '');
+      const email = (v.email || '').toLowerCase();
+      
+      return !searchLower || 
+             name.includes(searchLower) ||
+             visitorId.includes(searchLower) ||
+             phone.includes(searchLower.replace(/\s/g, '')) ||
+             email.includes(searchLower);
+    });
+
+    return [...filtered].sort((a, b) => {
       const dateA = new Date(`${a.date} ${a.checkInTime}`);
       const dateB = new Date(`${b.date} ${b.checkInTime}`);
       return dateB.getTime() - dateA.getTime();
     }).slice(dashboardPage * DASHBOARD_ITEMS_PER_PAGE, (dashboardPage + 1) * DASHBOARD_ITEMS_PER_PAGE);
-  }, [visitors, dashboardPage]);
+  }, [visitors, dashboardPage, searchQuery]);
 
   useEffect(() => {
     if (organization?.brandColor) {
@@ -5331,127 +5403,123 @@ export default function App() {
       </div>
 
       {/* Top Navigation Bar - Premium Density */}
-      <header className="bg-white/80 backdrop-blur-2xl border-b border-slate-200/40 sticky top-0 z-[100] w-full">
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-8">
-          <div className="flex justify-between items-center h-20 sm:h-24">
-            {/* Branding Container */}
+      <header 
+        className={`bg-white border-b border-slate-100 fixed top-0 right-0 z-[100] transition-all duration-500 ease-in-out ${isSidebarExpanded ? 'lg:left-64' : 'lg:left-20'} left-0`}
+      >
+        <div className="mx-auto px-4 sm:px-8">
+          <div className="flex justify-between items-center h-20 sm:h-24 gap-4">
+            {/* Branding Container - Only visible in top bar when sidebar is collapsed */}
             <div className="flex items-center gap-4 shrink-0">
-              <button 
+              <motion.button 
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={toggleSidebar}
-                className="hidden lg:flex p-2.5 hover:bg-slate-50 text-slate-400 hover:text-slate-900 rounded-xl transition-all active:scale-90"
+                className="p-2.5 hover:bg-slate-50 text-slate-400 hover:text-slate-900 rounded-xl transition-all"
                 title={isSidebarExpanded ? "Collapse Sidebar" : "Expand Sidebar"}
               >
-                <Menu className={`h-6 w-6 transition-all duration-300 ${isSidebarExpanded ? 'rotate-90' : 'rotate-0'}`} />
-              </button>
+                <Menu className="h-6 w-6" />
+              </motion.button>
               
-              <div className="flex items-center gap-5 group cursor-pointer" onClick={() => setActiveTab('dashboard')}>
-                <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl flex items-center justify-center shadow-2xl transition-all duration-500 group-hover:rotate-6 group-hover:scale-105 overflow-hidden" style={{ backgroundColor: organization?.brandColor || '#2563EB' }}>
-                  {organization?.logoUrl ? (
-                    <img src={organization.logoUrl} alt="Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  ) : (
-                    <span className="text-white text-xl sm:text-2xl font-black italic tracking-tighter">
-                      {organization?.name ? organization.name.substring(0, 2).toUpperCase() : 'OS'}
-                    </span>
-                  )}
+              <AnimatePresence>
+                {!isSidebarExpanded && (
+                  <motion.div 
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="flex lg:flex items-center gap-3 cursor-pointer" 
+                    onClick={() => handleTabSelection('dashboard')}
+                  >
+                    <div className="h-10 w-10 rounded-xl flex items-center justify-center shadow-lg overflow-hidden" style={{ backgroundColor: organization?.brandColor || '#2563EB' }}>
+                      {organization?.logoUrl ? (
+                        <img src={organization.logoUrl} alt="Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      ) : (
+                        <span className="text-white text-sm font-black italic">
+                          {organization?.name ? organization.name.substring(0, 2).toUpperCase() : 'OS'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-black text-slate-900 tracking-tight leading-none whitespace-nowrap">
+                        {organization?.name || 'VMS Hub'}
+                      </span>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">
+                        VMS 4.0
+                      </span>
+                      <span className="text-[7px] font-bold text-slate-300 uppercase tracking-widest leading-none mt-1">
+                        Visitor Management System
+                      </span>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Search Bar - SaaS Style */}
+            <div className="flex-1 max-w-2xl px-4">
+              <div className="relative w-full">
+                <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                  <Search className="h-4.5 w-4.5 text-slate-400" />
                 </div>
-                <div className="flex flex-col">
-                  <h1 className="text-xl sm:text-2xl font-display font-extrabold tracking-tight text-ngo-primary leading-none mb-1.5 flex items-center gap-2">
-                    {organization?.name || 'Visitor Management System'}
-                    <span className="h-1.5 w-1.5 bg-ngo-accent rounded-full animate-pulse" />
-                    {availableOrgs.length > 1 && (
-                      <button 
-                        onClick={handleSwitchWorkspace}
-                        className="ml-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-150 text-indigo-700 hover:text-indigo-800 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all shadow-sm active:scale-95 cursor-pointer"
-                        title="Switch to another associated organization"
-                      >
-                        <Briefcase className="h-3 w-3" />
-                        Switch
-                      </button>
-                    )}
-                  </h1>
-                  <div className="flex flex-col gap-0.5">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">
-                      VMS Intelligence 4.0
-                    </p>
-                    <p className="text-[9px] font-black text-brand-blue uppercase tracking-[0.25em] mt-1">
-                      Visitor Management System
-                    </p>
-                  </div>
-                </div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search visitors, records or intelligence..."
+                  className="w-full bg-[#F3F4F6] border-none rounded-2xl py-3 pl-12 pr-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/10 transition-all placeholder:text-slate-400"
+                />
+                {searchQuery && (
+                  <button 
+                    onClick={() => setSearchQuery('')}
+                    className="absolute inset-y-0 right-3 flex items-center text-slate-300 hover:text-slate-500"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Empty Spacer to maintain center header balance if needed, but we move nav to sidebar */}
-            <div className="hidden lg:flex flex-1" />
-
             {/* Profile & Notifications */}
-            <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-              {/* Desktop Global Scan Button */}
-              <div className="hidden lg:block">
-                <QRCheckOutScanner 
-                  onScan={handleScanCheckOut} 
-                  lang="EN" 
-                  className="mr-2"
-                />
+            <div className="flex items-center gap-3 sm:gap-6 shrink-0">
+              {/* Status Badge */}
+              <div className="hidden sm:block">
+                <div className="flex items-center gap-2 px-4 py-2 bg-[#F0FDF4] text-[#10B981] rounded-full text-[10px] font-black uppercase tracking-widest border border-[#DCFCE7]">
+                  <div className="h-1.5 w-1.5 bg-[#10B981] rounded-full animate-pulse" />
+                  ON-GRID LIVE
+                </div>
               </div>
 
-              {/* Connection Status Indicator */}
-              <div className="hidden sm:flex items-center gap-3">
-                {!isOnline ? (
-                  <motion.div 
-                    initial={{ scale: 0.9, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    className="flex items-center gap-2.5 px-4 py-2 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-red-100 shadow-[0_10px_20px_-5px_rgba(239,68,68,0.1)]"
-                  >
-                    <div className="h-2 w-2 bg-red-500 rounded-full animate-pulse" />
-                    Off-Grid
-                  </motion.div>
-                ) : (isSyncing || isSyncingOffline) ? (
-                  <motion.div 
-                    initial={{ scale: 0.9, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    className="flex items-center gap-2.5 px-4 py-2 bg-brand-blue/5 text-brand-blue rounded-2xl text-[10px] font-black uppercase tracking-widest border border-brand-blue/10 shadow-[0_10px_20px_-5px_rgba(37,99,235,0.1)]"
-                  >
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Syncing Intelligence
-                  </motion.div>
-                ) : (
-                  <motion.div 
-                    initial={{ scale: 0.9, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    className="flex items-center gap-2.5 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-emerald-100 shadow-[0_10px_20px_-5px_rgba(16,185,129,0.1)] group"
-                  >
-                    <div className="h-2 w-2 bg-emerald-500 rounded-full group-hover:scale-125 transition-transform" />
-                    On-Grid Live
-                  </motion.div>
-                )}
-              </div>
-
-              {/* Notifications Trigger */}
-              <button
+              {/* Notifications */}
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={() => setIsNotificationsOpen(true)}
-                className="h-10 w-10 sm:h-12 sm:w-12 bg-slate-50 hover:bg-slate-100 rounded-2xl flex items-center justify-center transition-all relative group border border-slate-100"
+                className="h-10 w-10 bg-[#F8FAFC] rounded-xl flex items-center justify-center transition-all relative group border border-slate-100"
               >
-                <Bell className="h-5 w-5 sm:h-6 sm:w-6 text-slate-400 group-hover:text-slate-900 transition-colors" />
-                {notifications.filter(n => !n.read).length > 0 && (
-                  <span className="absolute top-2.5 right-2.5 h-3 w-3 bg-red-500 rounded-full ring-2 ring-white animate-pulse" />
-                )}
-              </button>
+                <div className="relative">
+                  <Bell className="h-5 w-5 text-slate-400 group-hover:text-slate-900 transition-colors" />
+                  {notifications.filter(n => !n.read).length > 0 && (
+                    <span className="absolute -top-1 -right-1 h-2 w-2 bg-[#EF4444] rounded-full ring-2 ring-white" />
+                  )}
+                </div>
+              </motion.button>
 
-              <div className="hidden lg:flex flex-col items-end mr-1">
-                <span className="text-sm font-bold text-gray-900 leading-none mb-1">{user.name || 'User'}</span>
-                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">{user.role}</span>
-              </div>
-              <div 
-                className="h-10 w-10 sm:h-12 sm:w-12 rounded-2xl bg-gradient-to-br from-brand-blue to-blue-400 border-4 border-white shadow-xl flex items-center justify-center overflow-hidden cursor-pointer hover:shadow-2xl transition-all transform hover:scale-105 active:scale-95 group"
-                onClick={() => setActiveTab('profile')}
-                title="View Profile"
-              >
-                {user.photoURL ? (
-                  <img src={user.photoURL} alt={user.name || 'User'} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
-                ) : (
-                  <span className="text-white font-black text-lg group-hover:scale-110 transition-transform">{(user.name || 'U').charAt(0).toUpperCase()}</span>
-                )}
+              <div className="flex items-center gap-4 pl-4 border-l border-slate-100">
+                <div className="hidden lg:flex flex-col items-end">
+                  <span className="text-sm font-bold text-slate-900 leading-none">{user.name || 'Sam Joe'}</span>
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">{user.role || 'MASTER_ADMIN'}</span>
+                </div>
+                <motion.div 
+                  whileHover={{ scale: 1.05 }}
+                  onClick={() => setActiveTab('profile')}
+                  className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-[#2563EB] flex items-center justify-center overflow-hidden cursor-pointer shadow-md"
+                >
+                  {user.photoURL ? (
+                    <img src={user.photoURL} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-white font-black text-sm">{(user.name || 'S').charAt(0).toUpperCase()}</span>
+                  )}
+                </motion.div>
+                <ChevronDown className="h-4 w-4 text-slate-400 cursor-pointer" />
               </div>
             </div>
           </div>
@@ -5459,17 +5527,17 @@ export default function App() {
       </header>
 
     <div className="lg:hidden fixed bottom-0 left-0 right-0 py-1 flex items-center justify-around bg-white/95 backdrop-blur-md px-2 z-[100] shadow-[0_-8px_30px_rgba(0,0,0,0.08)] pb-safe-area-bottom border-t border-slate-100">
-        {mainMobileTabs.map(tab => (
+        {mainMobileTabsUI.map(tab => (
           <MobileNavBtn 
             key={tab.id}
             active={activeTab === tab.id} 
-            onClick={() => setActiveTab(tab.id as any)} 
+            onClick={() => handleTabSelection(tab.id)} 
             icon={tab.icon} 
             label={tab.label} 
           />
         ))}
         <MobileNavBtn 
-          active={isMoreMenuOpen || moreMobileTabs.some(t => activeTab === t.id)} 
+          active={isMoreMenuOpen || moreMobileTabsUI.some(t => activeTab === t.id)} 
           onClick={() => setIsMoreMenuOpen(true)} 
           icon={<MoreHorizontal />} 
           label="More" 
@@ -5490,124 +5558,188 @@ export default function App() {
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            transition={{ type: "spring", damping: 30, stiffness: 350 }}
             onClick={(e) => e.stopPropagation()}
-            className="bg-white w-full rounded-t-[3rem] p-8 pb-12 shadow-2xl max-h-[70vh] overflow-y-auto no-scrollbar border-t border-white/20"
+            className="bg-white w-full rounded-t-[3rem] p-8 pb-12 shadow-2xl max-h-[85vh] overflow-hidden flex flex-col border-t border-white/20"
           >
-            <div className="w-12 h-1.5 bg-slate-100 rounded-full mx-auto mb-8" />
-            <div className="grid grid-cols-3 gap-4">
-              {moreMobileTabs.map(tab => (
-                <motion.button
-                  key={tab.id}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => {
-                    setActiveTab(tab.id as any);
-                    setIsMoreMenuOpen(false);
-                  }}
-                  className={`flex flex-col items-center gap-3 p-4 rounded-3xl transition-all ${activeTab === tab.id ? 'bg-blue-50 text-brand-blue' : 'text-slate-500 hover:bg-slate-50'}`}
-                >
-                  <div className={`p-3 rounded-2xl ${activeTab === tab.id ? 'bg-white shadow-sm' : 'bg-slate-50'}`}>
-                    {React.cloneElement(tab.icon as any, { className: "w-6 h-6" })}
-                  </div>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-center">{tab.label}</span>
-                </motion.button>
-              ))}
+            <div className="flex items-center justify-between mb-8">
+               <div className="flex flex-col">
+                  <h3 className="text-xl font-display font-black text-slate-900 tracking-tight">Explore</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">More Features & Hubs</p>
+               </div>
+               <motion.button
+                 whileHover={{ scale: 1.1, rotate: 90 }}
+                 whileTap={{ scale: 0.9 }}
+                 onClick={() => setIsMoreMenuOpen(false)}
+                 className="h-10 w-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-900 transition-all border border-slate-100"
+               >
+                 <X className="h-5 w-5" />
+               </motion.button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto no-scrollbar pb-6">
+              <div className="grid grid-cols-3 gap-3">
+                {moreMobileTabsUI.map(tab => (
+                  <motion.button
+                    key={tab.id}
+                    whileHover={{ y: -2 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      handleTabSelection(tab.id);
+                      setIsMoreMenuOpen(false);
+                    }}
+                    className={`flex flex-col items-center gap-3 p-4 rounded-3xl transition-all border ${activeTab === tab.id ? 'bg-blue-50 text-brand-blue border-blue-100' : 'text-slate-500 hover:bg-slate-50 border-transparent'}`}
+                  >
+                    <div className={`p-3 rounded-2xl ${activeTab === tab.id ? 'bg-white shadow-sm' : 'bg-slate-100'}`}>
+                      {React.cloneElement(tab.icon as any, { className: "w-6 h-6" })}
+                    </div>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-center leading-tight truncate w-full">{tab.label}</span>
+                  </motion.button>
+                ))}
+              </div>
             </div>
             
-            <button
-              onClick={() => setIsMoreMenuOpen(false)}
-              className="mt-8 w-full py-4 bg-slate-100 text-slate-500 font-black uppercase tracking-widest rounded-2xl"
-            >
-              Close
-            </button>
+            <div className="pt-4 border-t border-slate-50">
+              <p className="text-center text-[8px] font-bold text-slate-300 uppercase tracking-[0.2em]">
+                Elite VMS Enterprise Edition
+              </p>
+            </div>
           </motion.div>
         </motion.div>
       )}
     </AnimatePresence>
 
-    <div className="flex-1 flex flex-col min-h-0 relative">
+    <div className={`flex-1 flex flex-col min-h-0 relative transition-all duration-500 ease-in-out ${isSidebarExpanded ? 'lg:ml-64' : 'lg:ml-20'}`}>
       <div className="flex flex-1 min-h-0">
         {/* Desktop Sidebar */}
         <aside 
-          className={`hidden lg:flex flex-col bg-white border-r border-slate-100 transition-all duration-500 sticky top-24 h-[calc(100vh-6rem)] z-40 overflow-hidden ${isSidebarExpanded ? 'w-64' : 'w-20'}`}
+          className={`hidden lg:flex flex-col bg-white border-r border-slate-100 transition-all duration-500 ease-in-out fixed left-0 top-0 bottom-0 z-[110] overflow-hidden ${isSidebarExpanded ? 'w-64' : 'w-20'}`}
         >
-          {/* Sidebar Top Action */}
-          <div className="px-5 py-4 border-b border-slate-50">
-             <QRCheckOutScanner 
-               onScan={handleScanCheckOut} 
-               lang="EN" 
-               variant={isSidebarExpanded ? "secondary" : "icon"}
-               className="w-full"
-               collapsed={!isSidebarExpanded}
-             />
+          {/* Logo Section */}
+          <div className="h-24 px-6 flex items-center gap-4">
+             <div className="h-10 w-10 shrink-0 rounded-xl flex items-center justify-center shadow-lg overflow-hidden" 
+               style={{ backgroundColor: organization?.brandColor || '#2563EB' }}
+               onClick={() => handleTabSelection('dashboard')}
+             >
+                {organization?.logoUrl ? (
+                  <img src={organization.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-white text-sm font-black italic">
+                    {organization?.name ? organization.name.substring(0, 2).toUpperCase() : 'OS'}
+                  </span>
+                )}
+             </div>
+             {isSidebarExpanded && (
+               <div className="flex flex-col">
+                  <span className="text-sm font-black text-slate-900 tracking-tight leading-none whitespace-nowrap">
+                    {organization?.name || 'VMS Hub'}
+                  </span>
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">
+                    VMS 4.0
+                  </span>
+                  <span className="text-[7px] font-bold text-slate-300 uppercase tracking-widest leading-none mt-1">
+                    Visitor Management System
+                  </span>
+               </div>
+             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto no-scrollbar py-6 flex flex-col gap-1.5 px-3">
-            {visibleTabs.map((tab) => (
-              <motion.button
-                key={tab.id}
-                whileHover={{ x: 4 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => {
-                  if (tab.id === 'legal') {
-                    setLegalSubView('support');
-                  }
-                  setActiveTab(tab.id as any);
-                }}
-                className={`
-                  flex items-center gap-4 p-3.5 rounded-2xl transition-all duration-300 group relative
-                  ${activeTab === tab.id 
-                    ? 'bg-blue-50 text-brand-blue shadow-sm' 
-                    : 'text-slate-400 hover:bg-slate-50 hover:text-slate-900 font-medium'
-                  }
-                `}
-              >
-                <div className={`transition-all duration-500 shrink-0 ${activeTab === tab.id ? 'scale-110' : 'group-hover:scale-110'}`}>
-                  {React.cloneElement(tab.icon as any, { 
-                    className: `h-5 w-5 ${activeTab === tab.id ? 'text-brand-blue' : ''}` 
-                  })}
-                </div>
-                
-                <AnimatePresence mode="wait">
-                  {isSidebarExpanded && (
-                    <motion.span
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -10 }}
-                      className="text-[11px] font-black uppercase tracking-widest whitespace-nowrap overflow-hidden"
-                    >
-                      {tab.label}
-                    </motion.span>
-                  )}
-                </AnimatePresence>
+          <div className="flex-1 overflow-y-auto no-scrollbar py-6 flex flex-col gap-8 px-4">
+            {visibleGroups.map((group) => (
+              <div key={group.section} className="flex flex-col gap-2">
+                {isSidebarExpanded && (
+                  <h3 className="px-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 opacity-60">
+                    {group.section}
+                  </h3>
+                )}
+                {group.tabs.map((tab) => (
+                  <motion.button
+                    key={tab.id}
+                    whileHover={{ x: 4 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => handleTabSelection(tab.id)}
+                    className={`
+                      flex items-center gap-4 p-3.5 rounded-2xl transition-all duration-300 group relative
+                      ${activeTab === tab.id 
+                        ? 'bg-[#EFF6FF] text-[#2563EB] shadow-sm' 
+                        : 'text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#0F172A] font-medium'
+                      }
+                    `}
+                  >
+                    <div className={`transition-all duration-300 shrink-0 ${activeTab === tab.id ? 'scale-110' : 'group-hover:scale-110'}`}>
+                      {React.cloneElement(tab.icon as any, { 
+                        className: `h-5 w-5 ${activeTab === tab.id ? 'text-[#2563EB]' : ''}` 
+                      })}
+                    </div>
+                    
+                    <AnimatePresence mode="wait">
+                      {isSidebarExpanded && (
+                        <motion.span
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -10 }}
+                          className="text-sm font-bold whitespace-nowrap overflow-hidden"
+                        >
+                          {tab.label}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
 
-                {!isSidebarExpanded && (
-                  <div className="absolute left-[72px] bg-slate-950 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 whitespace-nowrap shadow-xl">
-                    {tab.label}
-                  </div>
-                )}
-                
-                {activeTab === tab.id && (
-                  <motion.div 
-                    layoutId="sidebar-active-indicator"
-                    className="absolute right-2 w-1 h-1 bg-brand-blue rounded-full"
-                  />
-                )}
-              </motion.button>
+                    {!isSidebarExpanded && (
+                      <div className="absolute left-[72px] bg-slate-950 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 whitespace-nowrap shadow-xl">
+                        {tab.label}
+                      </div>
+                    )}
+                  </motion.button>
+                ))}
+              </div>
             ))}
+
+            {/* Intelligence Card - COMMUNITY Highlight */}
+            {isSidebarExpanded && (
+              <div className="mt-4 px-2">
+                <div className="bg-[#F8FAFC] border border-slate-100 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-sm font-bold text-slate-900">Intelligence</span>
+                  </div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
+                    Elite VMS Enterprise v4.0.2
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Sidebar Footer info */}
-          {isSidebarExpanded && (
-            <div className="p-6 border-t border-slate-50 text-center">
-              <p className="text-[8px] font-black text-slate-200 uppercase tracking-widest">
-                Elite VMS v4.0.2
-              </p>
-            </div>
-          )}
+          <div className="p-6 mt-auto border-t border-slate-50 space-y-6">
+            {/* Scan Pass Button */}
+            <QRCheckOutScanner 
+              onScan={handleScanCheckOut} 
+              lang="EN" 
+              customTrigger={
+                <motion.button
+                  whileHover={{ scale: 1.02, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
+                  className={`flex items-center justify-center gap-3 w-full p-4 rounded-2xl border-2 border-blue-600/10 text-blue-600 font-bold hover:bg-blue-50 transition-all ${!isSidebarExpanded ? 'aspect-square p-0 border-none' : ''}`}
+                >
+                  <Camera className="h-5 w-5" />
+                  {isSidebarExpanded && <span className="text-sm">Scan Pass</span>}
+                </motion.button>
+              }
+            />
+
+            {/* Collapse Button */}
+            <button 
+              onClick={toggleSidebar}
+              className={`flex items-center gap-3 text-slate-400 hover:text-slate-900 font-bold transition-all ${!isSidebarExpanded ? 'justify-center' : ''}`}
+            >
+              <ChevronLeft className={`h-5 w-5 transition-transform duration-500 ${isSidebarExpanded ? '' : 'rotate-180'}`} />
+              {isSidebarExpanded && <span className="text-sm">Collapse</span>}
+            </button>
+          </div>
         </aside>
 
-        <main className={`flex-1 w-full transition-all duration-500 ${user?.preferences?.density ? 'py-2 scale-[0.99] origin-top font-tight' : 'py-8'}`}>
+        <main className={`flex-1 w-full transition-all duration-500 ease-in-out pt-20 sm:pt-24 ${user?.preferences?.density ? 'py-2 scale-[0.99] origin-top font-tight' : 'py-8'}`}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <AnimatePresence mode="wait">
           {activeTab === 'dashboard' && isTabVisible('dashboard') && (
