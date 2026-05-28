@@ -197,12 +197,14 @@ function NavButton({ active, onClick, icon, label }: {
   label: string;
 }) {
   return (
-    <button
+    <motion.button
+      whileHover={{ y: -2 }}
+      whileTap={{ scale: 0.95 }}
       onClick={onClick}
       className={`
         flex flex-col items-center justify-center min-w-[72px] px-3 py-2 rounded-2xl transition-all duration-300 relative group
         ${active 
-          ? 'bg-blue-50 text-blue-600' 
+          ? 'bg-blue-50 text-blue-600 shadow-sm' 
           : 'text-slate-400 hover:text-slate-600'
         }
       `}
@@ -217,25 +219,33 @@ function NavButton({ active, onClick, icon, label }: {
         <motion.div 
           layoutId="nav-active-indicator"
           className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-blue-600 rounded-full"
+          initial={{ opacity: 0, scale: 0 }}
+          animate={{ opacity: 1, scale: 1 }}
         />
       )}
-    </button>
+    </motion.button>
   );
 }
 
 function MobileNavBtn({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
-    <button
+    <motion.button
+      whileTap={{ scale: 0.95 }}
+      whileHover={{ y: -2 }}
       onClick={onClick}
       className={`
         flex flex-row sm:flex-col lg:flex-row items-center justify-center py-2 px-4 rounded-xl sm:rounded-2xl transition-all duration-500 relative gap-2 shrink-0 group
-        ${active ? 'text-slate-900' : 'text-slate-400 hover:text-slate-900'}
+        ${active ? 'text-slate-900 bg-white/50 backdrop-blur-sm shadow-sm' : 'text-slate-400 hover:text-slate-900'}
       `}
     >
       <div className={`transition-all duration-500 relative ${active ? 'scale-110' : 'group-hover:scale-110'}`}>
         {React.cloneElement(icon as any, { className: `h-5 w-5 ${active ? 'text-brand-blue' : ''}` })}
         {active && (
-          <div className="absolute -inset-2 bg-brand-blue/10 rounded-full blur-md" />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.5 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="absolute -inset-2 bg-brand-blue/10 rounded-full blur-md" 
+          />
         )}
       </div>
       <span className={`text-[10px] font-black uppercase tracking-[0.2em] leading-none whitespace-nowrap transition-all ${active ? 'opacity-100 italic' : 'opacity-40 group-hover:opacity-80'}`}>
@@ -249,7 +259,7 @@ function MobileNavBtn({ active, onClick, icon, label }: { active: boolean; onCli
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
         />
       )}
-    </button>
+    </motion.button>
   );
 }
 
@@ -5531,20 +5541,24 @@ export default function App() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-4">
-                    <button
+                    <motion.button
+                      whileHover={{ scale: 1.05, y: -2 }}
+                      whileTap={{ scale: 0.95 }}
                       onClick={() => setActiveTab('visitors')}
-                      className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-[0_20px_40px_-10px_rgba(37,99,235,0.3)] hover:bg-blue-700 transition-all active:scale-95 flex items-center gap-2"
+                      className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-[0_20px_40px_-10px_rgba(37,99,235,0.3)] hover:bg-blue-700 transition-all flex items-center gap-2"
                     >
                       <LayoutDashboard className="h-5 w-5" />
                       Open Dashboard
-                    </button>
-                    <button
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.05, y: -2 }}
+                      whileTap={{ scale: 0.95 }}
                       onClick={() => setActiveTab('records')}
-                      className="px-8 py-4 bg-white border border-slate-200 text-slate-900 rounded-2xl font-bold hover:bg-slate-50 transition-all active:scale-95 flex items-center gap-2"
+                      className="px-8 py-4 bg-white border border-slate-200 text-slate-900 rounded-2xl font-bold hover:bg-slate-50 transition-all flex items-center gap-2"
                     >
                        View Reports
                        <ChevronRight className="h-4 w-4" />
-                    </button>
+                    </motion.button>
                   </div>
                 </div>
 
@@ -5958,13 +5972,15 @@ export default function App() {
                 </div>
                 <div className="flex flex-col sm:flex-row items-center gap-3">
                   <QRCheckOutScanner onScan={handleScanCheckOut} lang="EN" />
-                  <button
+                  <motion.button
+                    whileHover={{ scale: 1.05, y: -2 }}
+                    whileTap={{ scale: 0.95 }}
                     onClick={() => setShowForm(true)}
-                    className="flex items-center justify-center gap-3 px-8 py-4 bg-brand-blue text-white font-black rounded-2xl hover:bg-brand-blue/90 transition-all shadow-xl shadow-blue-200/50 hover:shadow-lg active:scale-95 uppercase tracking-widest text-[10px]"
+                    className="flex items-center justify-center gap-3 px-8 py-4 bg-brand-blue text-white font-black rounded-2xl hover:bg-brand-blue/90 transition-all shadow-xl shadow-blue-200/50 hover:shadow-lg uppercase tracking-widest text-[10px]"
                   >
                     <UserPlus className="h-4 w-4" />
                     Register New Arrival
-                  </button>
+                  </motion.button>
                 </div>
               </div>
 
@@ -6039,20 +6055,24 @@ export default function App() {
                 </div>
                 {(user.role === 'ADMIN' || user.role === 'MASTER_ADMIN') && (
                   <div className="flex gap-4">
-                    <button
+                    <motion.button
+                      whileHover={{ scale: 1.05, y: -2 }}
+                      whileTap={{ scale: 0.95 }}
                       onClick={exportToCSV}
-                      className="flex items-center justify-center gap-2 px-6 py-4 bg-white border border-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-all active:scale-95 shadow-sm"
+                      className="flex items-center justify-center gap-2 px-6 py-4 bg-white border border-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-all shadow-sm"
                     >
                       <FileText className="h-5 w-5 text-brand-blue" />
                       Export CSV
-                    </button>
-                    <button
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.05, y: -2 }}
+                      whileTap={{ scale: 0.95 }}
                       onClick={exportToExcel}
-                      className="flex items-center justify-center gap-2 px-6 py-4 bg-white border border-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-all active:scale-95 shadow-sm"
+                      className="flex items-center justify-center gap-2 px-6 py-4 bg-white border border-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-all shadow-sm"
                     >
                       <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
                       Export Excel
-                    </button>
+                    </motion.button>
                   </div>
                 )}
               </div>
@@ -7202,30 +7222,32 @@ export default function App() {
                   {settingsSubTab === 'Visibility' && (
                     <div className="space-y-8">
                       <div className="p-8 bg-slate-50/50 rounded-3xl border border-slate-100 space-y-8">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-100/50">
-                          <div className="flex items-center gap-4">
-                            <div className="h-14 w-14 bg-white rounded-2xl flex items-center justify-center shadow-sm">
-                              <Layout className="h-7 w-7 text-indigo-600" />
-                            </div>
-                            <div>
-                              <h3 className="text-xl font-bold text-gray-900 tracking-tight">Navigation & Tab Visibility</h3>
-                              <p className="text-gray-500 text-sm font-medium">Control which tabs are visible to Staff members. Admins always see all tabs.</p>
-                            </div>
-                          </div>
-                          <button 
-                            onClick={async () => {
-                              if (!organization) return;
-                              try {
-                                const orgRef = doc(db, 'organizations', organization.id);
-                                await updateDoc(orgRef, { navigationVisibility: organization.navigationVisibility || {} });
-                                addToast('Navigation visibility updated!', 'success');
-                              } catch (err) { addToast('Failed to update navigation', 'error'); }
-                            }}
-                            className="px-8 py-4 bg-slate-900 text-white font-black rounded-2xl hover:bg-slate-800 transition-all active:scale-95 shadow-xl shadow-slate-200 flex items-center gap-3 uppercase tracking-widest text-[10px]"
-                          >
-                            <Save className="h-4 w-4" /> Save Visibility
-                          </button>
-                        </div>
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-100/50">
+                    <div className="flex items-center gap-4">
+                      <div className="h-14 w-14 bg-white rounded-2xl flex items-center justify-center shadow-sm">
+                        <Layout className="h-7 w-7 text-indigo-600" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold text-gray-900 tracking-tight">Navigation & Tab Visibility</h3>
+                        <p className="text-gray-500 text-sm font-medium">Control which tabs are visible to Staff members. Admins always see all tabs.</p>
+                      </div>
+                    </div>
+                    <motion.button 
+                      whileHover={{ scale: 1.05, y: -2 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={async () => {
+                        if (!organization) return;
+                        try {
+                          const orgRef = doc(db, 'organizations', organization.id);
+                          await updateDoc(orgRef, { navigationVisibility: organization.navigationVisibility || {} });
+                          addToast('Navigation visibility updated!', 'success');
+                        } catch (err) { addToast('Failed to update navigation', 'error'); }
+                      }}
+                      className="px-8 py-4 bg-slate-900 text-white font-black rounded-2xl hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 flex items-center gap-3 uppercase tracking-widest text-[10px]"
+                    >
+                      <Save className="h-4 w-4" /> Save Visibility
+                    </motion.button>
+                  </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                           {['Home', 'Entry', 'Inquiries', 'Records', 'Analysis', 'Birthday', 'Reviews', 'Logs', 'Profile', 'Donations', 'Pre-Reg', 'Support'].map((tabName) => (
                             <label key={tabName} className={`flex items-center gap-4 p-5 rounded-2xl border-2 transition-all cursor-pointer group ${organization?.navigationVisibility?.[tabName] !== false ? 'bg-white border-brand-blue shadow-sm shadow-brand-blue/5' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
@@ -7255,35 +7277,37 @@ export default function App() {
                   {settingsSubTab === 'Forms' && (
                     <div className="space-y-8">
                       <div className="p-8 bg-slate-50/50 rounded-3xl border border-slate-100 space-y-8">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-100/50">
-                          <div className="flex items-center gap-4">
-                            <div className="h-14 w-14 bg-white rounded-2xl flex items-center justify-center shadow-sm">
-                              <Settings2 className="h-7 w-7 text-emerald-600" />
-                            </div>
-                            <div>
-                              <h3 className="text-xl font-bold text-gray-900 tracking-tight">Visitor Form Customization</h3>
-                              <p className="text-gray-500 text-sm font-medium">Add or remove options from the purpose and category lists.</p>
-                            </div>
-                          </div>
-                          <button 
-                            onClick={async () => {
-                              if (!organization) return;
-                              try {
-                                const orgRef = doc(db, 'organizations', organization.id);
-                                await updateDoc(orgRef, {
-                                  visitPurposes: organization.visitPurposes || [...PURPOSES],
-                                  visitorCategories: organization.visitorCategories || [...TYPES],
-                                  donationOccasions: organization.donationOccasions || [...DEFAULT_DONATION_OCCASIONS],
-                                  eventOccasions: organization.eventOccasions || [...DEFAULT_EVENT_OCCASIONS]
-                                });
-                                addToast('Form customization saved', 'success');
-                              } catch (err) { addToast('Failed to save settings', 'error'); }
-                            }}
-                            className="px-8 py-4 bg-emerald-600 text-white font-black rounded-2xl hover:bg-emerald-700 transition-all active:scale-95 shadow-xl shadow-emerald-100 flex items-center gap-3 uppercase tracking-widest text-[10px]"
-                          >
-                            <Save className="h-4 w-4" /> Confirm Selection
-                          </button>
-                        </div>
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-100/50">
+                    <div className="flex items-center gap-4">
+                      <div className="h-14 w-14 bg-white rounded-2xl flex items-center justify-center shadow-sm">
+                        <Settings2 className="h-7 w-7 text-emerald-600" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold text-gray-900 tracking-tight">Visitor Form Customization</h3>
+                        <p className="text-gray-500 text-sm font-medium">Add or remove options from the purpose and category lists.</p>
+                      </div>
+                    </div>
+                    <motion.button 
+                      whileHover={{ scale: 1.05, y: -2 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={async () => {
+                        if (!organization) return;
+                        try {
+                          const orgRef = doc(db, 'organizations', organization.id);
+                          await updateDoc(orgRef, {
+                            visitPurposes: organization.visitPurposes || [...PURPOSES],
+                            visitorCategories: organization.visitorCategories || [...TYPES],
+                            donationOccasions: organization.donationOccasions || [...DEFAULT_DONATION_OCCASIONS],
+                            eventOccasions: organization.eventOccasions || [...DEFAULT_EVENT_OCCASIONS]
+                          });
+                          addToast('Form customization saved', 'success');
+                        } catch (err) { addToast('Failed to save settings', 'error'); }
+                      }}
+                      className="px-8 py-4 bg-emerald-600 text-white font-black rounded-2xl hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100 flex items-center gap-3 uppercase tracking-widest text-[10px]"
+                    >
+                      <Save className="h-4 w-4" /> Confirm Selection
+                    </motion.button>
+                  </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                           <div className="space-y-5">
                             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Visit Purpose Index</h4>
@@ -7360,7 +7384,9 @@ export default function App() {
                               <p className="text-gray-500 text-xs sm:text-sm font-medium">Protect your kiosk from unauthorized exits.</p>
                             </div>
                           </div>
-                          <button 
+                          <motion.button 
+                            whileHover={{ scale: 1.05, y: -2 }}
+                            whileTap={{ scale: 0.95 }}
                             onClick={async () => {
                               if (!organization) return;
                               try {
@@ -7369,10 +7395,10 @@ export default function App() {
                                 addToast('Kiosk PIN updated successfully!', 'success');
                               } catch (err) { addToast('Failed to update PIN', 'error'); }
                             }}
-                            className="w-full md:w-auto px-8 py-3.5 sm:py-4 bg-amber-600 text-white font-black rounded-2xl hover:bg-amber-700 transition-all active:scale-95 shadow-xl shadow-amber-100 uppercase tracking-widest text-[10px]"
+                            className="w-full md:w-auto px-8 py-3.5 sm:py-4 bg-amber-600 text-white font-black rounded-2xl hover:bg-amber-700 transition-all shadow-xl shadow-amber-100 uppercase tracking-widest text-[10px]"
                           >
                             <Save className="h-4 w-4" /> Save Security PIN
-                          </button>
+                          </motion.button>
                         </div>
                         <div className="max-w-md space-y-4">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Terminal Exit Authorization PIN</label>
@@ -7629,7 +7655,9 @@ export default function App() {
 
 function FilterButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
   return (
-    <button
+    <motion.button
+      whileHover={{ y: -2 }}
+      whileTap={{ scale: 0.95 }}
       onClick={onClick}
       className={`px-5 py-2.5 rounded-xl text-xs font-bold tracking-wider uppercase transition-all whitespace-nowrap border ${
         active 
@@ -7638,7 +7666,7 @@ function FilterButton({ active, onClick, label }: { active: boolean; onClick: ()
       }`}
     >
       {label}
-    </button>
+    </motion.button>
   );
 }
 

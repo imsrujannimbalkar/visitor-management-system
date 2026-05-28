@@ -417,6 +417,12 @@ export default function VisitorTable({
                     <motion.tr
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
+                      transition={{ 
+                        duration: 0.3, 
+                        delay: Math.min(idx * 0.05, 0.5),
+                        ease: [0.23, 1, 0.32, 1] 
+                      }}
+                      whileHover={{ x: 4, backgroundColor: 'rgba(248, 250, 252, 0.8)' }}
                       className={`hover:bg-slate-50 transition-all duration-300 group cursor-pointer border-b border-slate-50 last:border-0 ${expandedRow === visitor.visitorId ? 'bg-ngo-surface underline-offset-4' : ''} ${selectedIds.includes(visitor.visitorId) ? 'bg-slate-50' : ''} ${isExtended ? 'bg-amber-50/50 hover:bg-amber-100/40 border-amber-200/50 dark:bg-amber-950/10' : ''}`}
                       onClick={() => toggleRow(visitor.visitorId)}
                     >
