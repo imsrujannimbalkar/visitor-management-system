@@ -39,8 +39,8 @@ export const speak = (text: string, lang: 'EN' | 'HI' = 'EN', enabled: boolean =
 export const kioskSpeak = (phraseId: string, lang: 'EN' | 'HI' = 'EN', enabled: boolean = true) => {
   const phrases: Record<string, { EN: string; HI: string }> = {
     'WELCOME': {
-      EN: 'Welcome! Please select an option to get started.',
-      HI: 'नमस्ते! शुरू करने के लिए कृपया एक विकल्प चुनें।'
+      EN: 'Welcome! Please select Check In, Pre-Registered, Scan Out, or Check Out to get started.',
+      HI: 'नमस्ते! शुरू करने के लिए कृपया चेक इन, प्री-रजिस्टर्ड, स्कैन आउट या चेक आउट चुनें।'
     },
     'CHECK_IN_START': {
       EN: 'Starting check-in. Please fill in your details.',
@@ -51,8 +51,8 @@ export const kioskSpeak = (phraseId: string, lang: 'EN' | 'HI' = 'EN', enabled: 
       HI: 'कृपया अपना फोन नंबर या पूर्व-पंजीकरण कोड दर्ज करें।'
     },
     'CHECK_OUT_START': {
-      EN: 'Please select your name from the list to check out.',
-      HI: 'चेक आउट करने के लिए कृपया सूची से अपना नाम चुनें।'
+      EN: 'Please enter your phone number to check out.',
+      HI: 'चेक आउट करने के लिए कृपया अपना फ़ोन नंबर दर्ज करें।'
     },
     'SCAN_OUT_START': {
       EN: 'Please scan your Q R pass to exit.',
