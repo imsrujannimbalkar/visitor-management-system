@@ -5445,7 +5445,7 @@ export default function App() {
                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">
                         VMS 4.0
                       </span>
-                      <span className="text-[7px] font-bold text-slate-300 uppercase tracking-widest leading-none mt-1">
+                      <span className="text-[7px] font-bold text-slate-900 uppercase tracking-widest leading-none mt-1">
                         Visitor Management System
                       </span>
                     </div>
@@ -5637,7 +5637,7 @@ export default function App() {
                   <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">
                     VMS 4.0
                   </span>
-                  <span className="text-[7px] font-bold text-slate-300 uppercase tracking-widest leading-none mt-1">
+                  <span className="text-[7px] font-bold text-slate-900 uppercase tracking-widest leading-none mt-1">
                     Visitor Management System
                   </span>
                </div>
