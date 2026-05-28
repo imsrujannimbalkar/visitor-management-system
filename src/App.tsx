@@ -74,6 +74,7 @@ import {
   Volume2,
   VolumeX,
   Menu,
+  AlignLeft,
   Briefcase
 } from 'lucide-react';
 import { 
@@ -5417,7 +5418,7 @@ export default function App() {
                 className="p-2.5 hover:bg-slate-50 text-slate-400 hover:text-slate-900 rounded-xl transition-all"
                 title={isSidebarExpanded ? "Collapse Sidebar" : "Expand Sidebar"}
               >
-                <Menu className="h-6 w-6" />
+                <AlignLeft className="h-6 w-6" />
               </motion.button>
               
               <AnimatePresence>
@@ -5445,7 +5446,7 @@ export default function App() {
                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">
                         VMS 4.0
                       </span>
-                      <span className="text-[7px] font-bold text-slate-900 uppercase tracking-widest leading-none mt-1">
+                      <span className="text-[7px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">
                         Visitor Management System
                       </span>
                     </div>
@@ -5637,7 +5638,7 @@ export default function App() {
                   <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">
                     VMS 4.0
                   </span>
-                  <span className="text-[7px] font-bold text-slate-900 uppercase tracking-widest leading-none mt-1">
+                  <span className="text-[7px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">
                     Visitor Management System
                   </span>
                </div>
@@ -6201,11 +6202,11 @@ export default function App() {
             >
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
-                  <h2 className="text-4xl font-black text-slate-900 tracking-tighter uppercase italic">Active Visitors</h2>
+                  <h2 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">Active Visitors</h2>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">Operational Personnel Deployment</p>
                 </div>
                 <div className="flex flex-col sm:flex-row items-center gap-3">
-                  <QRCheckOutScanner onScan={handleScanCheckOut} lang="EN" />
+                  <QRCheckOutScanner onScan={handleScanCheckOut} lang="EN" variant="icon" />
                   <motion.button
                     whileHover={{ scale: 1.05, y: -2 }}
                     whileTap={{ scale: 0.95 }}
@@ -6284,7 +6285,7 @@ export default function App() {
             >
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
-                  <h2 className="text-4xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">Master Archive</h2>
+                  <h2 className="text-4xl font-black text-slate-900 tracking-tighter uppercase leading-none">Master Archive</h2>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">Historical Node Persistence Logs</p>
                 </div>
                 {(user.role === 'ADMIN' || user.role === 'MASTER_ADMIN') && (
