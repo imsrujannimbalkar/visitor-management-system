@@ -1,9 +1,11 @@
 {
-  "name": "Visitor Management System",
-  "description": "A centralized record management system for secure visitor logging, documentation audit, and voice-guided kiosk navigation.",
+  "name": "Remix: Visitor Management System",
+  "description": "A centralized record management system for secure visitor logging, documentation audit, and organizational oversight.",
   "requestFramePermissions": [
     "microphone",
     "camera"
   ],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
