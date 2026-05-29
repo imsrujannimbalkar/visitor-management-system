@@ -2276,7 +2276,7 @@ export default function App() {
       if (unsubscribeOrg) unsubscribeOrg();
       if (unsubscribeNestedUser) unsubscribeNestedUser();
     };
-  }, [selectedOrgId, addToast]);
+  }, [selectedOrgId, activeOrgId, addToast]);
 
   // Real-time Organization Listener
   useEffect(() => {
@@ -4713,6 +4713,7 @@ export default function App() {
     return <OrgSetup onComplete={(orgId) => {
         setPageLoading(false);
         setActiveOrgId(orgId);
+        setSelectedOrgId(orgId);
     }} />;
   }
 
@@ -5392,15 +5393,15 @@ export default function App() {
                     className="flex lg:flex items-center gap-3 cursor-pointer" 
                     onClick={() => handleTabSelection('dashboard')}
                   >
-                    <div className="h-20 w-20 rounded-2xl bg-white flex items-center justify-center shadow-2xl shadow-blue-500/10 overflow-hidden p-3 border border-slate-50">
+                    <div className="h-24 w-24 rounded-3xl bg-white flex items-center justify-center shadow-2xl shadow-blue-500/10 overflow-hidden p-4 border border-slate-100">
                       <img src="/logo.png" alt="VMS Flow" className="w-full h-full object-contain scale-110" />
                     </div>
                     <div className="flex flex-col justify-center">
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="text-[9px] font-black text-blue-600 uppercase tracking-[0.2em] leading-none">VMS Flow</span>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] leading-none">VMS Flow</span>
                       </div>
                       <div className="flex items-center gap-1.5 leading-none">
-                        <span className="text-xl font-black text-slate-900 tracking-tighter">Sam Foundation</span>
+                        <span className="text-2xl font-black text-slate-900 tracking-tighter">{organization?.name || 'VMS Flow'}</span>
                       </div>
                       <div className="flex items-center gap-2 mt-1.5 leading-none">
                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.1em]">
@@ -5475,7 +5476,7 @@ export default function App() {
                   <motion.div 
                     whileHover={{ scale: 1.05 }}
                     onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                    className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-[#2563EB] flex items-center justify-center overflow-hidden cursor-pointer shadow-md border-2 border-slate-300 transition-all active:scale-95"
+                    className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-[#2563EB] flex items-center justify-center overflow-hidden cursor-pointer shadow-md border-2 border-slate-300 ring-2 ring-blue-500/30 transition-all active:scale-95"
                   >
                     {user.photoURL ? (
                       <img src={user.photoURL} alt="Avatar" className="w-full h-full object-cover" />
@@ -5616,11 +5617,11 @@ export default function App() {
           className={`hidden lg:flex flex-col bg-white border-r border-slate-100 transition-all duration-500 ease-in-out fixed left-0 top-0 bottom-0 z-[110] overflow-hidden ${isSidebarExpanded ? 'w-64' : 'w-20'}`}
         >
           {/* Logo Section */}
-          <div className="h-28 px-6 flex items-center gap-4 border-b border-slate-50 bg-slate-50/30">
-             <div className="h-16 w-16 shrink-0 rounded-2xl bg-white flex items-center justify-center shadow-2xl shadow-blue-500/10 overflow-hidden p-2.5 border border-slate-100 cursor-pointer" 
+          <div className="h-32 px-6 flex items-center gap-4 border-b border-slate-50 bg-slate-50/30">
+             <div className="h-20 w-20 shrink-0 rounded-[2rem] bg-white flex items-center justify-center shadow-2xl shadow-blue-500/10 overflow-hidden p-3 border border-slate-100 cursor-pointer" 
                onClick={() => handleTabSelection('dashboard')}
              >
-                <img src="/logo.png" alt="VMS Flow Logo" className="w-full h-full object-contain scale-110" />
+                <img src="/logo.png" alt="VMS Flow Logo" className="w-full h-full object-contain scale-125" />
              </div>
              {isSidebarExpanded && (
                <div className="flex flex-col">
