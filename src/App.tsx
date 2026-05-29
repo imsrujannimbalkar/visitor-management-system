@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import GoogleIntegration from './components/GoogleIntegration';
 import {
@@ -76,7 +76,8 @@ import {
   VolumeX,
   Menu,
   AlignLeft,
-  Briefcase
+  Briefcase,
+  Command
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -128,6 +129,9 @@ import { savePendingProfile, savePendingVisit, getPendingProfiles, getPendingVis
 import { createBackup, getBackups } from './services/backupService';
 import { auth, db, isConfigured, handleFirestoreError, OperationType } from './firebase';
 import { sanitizeForFirestore } from './lib/utils';
+
+const APP_VERSION = '4.1.0';
+
 import { 
   onAuthStateChanged, 
   signOut 
@@ -299,59 +303,57 @@ function SplashScreen({ organization }: { organization: Organization | null }) {
       transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
       className="fixed inset-0 z-[2000] bg-white flex flex-col items-center justify-center overflow-hidden font-sans"
     >
-      {/* Background Decor */}
-      <div className="absolute inset-0 z-0 overflow-hidden bg-white">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-50/50 rounded-full blur-[100px]" />
-      </div>
-
       <div className="relative z-10 flex flex-col items-center">
-        {/* Logo Animation */}
+        {/* App Icon / Logo Container */}
         <motion.div 
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-          className="relative mb-12"
+          className="relative mb-16"
         >
-          <div className="h-48 w-48 bg-white rounded-[3.5rem] flex items-center justify-center border border-slate-100 shadow-2xl overflow-hidden p-8 relative z-10">
+          <div className="h-44 w-44 bg-white rounded-[3.5rem] flex items-center justify-center shadow-[0_20px_50px_rgba(0,0,0,0.04)] border border-slate-50 overflow-hidden p-10 relative z-10 transition-all hover:scale-105 duration-700">
              <img src="/logo.png" alt="VMS Flow" className="w-full h-full object-contain" />
           </div>
-          {/* Subtle Pulse */}
-          <motion.div 
-            animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.1, 0.3] }}
-            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute -inset-8 bg-blue-50 rounded-[4.5rem]" 
-          />
         </motion.div>
 
-        <div className="flex flex-col items-center gap-2">
-          <div className="flex items-center gap-2.5">
-             <span className="text-6xl font-black text-slate-900 tracking-tighter">VMS</span>
-             <span className="text-6xl font-black text-blue-600 tracking-tighter">Flow</span>
-          </div>
+        {/* Gray Segmented Spinner */}
+        <div className="relative mb-12">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            className="w-12 h-12 relative"
+          >
+            {[...Array(12)].map((_, i) => (
+              <div
+                key={i}
+                className="absolute left-1/2 top-0 w-[3px] h-3 bg-slate-300 rounded-full origin-[center_24px]"
+                style={{
+                  transform: `translateX(-50%) rotate(${i * 30}deg)`,
+                  opacity: 1 - (i * 0.08)
+                }}
+              />
+            ))}
+          </motion.div>
         </div>
 
-        {/* Loading Bar */}
-        <div className="w-40 h-1 bg-slate-100 rounded-full mt-16 overflow-hidden relative shadow-sm mx-auto">
-           <motion.div 
-             initial={{ left: '-100%' }}
-             animate={{ left: '100%' }}
-             transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-             className="absolute inset-y-0 w-1/3 bg-blue-500 rounded-full"
-           />
+        {/* Loading Text & Status Capsule */}
+        <div className="flex flex-col items-center">
+          <span className="text-xl font-medium text-slate-800 tracking-tight mb-8">Loading ...</span>
+          
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="px-6 py-2.5 rounded-full border border-slate-100 bg-slate-50/50"
+          >
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] whitespace-nowrap">
+               {organization ? `SYNCING: ${organization.name}` : 'COMMENCING INITIALIZATION'}
+            </span>
+          </motion.div>
         </div>
       </div>
 
-      {/* Organization Context */}
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1 }}
-        className="absolute bottom-16 text-center"
-      >
-        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-white/50 backdrop-blur-sm px-6 py-2 rounded-full border border-slate-100">
-          {organization ? `SYNCING: ${organization.name}` : 'COMMENCING INITIALIZATION'}
-        </p>
-      </motion.div>
+
     </motion.div>
   );
 }
@@ -638,6 +640,57 @@ export default function App() {
       setDeferredPrompt(null);
     }
   };
+  const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input/textarea unless it's the Escape key
+      const isTyping = ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName);
+      
+      if (e.key === 'Escape') {
+        setIsShortcutsModalOpen(false);
+        setIsMobileMenuOpen(false);
+        setIsProfileMenuOpen(false);
+        setIsNotificationsOpen(false);
+        return;
+      }
+
+      // Cmd/Ctrl shortcuts
+      if (e.metaKey || e.ctrlKey) {
+        switch (e.key.toLowerCase()) {
+          case 'k':
+            e.preventDefault();
+            searchInputRef.current?.focus();
+            break;
+          case 'b':
+            e.preventDefault();
+            setIsSidebarExpanded(!isSidebarExpanded);
+            break;
+          case 'n':
+            e.preventDefault();
+            setActiveTab('visitors');
+            // We'll rely on the tab switch, but if there's a specific "New" state, we could trigger it
+            break;
+          case 'd':
+            e.preventDefault();
+            setActiveTab('dashboard');
+            break;
+          case 'h':
+            e.preventDefault();
+            setIsShortcutsModalOpen(true);
+            break;
+        }
+      } else if (e.key === '/' && !isTyping) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isSidebarExpanded]);
+
   const [showEmergencyForm, setShowEmergencyForm] = useState(false);
   const [activeOrgId, setActiveOrgId] = useState<string | null>(() => localStorage.getItem('activeOrgId'));
 
@@ -5385,11 +5438,11 @@ export default function App() {
 
       {/* Top Navigation Bar - Premium Density */}
       <header 
-        className={`bg-white border-b border-slate-100 fixed top-0 right-0 z-[100] transition-all duration-500 ease-in-out ${isSidebarExpanded ? 'lg:left-64' : 'lg:left-20'} left-0`}
+        className={`bg-white border-b border-slate-100 fixed top-0 left-0 right-0 z-[100] transition-all duration-300 ease-in-out`}
       >
-        <div className="mx-auto px-3 sm:px-8">
-          <div className="flex justify-between items-center h-16 sm:h-24 gap-2 sm:gap-4">
-            {/* Branding Container - Only visible in top bar when sidebar is collapsed */}
+        <div className="mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16 sm:h-20 lg:h-24 gap-2 sm:gap-4">
+            {/* Branding Container - Always visible */}
             <div className="flex items-center gap-2 sm:gap-4 shrink-0">
               <motion.button 
                 whileHover={{ scale: 1.05 }}
@@ -5405,57 +5458,60 @@ export default function App() {
                 <AlignLeft className="h-6 w-6" />
               </motion.button>
               
-              <AnimatePresence>
-                {!isSidebarExpanded && (
-                  <motion.div 
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    className="flex lg:flex items-center gap-2 sm:gap-3 cursor-pointer" 
-                    onClick={() => handleTabSelection('dashboard')}
-                  >
-                    <div className="h-10 w-10 sm:h-24 sm:w-24 rounded-xl sm:rounded-3xl bg-white flex items-center justify-center shadow-lg sm:shadow-2xl shadow-blue-500/10 overflow-hidden p-1.5 sm:p-4 border border-slate-100 shrink-0">
-                      <img src="/logo.png" alt="VMS Flow" className="w-full h-full object-contain scale-110 sm:scale-110" />
-                    </div>
-                    <div className="flex flex-col justify-center">
-                      <div className="flex items-center gap-1 sm:gap-1.5 mb-0.5 sm:mb-1">
-                        <span className="text-[8px] sm:text-[10px] font-black text-blue-600 uppercase tracking-widest sm:tracking-[0.2em] leading-none">VMS Flow</span>
-                      </div>
-                      <div className="flex items-center gap-1 sm:gap-1.5 leading-none">
-                        <span className="text-sm sm:text-2xl font-black text-slate-900 tracking-tighter truncate max-w-[100px] sm:max-w-none">{organization?.name || 'VMS Flow'}</span>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              <div 
+                className="flex items-center gap-2 sm:gap-3 cursor-pointer" 
+                onClick={() => handleTabSelection('dashboard')}
+              >
+                <div className="h-10 w-10 sm:h-12 lg:h-24 lg:w-24 rounded-xl sm:rounded-2xl lg:rounded-3xl bg-white flex items-center justify-center shadow-lg sm:shadow-xl lg:shadow-2xl shadow-blue-500/10 overflow-hidden p-1.5 sm:p-2 lg:p-4 border border-slate-100 shrink-0">
+                  <img src="/logo.png" alt="VMS Flow" className="w-full h-full object-contain scale-110" />
+                </div>
+                <div className="flex flex-col justify-center">
+                  <div className="flex items-center gap-1 sm:gap-1.5 mb-0.5 sm:mb-1 leading-none">
+                    <span className="text-[8px] sm:text-[9px] lg:text-[10px] font-black text-blue-600 uppercase tracking-widest lg:tracking-[0.2em]">VMS Flow</span>
+                  </div>
+                  <div className="flex items-center gap-1 sm:gap-1.5 leading-none">
+                    <span className="text-sm sm:text-base lg:text-2xl font-black text-slate-900 tracking-tighter truncate max-w-[80px] sm:max-w-[150px] lg:max-w-none">{organization?.name || 'VMS Flow'}</span>
+                  </div>
+                  <div className="hidden sm:flex items-center gap-2 mt-1.5 leading-none">
+                    <span className="text-[9px] lg:text-[10px] font-black text-slate-400 uppercase tracking-[0.1em]">
+                      VMS {APP_VERSION}
+                    </span>
+                    <span className="w-1 h-1 bg-slate-200 rounded-full" />
+                    <span className="text-[7.5px] lg:text-[8px] font-bold text-slate-500 uppercase tracking-widest">
+                      Visitor Management System
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Search Bar - SaaS Style */}
-            <div className="flex-1 max-w-2xl px-2 sm:px-4">
-              <div className="relative w-full">
-                <div className="absolute inset-y-0 left-3 sm:left-4 flex items-center pointer-events-none">
-                  <Search className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-slate-400" />
+            <div className="flex-1 max-w-2xl px-1 sm:px-4">
+              <div className="relative w-full group">
+                <div className="absolute inset-y-0 left-3 sm:left-4 flex items-center pointer-events-none z-10">
+                  <Search className="h-4 w-4 sm:h-5 sm:w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
                 </div>
                 <input
+                  ref={searchInputRef}
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search..."
-                  className="w-full bg-[#F3F4F6] border-none rounded-xl sm:rounded-2xl py-2 sm:py-3 pl-10 sm:pl-12 pr-4 text-[13px] sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/10 transition-all placeholder:text-slate-400"
+                  className="w-full bg-[#F3F4F6] border border-transparent rounded-xl sm:rounded-2xl py-2 sm:py-3.5 pl-9 sm:pl-12 pr-10 text-[13px] sm:text-sm font-medium focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:bg-white focus:border-blue-500/20 transition-all placeholder:text-slate-400 shadow-sm"
                 />
                 {searchQuery && (
                   <button 
                     onClick={() => setSearchQuery('')}
-                    className="absolute inset-y-0 right-2 sm:right-3 flex items-center text-slate-300 hover:text-slate-500"
+                    className="absolute inset-y-0 right-2 sm:right-4 flex items-center text-slate-300 hover:text-slate-500 transition-colors"
                   >
-                    <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    <X className="h-4 w-4 sm:h-5 sm:w-5" />
                   </button>
                 )}
               </div>
             </div>
 
             {/* Profile & Notifications Desktop */}
-            <div className="hidden sm:flex items-center gap-3 sm:gap-6 shrink-0">
+            <div className="hidden md:flex items-center gap-3 sm:gap-6 shrink-0">
               {/* Status Badge */}
               <div className="hidden sm:block">
                 <div className="flex items-center gap-2 px-4 py-2 bg-[#F0FDF4] text-[#10B981] rounded-full text-[10px] font-black uppercase tracking-widest border border-[#DCFCE7]">
@@ -5480,9 +5536,9 @@ export default function App() {
               </motion.button>
 
               <div className="flex items-center gap-4 pl-4 border-l border-slate-100">
-                <div className="hidden lg:flex flex-col items-end">
-                  <span className="text-sm font-bold text-slate-900 leading-none">{user.name || 'Sam Joe'}</span>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">{user.role || 'MASTER_ADMIN'}</span>
+                <div className="hidden lg:flex flex-col items-end min-w-0">
+                  <span className="text-sm font-bold text-slate-900 leading-none truncate max-w-[150px]">{user.name || 'Sam Joe'}</span>
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 truncate max-w-[150px]">{user.role || 'MASTER_ADMIN'}</span>
                 </div>
                 <div className="relative">
                   <motion.div 
@@ -5503,7 +5559,7 @@ export default function App() {
                         initial={{ opacity: 0, y: 10, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                        className="absolute right-0 mt-3 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50"
+                        className="absolute right-0 mt-3 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 max-h-[85vh] overflow-y-auto"
                       >
                         <button 
                           onClick={() => {
@@ -5512,8 +5568,19 @@ export default function App() {
                           }}
                           className="w-full flex items-center gap-3 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors"
                         >
-                          <UserIcon className="h-4 w-4" />
+                          <UserIcon className="h-4 w-4 text-slate-400" />
                           View Profile
+                        </button>
+
+                        <button 
+                          onClick={() => {
+                            setIsShortcutsModalOpen(true);
+                            setIsProfileMenuOpen(false);
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors border-b border-slate-50"
+                        >
+                          <Command className="h-4 w-4 text-slate-400" />
+                          Keyboard Shortcuts
                         </button>
 
                         {deferredPrompt && (
@@ -5555,7 +5622,7 @@ export default function App() {
             </div>
 
             {/* Profile & Notifications Mobile - Consolidated */}
-            <div className="flex sm:hidden items-center shrink-0">
+            <div className="flex md:hidden items-center shrink-0">
                <div className="relative">
                   <motion.button
                     whileTap={{ scale: 0.9 }}
@@ -5574,7 +5641,7 @@ export default function App() {
                         initial={{ opacity: 0, y: 10, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                        className="absolute right-0 mt-3 w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 overflow-hidden"
+                        className="absolute right-0 mt-3 w-64 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 overflow-y-auto max-h-[80vh]"
                       >
                         {/* Mobile User Header */}
                         <div className="px-4 py-3 bg-slate-50/50 border-b border-slate-100 mb-2">
@@ -5602,6 +5669,17 @@ export default function App() {
                         >
                           <UserIcon className="h-4 w-4 text-slate-400" />
                           View Profile
+                        </button>
+
+                        <button 
+                          onClick={() => {
+                            setIsShortcutsModalOpen(true);
+                            setIsMobileMenuOpen(false);
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] font-bold text-slate-700 hover:bg-slate-50 border-b border-slate-50"
+                        >
+                          <Command className="h-4 w-4 text-slate-400" />
+                          Keyboard Shortcuts
                         </button>
 
                         <button 
@@ -5750,32 +5828,83 @@ export default function App() {
       )}
     </AnimatePresence>
 
-    <div className={`flex-1 flex flex-col min-h-0 relative transition-all duration-500 ease-in-out ${isSidebarExpanded ? 'lg:ml-64' : 'lg:ml-20'}`}>
+    {/* Keyboard Shortcuts Modal */}
+    <AnimatePresence>
+      {isShortcutsModalOpen && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsShortcutsModalOpen(false)}
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100"
+          >
+            <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                  <Command className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 tracking-tight">Keyboard Shortcuts</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Master VMS Flow with hotkeys</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsShortcutsModalOpen(false)}
+                className="h-10 w-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 grid grid-cols-1 gap-4">
+              {[
+                { key: 'Ctrl + K', desc: 'Focus Search Bar', alt: '/' },
+                { key: 'Ctrl + B', desc: 'Toggle Sidebar' },
+                { key: 'Ctrl + N', desc: 'New Visitor Page' },
+                { key: 'Ctrl + D', desc: 'Go to Dashboard' },
+                { key: 'Ctrl + H', desc: 'Show this Help Modal' },
+                { key: 'ESC', desc: 'Close Modal or Menus' },
+              ].map((shortcut) => (
+                <div key={shortcut.key} className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                  <span className="text-sm font-bold text-slate-600">{shortcut.desc}</span>
+                  <div className="flex items-center gap-2">
+                    <kbd className="px-2 py-1 rounded-lg bg-white border-b-2 border-slate-200 text-xs font-black text-slate-900 shadow-sm min-w-[30px] text-center uppercase">
+                      {shortcut.key}
+                    </kbd>
+                    {shortcut.alt && (
+                      <>
+                        <span className="text-slate-300 text-xs">or</span>
+                        <kbd className="px-2 py-1 rounded-lg bg-white border-b-2 border-slate-200 text-xs font-black text-slate-900 shadow-sm min-w-[30px] text-center">
+                          {shortcut.alt}
+                        </kbd>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex justify-center">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Designed for High Productivity</span>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+
+    <div className={`flex-1 flex flex-col min-h-0 relative transition-all duration-300 ease-in-out ${isSidebarExpanded ? 'lg:ml-64' : 'lg:ml-20'}`}>
       <div className="flex flex-1 min-h-0">
         {/* Desktop Sidebar */}
         <aside 
-          className={`hidden lg:flex flex-col bg-white border-r border-slate-100 transition-all duration-500 ease-in-out fixed left-0 top-0 bottom-0 z-[110] overflow-hidden ${isSidebarExpanded ? 'w-64' : 'w-20'}`}
+          className={`hidden lg:flex flex-col bg-white border-r border-slate-100 transition-all duration-300 ease-in-out fixed left-0 top-16 sm:top-20 lg:top-24 bottom-0 z-[90] overflow-hidden ${isSidebarExpanded ? 'w-64' : 'w-20'}`}
         >
-          {/* Logo Section */}
-          <div className="h-32 px-6 flex items-center gap-4 border-b border-slate-50 bg-slate-50/30">
-             <div className="h-20 w-20 shrink-0 rounded-[2rem] bg-white flex items-center justify-center shadow-2xl shadow-blue-500/10 overflow-hidden p-3 border border-slate-100 cursor-pointer" 
-               onClick={() => handleTabSelection('dashboard')}
-             >
-                <img src="/logo.png" alt="VMS Flow Logo" className="w-full h-full object-contain scale-125" />
-             </div>
-             {isSidebarExpanded && (
-               <div className="flex flex-col">
-                  <div className="flex items-center gap-1.5 leading-none">
-                    <span className="text-lg font-black text-slate-900 tracking-tighter">VMS</span>
-                    <span className="text-lg font-black text-blue-600 tracking-tighter">Flow</span>
-                  </div>
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] leading-none mt-2 truncate max-w-[120px]">
-                    {organization?.name || 'VMS Hub'}
-                  </span>
-               </div>
-             )}
-          </div>
-
           <div className="flex-1 overflow-y-auto no-scrollbar py-6 flex flex-col gap-8 px-4">
             {visibleGroups.map((group) => (
               <div key={group.section} className="flex flex-col gap-2">
@@ -5871,7 +6000,7 @@ export default function App() {
           </div>
         </aside>
 
-        <main className={`flex-1 w-full transition-all duration-500 ease-in-out pt-20 sm:pt-24 ${user?.preferences?.density ? 'py-2 scale-[0.99] origin-top font-tight' : 'py-8'}`}>
+        <main className={`flex-1 w-full transition-all duration-300 ease-in-out pt-16 sm:pt-20 lg:pt-24 ${user?.preferences?.density ? 'py-2 scale-[0.99] origin-top font-tight' : 'py-8'}`}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <AnimatePresence mode="wait">
           {activeTab === 'dashboard' && isTabVisible('dashboard') && (

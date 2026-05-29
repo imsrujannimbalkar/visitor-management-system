@@ -309,7 +309,7 @@ export default function NotificationsCenter({
             )}
 
             {/* List with Grouping */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-8">
+            <div className="flex-1 overflow-y-auto p-6 space-y-8 min-h-0">
               {notifications.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center space-y-4 opacity-40">
                   <Inbox className="h-12 w-12 text-slate-300" />
