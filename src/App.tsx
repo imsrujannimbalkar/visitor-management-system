@@ -5413,8 +5413,8 @@ export default function App() {
                     className="flex lg:flex items-center gap-3 cursor-pointer" 
                     onClick={() => handleTabSelection('dashboard')}
                   >
-                    <div className="h-16 w-16 sm:h-24 sm:w-24 rounded-2xl sm:rounded-3xl bg-white flex items-center justify-center shadow-2xl shadow-blue-500/10 overflow-hidden p-2 sm:p-4 border border-slate-100 shrink-0">
-                      <img src="/logo.png" alt="VMS Flow" className="w-full h-full object-contain scale-125 sm:scale-110" />
+                    <div className="h-12 w-12 sm:h-24 sm:w-24 rounded-2xl sm:rounded-3xl bg-white flex items-center justify-center shadow-2xl shadow-blue-500/10 overflow-hidden p-1.5 sm:p-4 border border-slate-100 shrink-0">
+                      <img src="/logo.png" alt="VMS Flow" className="w-full h-full object-contain scale-110 sm:scale-110" />
                     </div>
                     <div className="flex flex-col justify-center">
                       <div className="flex items-center gap-1.5 mb-1">
@@ -5525,16 +5525,20 @@ export default function App() {
                         </button>
 
                         {deferredPrompt && (
-                          <button 
-                            onClick={() => {
-                              handleInstallClick();
-                              setIsProfileMenuOpen(false);
-                            }}
-                            className="w-full flex items-center gap-3 px-4 py-2 text-sm font-bold text-blue-600 hover:bg-blue-50 transition-colors animate-pulse"
-                          >
-                            <Download className="h-4 w-4" />
-                            Install App
-                          </button>
+                          <div className="px-4 py-2">
+                            <button 
+                              key="pwa-install-button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleInstallClick();
+                                setIsProfileMenuOpen(false);
+                              }}
+                              className="w-full flex items-center justify-center gap-3 px-4 py-3 text-sm font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95"
+                            >
+                              <Download className="h-4 w-4" />
+                              Install Mobile App
+                            </button>
+                          </div>
                         )}
 
                         <button 
