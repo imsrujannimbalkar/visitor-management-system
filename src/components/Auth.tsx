@@ -795,20 +795,15 @@ export default function Auth({ onAuthComplete }: AuthProps) {
 
         {/* Logo */}
         <div className="relative z-10 flex items-center gap-4">
-          <div className="h-14 w-14 bg-white/10 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/20">
-             <div className="relative">
-                <Shield className="h-8 w-8 text-white" />
-                <div className="absolute inset-0 flex items-center justify-center">
-                   <div className="w-3 h-3 bg-white rounded-full mt-0.5" />
-                </div>
-             </div>
+          <div className="h-16 w-16 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20 shadow-2xl overflow-hidden p-2">
+             <img src="/logo.png" alt="VMS Flow" className="w-full h-full object-contain" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-3xl font-bold text-white tracking-tight">VMS</span>
-              <span className="text-3xl font-bold text-blue-500 tracking-tight">ELITE</span>
+              <span className="text-3xl font-black text-white tracking-tighter">VMS</span>
+              <span className="text-3xl font-black text-blue-400 tracking-tighter">Flow</span>
             </div>
-            <p className="text-xs text-white/50 tracking-wide font-medium">Visitor Management System</p>
+            <p className="text-[10px] text-white/50 tracking-[0.2em] font-black uppercase">Visitor Management System</p>
           </div>
         </div>
 

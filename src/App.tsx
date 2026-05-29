@@ -87,7 +87,9 @@ import {
   ResponsiveContainer, 
   Cell,
   PieChart as RePieChart,
-  Pie
+  Pie,
+  AreaChart,
+  Area
 } from 'recharts';
 import VisitorForm, { PURPOSES, TYPES, DEFAULT_DONATION_OCCASIONS, DEFAULT_EVENT_OCCASIONS, DEFAULT_DONATION_TYPES, DEFAULT_PAYMENT_MODES } from './components/VisitorForm';
 import EmergencyForm from './components/EmergencyForm';
@@ -235,13 +237,16 @@ function NavButton({ active, onClick, icon, label }: {
 }
 
 function MobileNavBtn({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+  // Shorten long labels for mobile display
+  const displayLabel = label === 'Pre-Registration' ? 'Pre-Reg' : label;
+
   return (
     <motion.button
       whileTap={{ scale: 0.95 }}
       whileHover={{ y: -2 }}
       onClick={onClick}
       className={`
-        flex flex-row sm:flex-col lg:flex-row items-center justify-center py-2 px-4 rounded-xl sm:rounded-2xl transition-all duration-500 relative gap-2 shrink-0 group
+        flex flex-1 flex-col items-center justify-center py-2 px-1 rounded-xl sm:rounded-2xl transition-all duration-500 relative gap-0.5 min-w-0 group
         ${active ? 'text-slate-900 bg-white/50 backdrop-blur-sm shadow-sm' : 'text-slate-400 hover:text-slate-900'}
       `}
     >
@@ -255,15 +260,15 @@ function MobileNavBtn({ active, onClick, icon, label }: { active: boolean; onCli
           />
         )}
       </div>
-      <span className={`text-[10px] font-black uppercase tracking-[0.2em] leading-none whitespace-nowrap transition-all ${active ? 'opacity-100 italic' : 'opacity-40 group-hover:opacity-80'}`}>
-        {label}
+      <span className={`text-[7px] sm:text-[9px] font-black uppercase tracking-[0.05em] sm:tracking-[0.1em] leading-tight text-center break-words w-full transition-all ${active ? 'opacity-100 italic' : 'opacity-50 group-hover:opacity-80'}`}>
+        {displayLabel}
       </span>
       {active && (
         <motion.div 
           layoutId="mobile-nav-pill"
-          className="absolute -bottom-1 sm:-top-1 h-1 w-8 bg-brand-blue rounded-full shadow-[0_0_10px_rgba(37,99,235,0.5)]"
+          className="absolute -bottom-1 h-1 w-8 bg-brand-blue rounded-full shadow-[0_0_10px_rgba(37,99,235,0.5)]"
           initial={false}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          transition={{ type: "spring", stiffness: 500, damping: 30 }}
         />
       )}
     </motion.button>
@@ -291,84 +296,47 @@ function SplashScreen({ organization }: { organization: Organization | null }) {
       initial={{ opacity: 1 }}
       exit={{ opacity: 0, scale: 1.05, filter: 'blur(10px)' }}
       transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-      className="fixed inset-0 z-[2000] bg-slate-50 flex flex-col items-center justify-center overflow-hidden font-sans uppercase-none"
+      className="fixed inset-0 z-[2000] bg-white flex flex-col items-center justify-center overflow-hidden font-sans"
     >
       {/* Background Decor */}
-      <div className="absolute inset-0 z-0 overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-brand-blue/5 rounded-full blur-[120px]" />
-        <div className="absolute inset-0 opacity-[0.05] bg-[radial-gradient(#000000_1px,transparent_1px)] [background-size:32px_32px]" />
-        
-        {/* Animated Orbits */}
-        {[...Array(3)].map((_, i) => (
-          <motion.div
-            key={i}
-            initial={{ rotate: 0 }}
-            animate={{ rotate: 360 }}
-            transition={{ duration: 10 + i * 5, repeat: Infinity, ease: "linear" }}
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-            style={{ 
-              width: `${400 + i * 200}px`, 
-              height: `${400 + i * 200}px`,
-              border: '1px solid rgba(0,0,0,0.03)',
-              borderRadius: '50%'
-            }}
-          >
-            <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-brand-blue rounded-full blur-[1px] opacity-20`} />
-          </motion.div>
-        ))}
+      <div className="absolute inset-0 z-0 overflow-hidden bg-white">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-50/50 rounded-full blur-[100px]" />
       </div>
 
       <div className="relative z-10 flex flex-col items-center">
         {/* Logo Animation */}
-        <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
+        <motion.div 
+          initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 1.2, ease: "easeOut" }}
+          transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
           className="relative mb-12"
         >
-          <div className="h-24 w-24 bg-white rounded-[2.5rem] flex items-center justify-center border border-slate-100 shadow-xl">
-             <div className="relative">
-               <Shield className="h-12 w-12 text-brand-blue" />
-               <motion.div 
-                 animate={{ opacity: [0.4, 1, 0.4] }}
-                 transition={{ duration: 2, repeat: Infinity }}
-                 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[40%]"
-               >
-                 <Users className="h-5 w-5 text-indigo-500" />
-               </motion.div>
-             </div>
+          <div className="h-48 w-48 bg-white rounded-[3.5rem] flex items-center justify-center border border-slate-100 shadow-2xl overflow-hidden p-8 relative z-10">
+             <img src="/logo.png" alt="VMS Flow" className="w-full h-full object-contain" />
           </div>
-          {/* Outer Ring */}
+          {/* Subtle Pulse */}
           <motion.div 
-            animate={{ rotate: 360 }}
-            transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-            className="absolute -inset-4 border-2 border-dashed border-brand-blue/10 rounded-[3rem]" 
+            animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.1, 0.3] }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute -inset-8 bg-blue-50 rounded-[4.5rem]" 
           />
         </motion.div>
 
-        {/* Text Fade-in */}
-        <div className="text-center space-y-4">
-           <motion.div
-             initial={{ y: 20, opacity: 0 }}
-             animate={{ y: 0, opacity: 1 }}
-             transition={{ delay: 0.3, duration: 0.8 }}
-           >
-              <div className="flex items-center justify-center gap-3">
-                 <span className="text-4xl font-bold text-slate-900 tracking-tight">Elite</span>
-                 <span className="text-4xl font-black text-brand-blue tracking-tight">VMS</span>
-              </div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.5em] mt-3">Smart Visitor Infrastructure</p>
-           </motion.div>
+        <div className="flex flex-col items-center gap-2">
+          <div className="flex items-center gap-2.5">
+             <span className="text-6xl font-black text-slate-900 tracking-tighter">VMS</span>
+             <span className="text-6xl font-black text-blue-600 tracking-tighter">Flow</span>
+          </div>
+        </div>
 
-           {/* Loading Bar */}
-           <div className="w-48 h-1 bg-slate-200 rounded-full mt-10 overflow-hidden relative mx-auto shadow-sm">
-              <motion.div 
-                initial={{ left: '-100%' }}
-                animate={{ left: '100%' }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-brand-blue to-transparent"
-              />
-           </div>
+        {/* Loading Bar */}
+        <div className="w-40 h-1 bg-slate-100 rounded-full mt-16 overflow-hidden relative shadow-sm mx-auto">
+           <motion.div 
+             initial={{ left: '-100%' }}
+             animate={{ left: '100%' }}
+             transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+             className="absolute inset-y-0 w-1/3 bg-blue-500 rounded-full"
+           />
         </div>
       </div>
 
@@ -416,12 +384,12 @@ function LoaderScreen({ progress }: { progress: number }) {
             animate={{ y: 0, opacity: 1 }}
             className="flex justify-center"
           >
-            <div className="w-16 h-16 bg-white rounded-2xl shadow-xl shadow-brand-blue/5 border border-slate-100 flex items-center justify-center p-3 relative">
-              <ShieldCheck className="h-full w-full text-brand-blue" />
+            <div className="w-48 h-48 bg-white rounded-[3.5rem] shadow-2xl shadow-blue-500/10 border border-slate-100 flex items-center justify-center p-6 relative overflow-hidden">
+              <img src="/logo.png" alt="VMS Flow" className="w-full h-full object-contain relative z-10" />
               <motion.div 
-                animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="absolute inset-0 bg-brand-blue/20 rounded-2xl blur-md"
+                animate={{ scale: [1, 1.5, 1], opacity: [0.1, 0.3, 0.1] }}
+                transition={{ duration: 3, repeat: Infinity }}
+                className="absolute inset-0 bg-blue-500 rounded-full blur-2xl"
               />
             </div>
           </motion.div>
@@ -648,6 +616,7 @@ export default function App() {
   const [orgInvitations, setOrgInvitations] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [showEmergencyForm, setShowEmergencyForm] = useState(false);
   const [activeOrgId, setActiveOrgId] = useState<string | null>(() => localStorage.getItem('activeOrgId'));
 
@@ -1648,7 +1617,7 @@ export default function App() {
 
   // Kiosk Voice Navigation Effect
   useEffect(() => {
-    if (!isKioskMode || !voiceEnabled) return;
+    if (!isKioskMode || !voiceEnabled || pageLoading || showSplash || showLoader) return;
 
     if (isKioskPreRegLookupOpen) {
       kioskSpeak('PREREG_START', kioskLang);
@@ -1657,7 +1626,7 @@ export default function App() {
     } else {
       kioskSpeak('WELCOME', kioskLang);
     }
-  }, [isKioskMode, isKioskFormOpen, isKioskPreRegLookupOpen, kioskLang]);
+  }, [isKioskMode, isKioskFormOpen, isKioskPreRegLookupOpen, kioskLang, voiceEnabled, pageLoading, showSplash, showLoader]);
 
   const [isSyncingOffline, setIsSyncingOffline] = useState(false);
 
@@ -2292,7 +2261,7 @@ export default function App() {
         setAuthLoading(false);
         setPageLoading(false);
         setIsAuthReady(true);
-        document.title = 'Visitor Management System';
+        document.title = 'VMS Flow';
         
         // Local persistence cleanup on session end
         sessionStorage.removeItem('vms_selected_org_id');
@@ -3247,7 +3216,7 @@ export default function App() {
     try {
       const orgRef = doc(db, 'organizations', organization.id);
       const updateData = sanitizeForFirestore({
-        name: organization.name || 'Visitor Management System',
+        name: organization.name || 'VMS Flow',
         brandColor: organization.brandColor || '#2563EB',
         logoUrl: organization.logoUrl || null,
         googleReviewUrl: organization.googleReviewUrl || null,
@@ -3845,7 +3814,7 @@ export default function App() {
             const showThankYou = () => {
               Swal.fire({
                 title: kioskLang === 'EN' ? 'Thank You!' : 'धन्यवाद!',
-                text: kioskLang === 'EN' ? `Your entry has been recorded, ${data.name}. Welcome to ${organization?.name || 'Visitor Management System'}.` : `आपकी प्रविष्टि दर्ज कर ली गई है, ${data.name}। ${organization?.name || 'Visitor Management System'} में आपका स्वागत है।`,
+                text: kioskLang === 'EN' ? `Your entry has been recorded, ${data.name}. Welcome to ${organization?.name || 'VMS Flow'}.` : `आपकी प्रविष्टि दर्ज कर ली गई है, ${data.name}। ${organization?.name || 'VMS Flow'} में आपका स्वागत है।`,
                 icon: 'success',
                 showConfirmButton: true,
                 confirmButtonText: kioskLang === 'EN' ? 'Close' : 'बंद करें',
@@ -4896,8 +4865,8 @@ export default function App() {
           animate={{ opacity: 1, scale: 1 }}
           className="max-w-md w-full bg-white rounded-[2.5rem] p-12 shadow-2xl border border-red-100 text-center space-y-8"
         >
-          <div className="mx-auto w-24 h-24 bg-red-50 rounded-[2rem] flex items-center justify-center">
-            <Shield className="h-12 w-12 text-red-600 animate-pulse" />
+          <div className="mx-auto w-24 h-24 bg-white rounded-[2rem] flex items-center justify-center shadow-2xl border border-red-50 p-4">
+            <img src="/logo.png" alt="Logo" className="w-full h-full object-contain grayscale opacity-50" />
           </div>
           <div className="space-y-4">
             <h1 className="text-3xl font-black text-gray-900 italic uppercase leading-none">Organization Deactivated</h1>
@@ -4953,30 +4922,26 @@ export default function App() {
       {isKioskMode ? (
         <div className="min-h-screen bg-slate-50 transition-colors duration-500 font-sans flex flex-col">
           {/* Kiosk Header */}
-          <header className="h-24 bg-white border-b border-gray-100 flex items-center justify-between px-12 shadow-sm relative z-50">
-            <div className="flex items-center gap-6">
+          <header className="h-20 sm:h-24 bg-white border-b border-gray-100 flex items-center justify-between px-4 sm:px-12 shadow-sm relative z-50">
+            <div className="flex items-center gap-3 sm:gap-6">
               <button 
                 onClick={handleExitKiosk}
-                className="p-3 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-xl transition-all mr-2 group"
+                className="p-2 sm:p-3 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-xl transition-all mr-1 sm:mr-2 group"
                 title="Exit Kiosk"
               >
                 <Power className="h-5 w-5 group-hover:scale-110 transition-transform" />
               </button>
-              <div className="h-14 w-14 bg-brand-blue rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-                {organization?.logoUrl ? (
-                  <img src={organization.logoUrl} className="w-10 h-10 object-contain brightness-0 invert" referrerPolicy="no-referrer" />
-                ) : (
-                  <span className="text-white font-black text-xl italic">{organization?.name?.charAt(0) || 'AF'}</span>
-                )}
+              <div className="h-10 w-10 sm:h-14 sm:w-14 bg-white rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg border border-slate-50 p-1.5 shrink-0 overflow-hidden">
+                <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
               </div>
-              <div>
-                <h1 className="text-2xl font-black tracking-tight text-gray-900 uppercase italic leading-none">{organization?.name || (kioskLang === 'EN' ? 'Visitor Management System' : 'आगंतुक प्रबंधन प्रणाली')}</h1>
-                <p className="text-[10px] font-bold text-brand-blue tracking-[0.3em] uppercase mt-1">{kioskLang === 'EN' ? 'Self Check-In Terminal' : 'स्वयं चेक-इन टर्मिनल'}</p>
+              <div className="flex-1 min-w-0">
+                <h1 className="text-base sm:text-2xl font-black tracking-tight text-gray-900 uppercase italic leading-none truncate">{organization?.name || (kioskLang === 'EN' ? 'VMS Flow' : 'वीएमएस फ्लो')}</h1>
+                <p className="text-[7px] sm:text-[10px] font-bold text-brand-blue tracking-[0.15em] sm:tracking-[0.3em] uppercase mt-0.5 sm:mt-1 whitespace-nowrap truncate">{kioskLang === 'EN' ? 'Self Check-In Terminal' : 'स्वयं चेक-इन टर्मिनल'}</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-12">
-              <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1.5 sm:gap-6 lg:gap-12 ml-2">
+              <div className="flex items-center gap-2">
                 <button 
                   onClick={() => {
                     const newValue = !voiceEnabled;
@@ -4984,38 +4949,39 @@ export default function App() {
                     localStorage.setItem('vms_voice_enabled', String(newValue));
                     if (!newValue) window.speechSynthesis.cancel();
                   }}
-                  className={`p-3 rounded-2xl transition-all shadow-sm flex items-center gap-2 group ${voiceEnabled ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-400'}`}
+                  className={`p-2 sm:p-3 rounded-xl sm:rounded-2xl transition-all shadow-sm flex items-center gap-1 sm:gap-2 group ${voiceEnabled ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-400'}`}
+                  title={voiceEnabled ? 'Disable Voice Guidance' : 'Enable Voice Guidance'}
                 >
                   <motion.div animate={voiceEnabled ? { scale: [1, 1.2, 1] } : {}} transition={{ repeat: Infinity, duration: 2 }}>
-                    {voiceEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+                    {voiceEnabled ? <Volume2 className="h-4 w-4 sm:h-5 sm:w-5" /> : <VolumeX className="h-4 w-4 sm:h-5 sm:w-5" />}
                   </motion.div>
-                  <span className="text-[10px] font-black uppercase tracking-widest pr-1">
-                    Voice {voiceEnabled ? 'On' : 'Off'}
+                  <span className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest sm:pr-1 hidden xs:inline">
+                    {voiceEnabled ? 'On' : 'Off'}
                   </span>
                 </button>
               </div>
 
-              <div className="flex bg-gray-100 rounded-2xl p-1 border border-gray-200 shadow-inner">
+              <div className="flex bg-gray-100 rounded-xl sm:rounded-2xl p-1 border border-gray-200 shadow-inner shrink-0">
                 <button 
                   onClick={() => setKioskLang('EN')}
-                  className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${kioskLang === 'EN' ? 'bg-brand-blue text-white shadow-lg' : 'text-gray-400 hover:text-gray-600'}`}
+                  className={`px-3 sm:px-6 py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${kioskLang === 'EN' ? 'bg-brand-blue text-white shadow-lg' : 'text-gray-400 hover:text-gray-600'}`}
                 >
-                  English
+                  EN
                 </button>
                 <button 
                   onClick={() => setKioskLang('HI')}
-                  className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${kioskLang === 'HI' ? 'bg-brand-blue text-white shadow-lg' : 'text-gray-400 hover:text-gray-600'}`}
+                  className={`px-3 sm:px-6 py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${kioskLang === 'HI' ? 'bg-brand-blue text-white shadow-lg' : 'text-gray-400 hover:text-gray-600'}`}
                 >
                   हिंदी
                 </button>
               </div>
 
-              <div className="text-right">
-                <div className="text-3xl font-black text-gray-900 font-mono tracking-tighter">
+              <div className="text-right hidden sm:block">
+                <div className="text-2xl sm:text-3xl font-black text-gray-900 font-mono tracking-tighter">
                   {new Date().toLocaleTimeString(kioskLang === 'HI' ? 'hi-IN' : 'en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
                 </div>
-                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                  {new Date().toLocaleDateString(kioskLang === 'HI' ? 'hi-IN' : 'en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                <div className="text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                  {new Date().toLocaleDateString(kioskLang === 'HI' ? 'hi-IN' : 'en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                 </div>
               </div>
             </div>
@@ -5071,34 +5037,34 @@ export default function App() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
-                  className="flex-1 flex flex-col p-12 max-w-[1400px] mx-auto w-full gap-12"
+                  className="flex-1 flex flex-col p-4 sm:p-12 max-w-[1400px] mx-auto w-full gap-6 sm:gap-12 overflow-y-auto no-scrollbar"
                 >
                   {/* Action Cards */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-8">
                     <motion.button
                       whileHover={{ y: -10, scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => setIsKioskFormOpen(true)}
-                      className="bg-white rounded-[3rem] p-12 shadow-xl border border-gray-100 flex flex-col items-center text-center group hover:shadow-2xl transition-all duration-500"
+                      className="bg-white rounded-3xl sm:rounded-[3rem] p-6 sm:p-12 shadow-xl border border-gray-100 flex flex-col items-center text-center group hover:shadow-2xl transition-all duration-500"
                     >
-                      <div className="w-24 h-24 bg-blue-50 rounded-[2rem] flex items-center justify-center mb-8 shadow-inner group-hover:bg-brand-blue transition-colors duration-500">
-                        <UserPlus className="h-12 w-12 text-brand-blue group-hover:text-white transition-colors" />
+                      <div className="w-16 h-16 sm:w-24 sm:h-24 bg-blue-50 rounded-2xl sm:rounded-[2rem] flex items-center justify-center mb-4 sm:mb-8 shadow-inner group-hover:bg-brand-blue transition-colors duration-500">
+                        <UserPlus className="h-8 w-8 sm:h-12 sm:w-12 text-brand-blue group-hover:text-white transition-colors" />
                       </div>
-                      <h3 className="text-3xl font-black text-gray-900 mb-2 italic uppercase">{kioskLang === 'EN' ? 'Check In' : 'चेक इन'}</h3>
-                      <p className="text-gray-400 font-bold text-xs uppercase tracking-widest">{kioskLang === 'EN' ? 'New Visitor Entry' : 'नया आगंतुक प्रवेश'}</p>
+                      <h3 className="text-xl sm:text-3xl font-black text-gray-900 mb-1 sm:mb-2 italic uppercase">{kioskLang === 'EN' ? 'Check In' : 'चेक इन'}</h3>
+                      <p className="text-gray-400 font-bold text-[10px] sm:text-xs uppercase tracking-widest">{kioskLang === 'EN' ? 'New Visitor Entry' : 'नया आगंतुक प्रवेश'}</p>
                     </motion.button>
 
                     <motion.button
                       whileHover={{ y: -10, scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={handleKioskPreRegistered}
-                      className="bg-white rounded-[3rem] p-12 shadow-xl border border-gray-100 flex flex-col items-center text-center group hover:shadow-2xl transition-all duration-500"
+                      className="bg-white rounded-3xl sm:rounded-[3rem] p-6 sm:p-12 shadow-xl border border-gray-100 flex flex-col items-center text-center group hover:shadow-2xl transition-all duration-500"
                     >
-                      <div className="w-24 h-24 bg-orange-50 rounded-[2rem] flex items-center justify-center mb-8 shadow-inner group-hover:bg-orange-500 transition-colors duration-500">
-                        <Calendar className="h-12 w-12 text-orange-500 group-hover:text-white transition-colors" />
+                      <div className="w-16 h-16 sm:w-24 sm:h-24 bg-orange-50 rounded-2xl sm:rounded-[2rem] flex items-center justify-center mb-4 sm:mb-8 shadow-inner group-hover:bg-orange-500 transition-colors duration-500">
+                        <Calendar className="h-8 w-8 sm:h-12 sm:w-12 text-orange-500 group-hover:text-white transition-colors" />
                       </div>
-                      <h3 className="text-3xl font-black text-gray-900 mb-2 italic uppercase">{kioskLang === 'EN' ? 'Pre-registered' : 'पूर्व-पंजीकृत'}</h3>
-                      <p className="text-gray-400 font-bold text-xs uppercase tracking-widest">{kioskLang === 'EN' ? 'Quick Check-In' : 'त्वरित चेक-इन'}</p>
+                      <h3 className="text-xl sm:text-3xl font-black text-gray-900 mb-1 sm:mb-2 italic uppercase">{kioskLang === 'EN' ? 'Pre-registered' : 'पूर्व-पंजीकृत'}</h3>
+                      <p className="text-gray-400 font-bold text-[10px] sm:text-xs uppercase tracking-widest">{kioskLang === 'EN' ? 'Quick Check-In' : 'त्वरित चेक-इन'}</p>
                     </motion.button>
 
                       <QRCheckOutScanner
@@ -5116,13 +5082,13 @@ export default function App() {
                           onClick={(e) => {
                             // Let the QRScanner's onClick handle it
                           }}
-                          className="w-full h-full bg-white rounded-[3rem] p-12 shadow-xl border border-gray-100 flex flex-col items-center text-center group hover:shadow-2xl transition-all duration-500"
+                          className="w-full h-full bg-white rounded-3xl sm:rounded-[3rem] p-6 sm:p-12 shadow-xl border border-gray-100 flex flex-col items-center text-center group hover:shadow-2xl transition-all duration-500"
                         >
-                          <div className="w-24 h-24 bg-purple-50 rounded-[2rem] flex items-center justify-center mb-8 shadow-inner group-hover:bg-purple-500 transition-colors duration-500">
-                            <Camera className="h-12 w-12 text-purple-500 group-hover:text-white transition-colors" />
+                          <div className="w-16 h-16 sm:w-24 sm:h-24 bg-purple-50 rounded-2xl sm:rounded-[2rem] flex items-center justify-center mb-4 sm:mb-8 shadow-inner group-hover:bg-purple-500 transition-colors duration-500">
+                            <Camera className="h-8 w-8 sm:h-12 sm:w-12 text-purple-500 group-hover:text-white transition-colors" />
                           </div>
-                          <h3 className="text-3xl font-black text-gray-900 mb-2 italic uppercase">{kioskLang === 'EN' ? 'Scan Out' : 'स्कैन आउट'}</h3>
-                          <p className="text-gray-400 font-bold text-xs uppercase tracking-widest">{kioskLang === 'EN' ? 'Scan QR Pass to Exit' : 'बाहर जाने के लिए QR स्कैन करें'}</p>
+                          <h3 className="text-xl sm:text-3xl font-black text-gray-900 mb-1 sm:mb-2 italic uppercase">{kioskLang === 'EN' ? 'Scan Out' : 'स्कैन आउट'}</h3>
+                          <p className="text-gray-400 font-bold text-[10px] sm:text-xs uppercase tracking-widest">{kioskLang === 'EN' ? 'Scan QR Pass to Exit' : 'बाहर जाने के लिए QR स्कैन करें'}</p>
                         </motion.button>
                       }
                     />
@@ -5131,38 +5097,38 @@ export default function App() {
                       whileHover={{ y: -10, scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={handleKioskCheckOut}
-                      className="bg-white rounded-[3rem] p-12 shadow-xl border border-gray-100 flex flex-col items-center text-center group hover:shadow-2xl transition-all duration-500"
+                      className="bg-white rounded-3xl sm:rounded-[3rem] p-6 sm:p-12 shadow-xl border border-gray-100 flex flex-col items-center text-center group hover:shadow-2xl transition-all duration-500"
                     >
-                      <div className="w-24 h-24 bg-emerald-50 rounded-[2rem] flex items-center justify-center mb-8 shadow-inner group-hover:bg-emerald-500 transition-colors duration-500">
-                        <LogOut className="h-12 w-12 text-emerald-500 group-hover:text-white transition-colors" />
+                      <div className="w-16 h-16 sm:w-24 sm:h-24 bg-emerald-50 rounded-2xl sm:rounded-[2rem] flex items-center justify-center mb-4 sm:mb-8 shadow-inner group-hover:bg-emerald-500 transition-colors duration-500">
+                        <LogOut className="h-8 w-8 sm:h-12 sm:w-12 text-emerald-500 group-hover:text-white transition-colors" />
                       </div>
-                      <h3 className="text-3xl font-black text-gray-900 mb-2 italic uppercase">{kioskLang === 'EN' ? 'Check Out' : 'चेक आउट'}</h3>
-                      <p className="text-gray-400 font-bold text-xs uppercase tracking-widest">{kioskLang === 'EN' ? 'Mark Your Departure' : 'प्रस्थान दर्ज करें'}</p>
+                      <h3 className="text-xl sm:text-3xl font-black text-gray-900 mb-1 sm:mb-2 italic uppercase">{kioskLang === 'EN' ? 'Check Out' : 'चेक आउट'}</h3>
+                      <p className="text-gray-400 font-bold text-[10px] sm:text-xs uppercase tracking-widest">{kioskLang === 'EN' ? 'Mark Your Departure' : 'प्रस्थान दर्ज करें'}</p>
                     </motion.button>
                   </div>
 
                   {/* Bottom Row */}
                   <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
                     {/* Recent Activity / Scan History */}
-                    <div className="lg:col-span-3 bg-white rounded-[3rem] p-10 shadow-lg border border-gray-50 flex flex-col min-h-[400px]">
-                      <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-50">
-                        <div className="flex items-center gap-4 bg-gray-100 rounded-2xl p-1 shadow-inner">
+                    <div className="lg:col-span-3 bg-white rounded-3xl sm:rounded-[3rem] p-6 sm:p-10 shadow-lg border border-gray-50 flex flex-col min-h-[300px] sm:min-h-[400px]">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 sm:mb-8 pb-4 sm:pb-6 border-b border-gray-50 gap-4">
+                        <div className="flex bg-gray-100 rounded-xl sm:rounded-2xl p-1 shadow-inner w-full sm:w-auto">
                           <button 
                             onClick={() => setKioskTappings('ACTIONS')}
-                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${kioskTappings === 'ACTIONS' ? 'bg-white text-brand-blue shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                            className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${kioskTappings === 'ACTIONS' ? 'bg-white text-brand-blue shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
                           >
                             <History className="h-3 w-3" />
                             {kioskLang === 'EN' ? 'Entries' : 'प्रविष्टियां'}
                           </button>
                           <button 
                             onClick={() => setKioskTappings('HISTORY')}
-                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${kioskTappings === 'HISTORY' ? 'bg-white text-brand-blue shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                            className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${kioskTappings === 'HISTORY' ? 'bg-white text-brand-blue shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
                           >
                             <Camera className="h-3 w-3" />
-                            {kioskLang === 'EN' ? 'Scan History' : 'स्कैन इतिहास'}
+                            {kioskLang === 'EN' ? 'History' : 'इतिहास'}
                           </button>
                         </div>
-                        <span className="px-3 py-1 bg-blue-50 text-brand-blue rounded-lg text-[10px] font-black tracking-widest uppercase">
+                        <span className="px-3 py-1 bg-blue-50 text-brand-blue rounded-lg text-[8px] sm:text-[10px] font-black tracking-widest uppercase">
                           {kioskTappings === 'ACTIONS' ? kioskSessionEntries.length : kioskScanHistory.length} {kioskLang === 'EN' ? (kioskTappings === 'ACTIONS' ? 'In Session' : 'Saved') : (kioskTappings === 'ACTIONS' ? 'सत्र में' : 'सुरक्षित')}
                         </span>
                       </div>
@@ -5251,11 +5217,11 @@ export default function App() {
                     </div>
 
                     {/* Help Card */}
-                    <div className="lg:col-span-2 bg-brand-blue rounded-[3rem] p-12 shadow-xl shadow-blue-500/20 text-white flex flex-col relative overflow-hidden group">
-                      <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 blur-3xl rounded-full -mr-20 -mt-20 group-hover:scale-110 transition-transform duration-700 pointer-events-none" />
+                    <div className="lg:col-span-2 bg-brand-blue rounded-3xl sm:rounded-[3rem] p-6 sm:p-12 shadow-xl shadow-blue-500/20 text-white flex flex-col relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-32 sm:w-64 h-32 sm:h-64 bg-white/5 blur-2xl sm:blur-3xl rounded-full -mr-10 sm:-mr-20 -mt-10 sm:-mt-20 group-hover:scale-110 transition-transform duration-700 pointer-events-none" />
                       
-                      <h3 className="text-3xl font-black mb-6 italic uppercase leading-[0.9]">{kioskLang === 'EN' ? 'Need Help?' : 'क्या आपको मदद चाहिए?'}</h3>
-                      <p className="text-blue-100/70 font-bold text-sm leading-relaxed mb-10">
+                      <h3 className="text-xl sm:text-3xl font-black mb-4 sm:mb-6 italic uppercase leading-[0.9]">{kioskLang === 'EN' ? 'Need Help?' : 'क्या आपको मदद चाहिए?'}</h3>
+                      <p className="text-blue-100/70 font-bold text-xs sm:text-sm leading-relaxed mb-6 sm:mb-10">
                         {kioskLang === 'EN' 
                           ? "If you're having trouble checking in or need to speak with a staff member, please tap the button below."
                           : "यदि आपको चेक-इन करने में समस्या हो रही है या किसी कर्मचारी से बात करने की आवश्यकता है, तो कृपया नीचे दिए गए बटन पर टैप करें।"}
@@ -5265,9 +5231,9 @@ export default function App() {
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
                         onClick={handleCallStaff}
-                        className="mt-auto w-full py-5 bg-white text-brand-blue font-black rounded-2xl shadow-xl shadow-black/5 flex items-center justify-center gap-3 uppercase text-xs tracking-widest"
+                        className="mt-auto w-full py-4 sm:py-5 bg-white text-brand-blue font-black rounded-xl sm:rounded-2xl shadow-xl shadow-black/5 flex items-center justify-center gap-3 uppercase text-[10px] sm:text-xs tracking-widest"
                       >
-                        <UserCheck className="h-5 w-5" />
+                        <UserCheck className="h-4 w-4 sm:h-5 sm:w-5" />
                         {kioskLang === 'EN' ? 'Call Staff' : 'कर्मचारियों को बुलाएं'}
                       </motion.button>
                     </div>
@@ -5298,24 +5264,16 @@ export default function App() {
                   exit={{ opacity: 0, x: -200 }}
                   className="flex-1 bg-white relative z-[100] flex flex-col"
                 >
-                  <div className="h-24 bg-white border-b border-gray-50 flex items-center justify-between px-12 shrink-0">
-                    <button onClick={() => setIsKioskFormOpen(false)} className="flex items-center gap-4 text-slate-400 group">
-                      <div className="p-4 bg-slate-50 rounded-[2rem] group-hover:bg-brand-blue group-hover:text-white transition-all duration-500 shadow-sm">
-                        <ChevronLeft className="h-8 w-8 transition-transform group-hover:-translate-x-1" />
+                  <div className="h-16 sm:h-20 bg-white border-b border-gray-50 flex items-center justify-between px-4 sm:px-12 shrink-0">
+                    <button onClick={() => setIsKioskFormOpen(false)} className="flex items-center gap-2 sm:gap-3 text-slate-400 group">
+                      <div className="p-2 sm:p-3 bg-slate-50 rounded-xl sm:rounded-2xl group-hover:bg-brand-blue group-hover:text-white transition-all duration-500 shadow-sm">
+                        <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6 transition-transform group-hover:-translate-x-1" />
                       </div>
-                      <span className="font-black tracking-[0.3em] uppercase text-xs">{kioskLang === 'EN' ? 'Back' : 'पीछे'}</span>
-                    </button>
-                    
-                    <button 
-                      onClick={handleExitKiosk}
-                      className="p-3 bg-red-50 text-red-500 rounded-2xl hover:bg-red-100 transition-all flex items-center gap-2 group shadow-sm"
-                    >
-                      <Power className="h-5 w-5 group-hover:scale-110 transition-transform" />
-                      <span className="text-[10px] font-black uppercase tracking-widest">{kioskLang === 'EN' ? 'Exit' : 'बंद'}</span>
+                      <span className="font-black tracking-[0.2em] sm:tracking-[0.3em] uppercase text-[9px] sm:text-[11px] text-slate-500">{kioskLang === 'EN' ? 'Back' : 'पीछे'}</span>
                     </button>
                   </div>
-                  <div className="flex-1 overflow-y-auto no-scrollbar pt-8">
-                     <div className="max-w-4xl mx-auto px-12 pb-12">
+                  <div className="flex-1 overflow-y-auto no-scrollbar pt-4 sm:pt-8">
+                     <div className="max-w-4xl mx-auto px-4 sm:px-12 pb-8 sm:pb-12">
                         <VisitorForm 
                           onSave={(data) => {
                             saveVisitor(data);
@@ -5414,8 +5372,12 @@ export default function App() {
               <motion.button 
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={toggleSidebar}
-                className="p-2.5 hover:bg-slate-50 text-slate-400 hover:text-slate-900 rounded-xl transition-all"
+                onClick={() => {
+                  if (window.innerWidth >= 1024) {
+                    toggleSidebar();
+                  }
+                }}
+                className="hidden lg:flex p-2.5 hover:bg-slate-50 text-slate-400 hover:text-slate-900 rounded-xl transition-all"
                 title={isSidebarExpanded ? "Collapse Sidebar" : "Expand Sidebar"}
               >
                 <AlignLeft className="h-6 w-6" />
@@ -5430,25 +5392,25 @@ export default function App() {
                     className="flex lg:flex items-center gap-3 cursor-pointer" 
                     onClick={() => handleTabSelection('dashboard')}
                   >
-                    <div className="h-10 w-10 rounded-xl flex items-center justify-center shadow-lg overflow-hidden" style={{ backgroundColor: organization?.brandColor || '#2563EB' }}>
-                      {organization?.logoUrl ? (
-                        <img src={organization.logoUrl} alt="Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                      ) : (
-                        <span className="text-white text-sm font-black italic">
-                          {organization?.name ? organization.name.substring(0, 2).toUpperCase() : 'OS'}
-                        </span>
-                      )}
+                    <div className="h-20 w-20 rounded-2xl bg-white flex items-center justify-center shadow-2xl shadow-blue-500/10 overflow-hidden p-3 border border-slate-50">
+                      <img src="/logo.png" alt="VMS Flow" className="w-full h-full object-contain scale-110" />
                     </div>
-                    <div className="flex flex-col">
-                      <span className="text-sm font-black text-slate-900 tracking-tight leading-none whitespace-nowrap">
-                        {organization?.name || 'VMS Hub'}
-                      </span>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">
-                        VMS 4.0
-                      </span>
-                      <span className="text-[7px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">
-                        Visitor Management System
-                      </span>
+                    <div className="flex flex-col justify-center">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className="text-[9px] font-black text-blue-600 uppercase tracking-[0.2em] leading-none">VMS Flow</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 leading-none">
+                        <span className="text-xl font-black text-slate-900 tracking-tighter">Sam Foundation</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1.5 leading-none">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.1em]">
+                          VMS 4.0
+                        </span>
+                        <span className="w-1 h-1 bg-slate-200 rounded-full" />
+                        <span className="text-[7.5px] font-bold text-slate-500 uppercase tracking-widest">
+                          Visitor Management System
+                        </span>
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -5509,18 +5471,55 @@ export default function App() {
                   <span className="text-sm font-bold text-slate-900 leading-none">{user.name || 'Sam Joe'}</span>
                   <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">{user.role || 'MASTER_ADMIN'}</span>
                 </div>
-                <motion.div 
-                  whileHover={{ scale: 1.05 }}
-                  onClick={() => setActiveTab('profile')}
-                  className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-[#2563EB] flex items-center justify-center overflow-hidden cursor-pointer shadow-md"
-                >
-                  {user.photoURL ? (
-                    <img src={user.photoURL} alt="Avatar" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-white font-black text-sm">{(user.name || 'S').charAt(0).toUpperCase()}</span>
-                  )}
-                </motion.div>
-                <ChevronDown className="h-4 w-4 text-slate-400 cursor-pointer" />
+                <div className="relative">
+                  <motion.div 
+                    whileHover={{ scale: 1.05 }}
+                    onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                    className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-[#2563EB] flex items-center justify-center overflow-hidden cursor-pointer shadow-md border-2 border-slate-300 transition-all active:scale-95"
+                  >
+                    {user.photoURL ? (
+                      <img src={user.photoURL} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-white font-black text-sm">{(user.name || 'S').charAt(0).toUpperCase()}</span>
+                    )}
+                  </motion.div>
+                  
+                  <AnimatePresence>
+                    {isProfileMenuOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        className="absolute right-0 mt-3 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50"
+                      >
+                        <button 
+                          onClick={() => {
+                            setActiveTab('profile');
+                            setIsProfileMenuOpen(false);
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                        >
+                          <UserIcon className="h-4 w-4" />
+                          View Profile
+                        </button>
+                        <button 
+                          onClick={() => {
+                            handleLogout();
+                            setIsProfileMenuOpen(false);
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <LogOut className="h-4 w-4" />
+                          Sign Out
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+                <ChevronDown 
+                  className={`h-4 w-4 text-slate-400 cursor-pointer transition-transform duration-300 ${isProfileMenuOpen ? 'rotate-180' : ''}`} 
+                  onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                />
               </div>
             </div>
           </div>
@@ -5602,7 +5601,7 @@ export default function App() {
             
             <div className="pt-4 border-t border-slate-50">
               <p className="text-center text-[8px] font-bold text-slate-300 uppercase tracking-[0.2em]">
-                Elite VMS Enterprise Edition
+                VMS Flow Enterprise Edition
               </p>
             </div>
           </motion.div>
@@ -5617,29 +5616,20 @@ export default function App() {
           className={`hidden lg:flex flex-col bg-white border-r border-slate-100 transition-all duration-500 ease-in-out fixed left-0 top-0 bottom-0 z-[110] overflow-hidden ${isSidebarExpanded ? 'w-64' : 'w-20'}`}
         >
           {/* Logo Section */}
-          <div className="h-24 px-6 flex items-center gap-4">
-             <div className="h-10 w-10 shrink-0 rounded-xl flex items-center justify-center shadow-lg overflow-hidden" 
-               style={{ backgroundColor: organization?.brandColor || '#2563EB' }}
+          <div className="h-28 px-6 flex items-center gap-4 border-b border-slate-50 bg-slate-50/30">
+             <div className="h-16 w-16 shrink-0 rounded-2xl bg-white flex items-center justify-center shadow-2xl shadow-blue-500/10 overflow-hidden p-2.5 border border-slate-100 cursor-pointer" 
                onClick={() => handleTabSelection('dashboard')}
              >
-                {organization?.logoUrl ? (
-                  <img src={organization.logoUrl} alt="Logo" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-white text-sm font-black italic">
-                    {organization?.name ? organization.name.substring(0, 2).toUpperCase() : 'OS'}
-                  </span>
-                )}
+                <img src="/logo.png" alt="VMS Flow Logo" className="w-full h-full object-contain scale-110" />
              </div>
              {isSidebarExpanded && (
                <div className="flex flex-col">
-                  <span className="text-sm font-black text-slate-900 tracking-tight leading-none whitespace-nowrap">
+                  <div className="flex items-center gap-1.5 leading-none">
+                    <span className="text-lg font-black text-slate-900 tracking-tighter">VMS</span>
+                    <span className="text-lg font-black text-blue-600 tracking-tighter">Flow</span>
+                  </div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] leading-none mt-2 truncate max-w-[120px]">
                     {organization?.name || 'VMS Hub'}
-                  </span>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">
-                    VMS 4.0
-                  </span>
-                  <span className="text-[7px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">
-                    Visitor Management System
                   </span>
                </div>
              )}
@@ -5705,7 +5695,7 @@ export default function App() {
                     <span className="text-sm font-bold text-slate-900">Intelligence</span>
                   </div>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
-                    Elite VMS Enterprise v4.0.2
+                    VMS Flow Enterprise v4.0.2
                   </p>
                 </div>
               </div>
@@ -7958,7 +7948,7 @@ function FilterButton({ active, onClick, label }: { active: boolean; onClick: ()
   );
 }
 
-function StatCard({ title, value, icon, trend, color = 'blue', delay = 0 }: { title: string; value: string | number; icon: React.ReactNode; trend?: string; color?: 'blue' | 'indigo' | 'emerald' | 'purple' | 'amber' | 'rose'; delay?: number }) {
+function StatCard({ title, value, icon, trend, color = 'blue', delay = 0, chartData }: { title: string; value: string | number; icon: React.ReactNode; trend?: string; color?: 'blue' | 'indigo' | 'emerald' | 'purple' | 'amber' | 'rose'; delay?: number; chartData?: { value: number }[] }) {
   const accentColors = {
     blue: 'text-blue-500 bg-blue-50/50',
     indigo: 'text-indigo-500 bg-indigo-50/50',
@@ -7986,6 +7976,25 @@ function StatCard({ title, value, icon, trend, color = 'blue', delay = 0 }: { ti
     rose: 'bg-rose-50/50 border-rose-100/50'
   };
 
+  const chartColors = {
+    blue: '#3b82f6',
+    indigo: '#6366f1',
+    emerald: '#10b981',
+    purple: '#a855f7',
+    amber: '#f59e0b',
+    rose: '#f43f5e'
+  };
+
+  // Generate some dummy data if none provided for better visual consistency
+  const data = useMemo(() => {
+    if (chartData && chartData.length > 0) return chartData;
+    // Generate organic-looking mock trend data based on the value
+    const numericValue = typeof value === 'number' ? value : parseInt(value as string) || 0;
+    return Array.from({ length: 12 }, (_, i) => ({
+      value: Math.max(0, numericValue * (0.4 + Math.random() * 0.6) + (i * (Math.random() * 2)))
+    }));
+  }, [value, chartData]);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -8001,8 +8010,33 @@ function StatCard({ title, value, icon, trend, color = 'blue', delay = 0 }: { ti
         {React.cloneElement(icon as any, { size: 140 })}
       </div>
 
-      <div className={`h-14 w-14 rounded-2xl flex items-center justify-center mb-10 shadow-sm ${accentColors[color]}`}>
-        {React.cloneElement(icon as any, { size: 24 })}
+      <div className="flex justify-between items-start mb-10">
+        <div className={`h-14 w-14 rounded-2xl flex items-center justify-center shadow-sm ${accentColors[color]}`}>
+          {React.cloneElement(icon as any, { size: 24 })}
+        </div>
+        
+        {/* Subtle Mini Chart */}
+        <div className="h-12 w-24">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data}>
+              <defs>
+                <linearGradient id={`grad-${color}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={chartColors[color]} stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor={chartColors[color]} stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <Area 
+                type="monotone" 
+                dataKey="value" 
+                stroke={chartColors[color]} 
+                fillOpacity={1} 
+                fill={`url(#grad-${color})`} 
+                strokeWidth={2}
+                isAnimationActive={true}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
       </div>
       
       <div className="space-y-4">

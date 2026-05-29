@@ -1,14 +1,14 @@
 {
-  "short_name": "VMS",
-  "name": "Visitor Management System",
+  "short_name": "VMS Flow",
+  "name": "VMS Flow | Visitor Management",
   "icons": [
     {
-      "src": "https://picsum.photos/seed/vms/192/192",
+      "src": "/pwa-192x192.png",
       "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "https://picsum.photos/seed/vms/512/512",
+      "src": "/pwa-512x512.png",
       "type": "image/png",
       "sizes": "512x512"
     }

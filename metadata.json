@@ -1,11 +1,9 @@
 {
-  "name": "Remix: Visitor Management System",
-  "description": "A centralized record management system for secure visitor logging, documentation audit, and organizational oversight.",
+  "name": "VMS Flow",
+  "description": "Next-generation visitor management system for secure logging, intelligent insights, and professional organizational branding.",
   "requestFramePermissions": [
     "microphone",
     "camera"
   ],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

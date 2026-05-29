@@ -23,7 +23,7 @@ interface LegalPagesProps {
 }
 
 export const PrivacyPolicy: React.FC<LegalPagesProps> = ({ 
-  appName = "Visitor Management System", 
+  appName = "VMS Flow", 
   organizationName = "The Organization" 
 }) => {
   const points = [
@@ -95,7 +95,7 @@ export const PrivacyPolicy: React.FC<LegalPagesProps> = ({
 };
 
 export const TermsOfService: React.FC<LegalPagesProps> = ({ 
-  appName = "Visitor Management System" 
+  appName = "VMS Flow" 
 }) => {
   const guidelines = [
     {

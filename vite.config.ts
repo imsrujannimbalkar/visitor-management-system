@@ -12,17 +12,23 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+        includeAssets: ['favicon.png', 'logo.png', 'pwa-192x192.png', 'pwa-512x512.png'],
         manifest: {
-          name: 'Visitor Management Kiosk',
-          short_name: 'Visitor Kiosk',
-          description: 'Offline-ready visitor management system for organizations',
-          theme_color: '#3b82f6',
+          name: 'VMS Flow | Visitor Management',
+          short_name: 'VMS Flow',
+          description: 'Intelligent Visitor Management for modern organizations',
+          theme_color: '#2563eb',
           icons: [
             {
               src: 'pwa-192x192.png',
               sizes: '192x192',
               type: 'image/png'
+            },
+            {
+              src: 'pwa-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'maskable'
             },
             {
               src: 'pwa-512x512.png',

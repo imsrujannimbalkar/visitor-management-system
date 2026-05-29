@@ -46,7 +46,7 @@ interface BirthdayTabProps {
   organizationName?: string;
 }
 
-export default function BirthdayTab({ organizationId, visitors, donations, loadingStates = {}, organizationName = 'Visitor Management System' }: BirthdayTabProps) {
+export default function BirthdayTab({ organizationId, visitors, donations, loadingStates = {}, organizationName = 'VMS Flow' }: BirthdayTabProps) {
   const { showToast } = useToast();
   const today = new Date();
   const todayMonth = today.getMonth();

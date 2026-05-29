@@ -364,11 +364,11 @@ export default function VisitorTable({
         </div>
       </div>
 
-      <div className="overflow-x-auto custom-scrollbar-horizontal scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-200">
-        <table className="w-full text-left border-collapse min-w-[1100px]">
+      <div className="overflow-x-auto sm:overflow-x-visible no-scrollbar pb-4 -mx-4 px-4 sm:mx-0 sm:px-0">
+        <table className="w-full text-left border-collapse min-w-full sm:min-w-[700px] lg:min-w-[1100px]">
           <thead>
             <tr className="bg-slate-50/50 border-b border-slate-100/50">
-              <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
+              <th className="px-3 sm:px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
                 <button 
                   onClick={toggleSelectAll}
                   className="text-slate-300 hover:text-brand-blue transition-colors"
@@ -380,16 +380,16 @@ export default function VisitorTable({
                   )}
                 </button>
               </th>
-              <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic">Ind.</th>
-              <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic">Log#</th>
-              <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic">UID Reference</th>
-              <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic">Identity Details</th>
-              <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic">Location Info</th>
-              <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic">Contact Core</th>
-              <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic">Engagement</th>
-              <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic">Temporal Log</th>
-              <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic text-center">Security Status</th>
-              <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic text-right">Command Center</th>
+              <th className="hidden sm:table-cell px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic">Ind.</th>
+              <th className="hidden lg:table-cell px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic">Log#</th>
+              <th className="hidden md:table-cell px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic">UID Reference</th>
+              <th className="px-3 sm:px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic">Identity Details</th>
+              <th className="hidden lg:table-cell px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic">Location Info</th>
+              <th className="hidden md:table-cell px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic">Contact Core</th>
+              <th className="hidden lg:table-cell px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic">Engagement</th>
+              <th className="hidden sm:table-cell px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic">Temporal Log</th>
+              <th className="hidden sm:table-cell px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic text-center">Security Status</th>
+              <th className="px-3 sm:px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] italic text-right">Command</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -426,7 +426,7 @@ export default function VisitorTable({
                       className={`hover:bg-slate-50 transition-all duration-300 group cursor-pointer border-b border-slate-50 last:border-0 ${expandedRow === visitor.visitorId ? 'bg-ngo-surface underline-offset-4' : ''} ${selectedIds.includes(visitor.visitorId) ? 'bg-slate-50' : ''} ${isExtended ? 'bg-amber-50/50 hover:bg-amber-100/40 border-amber-200/50 dark:bg-amber-950/10' : ''}`}
                       onClick={() => toggleRow(visitor.visitorId)}
                     >
-                    <td className="px-8 py-6" onClick={(e) => toggleSelect(e, visitor.visitorId)}>
+                    <td className="px-3 sm:px-8 py-6" onClick={(e) => toggleSelect(e, visitor.visitorId)}>
                       <div className="flex items-center justify-center">
                         <button className="text-slate-300 hover:text-ngo-accent transition-colors">
                           {selectedIds.includes(visitor.visitorId) ? (
@@ -437,7 +437,7 @@ export default function VisitorTable({
                         </button>
                       </div>
                     </td>
-                    <td className="px-8 py-6">
+                    <td className="hidden sm:table-cell px-8 py-6">
                       <div className="flex items-center justify-center">
                         {expandedRow === visitor.visitorId ? 
                           <ChevronUp className="h-4 w-4 text-ngo-accent" /> : 
@@ -445,17 +445,17 @@ export default function VisitorTable({
                         }
                       </div>
                     </td>
-                    <td className="px-8 py-6 text-[11px] font-black text-slate-400 italic">#{String(visitor.serialNumber || 0).padStart(3, '0')}</td>
-                    <td className="px-8 py-6">
+                    <td className="hidden lg:table-cell px-8 py-6 text-[11px] font-black text-slate-400 italic">#{String(visitor.serialNumber || 0).padStart(3, '0')}</td>
+                    <td className="hidden md:table-cell px-8 py-6">
                       <span className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-lg font-mono font-bold text-[10px] tracking-tighter border border-slate-200/50">
                         {visitor.visitorId}
                       </span>
                     </td>
-                    <td className="px-8 py-6">
+                    <td className="px-3 sm:px-8 py-6">
                       <div className="flex flex-col gap-1">
                         <span className="text-sm font-display font-black text-ngo-primary group-hover:text-ngo-accent transition-colors leading-tight">{visitor.name}</span>
                         <div className="flex items-center gap-1.5 flex-wrap">
-                           <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider text-white ${
+                           <span className={`px-2 py-0.5 rounded text-[7px] font-black uppercase tracking-wider text-white ${
                              visitor.category === 'Volunteer' ? 'bg-emerald-500' :
                              visitor.category === 'Donor' ? 'bg-ngo-accent' :
                              visitor.category === 'Beneficiary' ? 'bg-rose-500' :
@@ -466,44 +466,39 @@ export default function VisitorTable({
                            }`}>
                              {visitor.category}
                            </span>
+                           <span className="sm:hidden px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[7px] font-bold uppercase tracking-widest">{visitor.status}</span>
                            {getBehaviorLabels(visitor).map((label, lIdx) => (
-                             <span key={lIdx} className={`px-2 py-0.5 rounded ${label.color} text-white text-[8px] font-black uppercase tracking-tighter`}>
+                             <span key={lIdx} className={`px-2 py-0.5 rounded ${label.color} text-white text-[7px] font-black uppercase tracking-tighter`}>
                                {label.text}
                              </span>
                            ))}
                            {visitor.passPrintedAt && (
-                             <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-600 border border-blue-200 text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 shadow-sm" title={`Pass Printed: ${new Date(visitor.passPrintedAt).toLocaleString()}`}>
+                             <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-600 border border-blue-200 text-[7px] font-black uppercase tracking-tighter flex items-center gap-1 shadow-sm">
                                <Printer className="h-2 w-2" />
-                               Printed
                              </span>
                            )}
                            {visitor.isEmergency && (
-                              <div className="flex flex-col gap-1 items-start">
-                                <span className="px-3 py-1 rounded bg-red-600 text-white text-[9px] font-black uppercase tracking-tighter animate-pulse shadow-md shadow-red-200 border border-white/20 flex items-center gap-1.5">
-                                  <AlertTriangle className="h-2.5 w-2.5" />
-                                  EMERGENCY PROTOCOL ENTRY
-                                </span>
-                                {visitor.phone?.startsWith('EMER-') && (
-                                  <span className="px-1.5 py-0.5 bg-red-50 text-red-600 border border-red-100 rounded text-[7px] font-black tracking-widest uppercase">ID: {visitor.phone}</span>
-                                )}
-                              </div>
+                             <span className="px-2 py-0.5 rounded bg-red-600 text-white text-[7px] font-black uppercase tracking-tighter animate-pulse">
+                               SOS
+                             </span>
                            )}
+                           <span className="lg:hidden text-[7px] font-bold text-slate-400 uppercase tracking-widest">{visitor.purpose}</span>
                         </div>
                       </div>
                     </td>
-                    <td className="px-8 py-6">
+                    <td className="hidden lg:table-cell px-8 py-6">
                       <div className="flex flex-col gap-1">
                         <span className="text-[11px] font-black text-slate-900 tracking-tight">{visitor.dob || '--'}</span>
                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">DOB Registry</span>
                       </div>
                     </td>
-                    <td className="px-8 py-6">
+                    <td className="hidden lg:table-cell px-8 py-6">
                       <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
                         <MapPin className="h-3.5 w-3.5 text-slate-300" />
                         <span className="truncate max-w-[120px]" title={visitor.address}>{visitor.address || 'Location Unknown'}</span>
                       </div>
                     </td>
-                    <td className="px-8 py-6">
+                    <td className="hidden md:table-cell px-8 py-6">
                       <div className="flex flex-col gap-1.5">
                         <div className="text-[11px] font-black text-slate-900 tracking-tight flex items-center gap-2">
                           <Phone className="h-3.5 w-3.5 text-slate-300" />
@@ -517,21 +512,18 @@ export default function VisitorTable({
                         )}
                       </div>
                     </td>
-                    <td className="px-8 py-6 text-sm font-black text-slate-600">
+                    <td className="hidden lg:table-cell px-8 py-6 text-sm font-black text-slate-600">
                       {visitor.purpose}
                     </td>
-                    <td className="px-8 py-6">
+                    <td className="hidden sm:table-cell px-8 py-6">
                       <div className="flex flex-col">
                         <span className="text-[11px] font-black text-slate-900 italic tracking-tighter">{visitor.date}</span>
                         <div className="flex items-center gap-2 mt-1">
-                          <div className="h-1 w-8 bg-slate-100 rounded-full overflow-hidden">
-                             <div className="h-full bg-ngo-accent w-1/3" />
-                          </div>
                           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest font-mono">IN {visitor.checkInTime}</span>
                         </div>
                       </div>
                     </td>
-                    <td className="px-8 py-6 text-center">
+                    <td className="hidden sm:table-cell px-8 py-6 text-center">
                       <div className="flex flex-col items-center gap-1.5 justify-center">
                         <span className={`inline-flex items-center px-4 py-2 rounded-xl text-[9px] font-black tracking-[0.1em] uppercase border ${
                           visitor.status === 'INSIDE'
@@ -546,22 +538,22 @@ export default function VisitorTable({
                         {isExtended && (
                           <span className="text-[8px] font-black tracking-[0.05em] uppercase text-amber-600 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-md flex items-center gap-1">
                             <Clock className="w-2.5 h-2.5 text-amber-500" />
-                            Extended Visit
+                            Extended
                           </span>
                         )}
                       </div>
                     </td>
-                    <td className="px-8 py-6 text-right">
-                      <div className="inline-flex items-center gap-2">
-                         <div className="flex items-center gap-1 p-1 bg-slate-50 rounded-xl border border-slate-100 group-hover:bg-white group-hover:border-slate-200 transition-all">
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); onEdit(visitor); }}
-                              className="p-2 text-slate-400 hover:text-ngo-accent hover:bg-slate-50 rounded-lg transition-all"
-                              title="Edit Identity"
-                            >
-                              <Edit2 className="h-3.5 w-3.5" />
-                            </button>
-                            {(userRole === 'ADMIN' || userRole === 'MASTER_ADMIN') && onDelete && (
+                    <td className="px-3 sm:px-8 py-6 text-right">
+                      <div className="inline-flex items-center gap-1 sm:gap-2">
+                         <div className="hidden sm:flex items-center gap-1 p-1 bg-slate-50 rounded-xl border border-slate-100 group-hover:bg-white group-hover:border-slate-200 transition-all">
+                             <button 
+                               onClick={(e) => { e.stopPropagation(); onEdit(visitor); }}
+                               className="p-2 text-slate-400 hover:text-ngo-accent hover:bg-slate-50 rounded-lg transition-all"
+                               title="Edit Identity"
+                             >
+                               <Edit2 className="h-3.5 w-3.5" />
+                             </button>
+                             {(userRole === 'ADMIN' || userRole === 'MASTER_ADMIN') && onDelete && (
                               <button 
                                 onClick={(e) => { e.stopPropagation(); handleDelete(visitor.visitorId); }}
                                 className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
@@ -575,14 +567,14 @@ export default function VisitorTable({
                             <>
                                <button 
                                  onClick={(e) => { e.stopPropagation(); onGeneratePass?.(visitor); }}
-                                 className="p-2.5 bg-brand-blue text-white hover:bg-blue-600 rounded-[1rem] shadow-lg shadow-blue-500/10 transition-all active:scale-95"
+                                 className="hidden sm:flex p-2.5 bg-brand-blue text-white hover:bg-blue-600 rounded-[1rem] shadow-lg shadow-blue-500/10 transition-all active:scale-95"
                                  title="Generate Digital Pass"
                                >
                                  <Ticket className="h-4 w-4" />
                                </button>
                                <button 
                                  onClick={(e) => { e.stopPropagation(); onPrintPass?.(visitor); }}
-                                 className="p-2.5 bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 rounded-[1rem] transition-all active:scale-95 border border-slate-200/50"
+                                 className="hidden sm:flex p-2.5 bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 rounded-[1rem] transition-all active:scale-95 border border-slate-200/50"
                                  title="Print Badge"
                                >
                                  <Printer className="h-4 w-4" />
@@ -593,50 +585,36 @@ export default function VisitorTable({
                             <button 
                               onClick={(e) => { e.stopPropagation(); onCheckOut(visitor.visitorId); }}
                               disabled={loadingStates[visitor.visitorId]}
-                              className="flex items-center gap-2 px-4 py-2.5 bg-ngo-primary text-white hover:bg-ngo-accent rounded-[1rem] shadow-lg shadow-ngo-primary/10 transition-all text-[9px] font-black uppercase tracking-widest active:scale-95 disabled:opacity-50"
+                              className="flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-ngo-primary text-white hover:bg-ngo-accent rounded-lg sm:rounded-[1rem] shadow-lg shadow-ngo-primary/10 transition-all text-[8px] sm:text-[9px] font-black uppercase tracking-widest active:scale-95 disabled:opacity-50"
                             >
                               {loadingStates[visitor.visitorId] ? (
-                                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
                               ) : (
                                 <>
                                   <LogOut className="h-3.5 w-3.5" />
-                                  <span>Finalize</span>
+                                  <span className="hidden min-[450px]:inline">Finalize</span>
                                 </>
                               )}
                             </button>
                          )}
                          {visitor.status === 'CHECKED OUT' && (
-                            visitor.whatsappStatus === 'SENT' ? (
-                               <div className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 text-emerald-600 rounded-[1rem] border border-emerald-100">
-                                 <CheckCircle className="h-4 w-4" />
-                                 <span className="text-[9px] font-black uppercase tracking-widest hidden sm:inline">Redirected</span>
-                                 <button 
-                                   onClick={(e) => { e.stopPropagation(); sendThankYou(visitor); }}
-                                   className="ml-1 p-0.5 text-emerald-400 hover:text-emerald-600 transition-colors"
-                                   title="Resend Thank You Note"
-                                 >
-                                   <RotateCcw className="h-3 w-3" />
-                                 </button>
-                               </div>
-                            ) : (
-                               <button 
-                                 onClick={(e) => { e.stopPropagation(); sendThankYou(visitor); }}
-                                 className="flex items-center justify-center p-2.5 bg-emerald-500 text-white hover:bg-emerald-600 rounded-[1rem] shadow-lg shadow-emerald-500/10 transition-all active:scale-95"
-                                 title="Send Thank You Note"
-                               >
-                                 <MessageCircle className="h-4 w-4" />
-                               </button>
-                            )
+                             <button 
+                               onClick={(e) => { e.stopPropagation(); sendThankYou(visitor); }}
+                               className="flex items-center justify-center p-2 sm:p-2.5 bg-emerald-500 text-white hover:bg-emerald-600 rounded-lg sm:rounded-[1rem] shadow-lg shadow-emerald-500/10 transition-all active:scale-95"
+                               title="Send Thank You Note"
+                             >
+                               <MessageCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                             </button>
                          )}
                          <button 
                            onClick={(e) => { e.stopPropagation(); toggleRow(visitor.visitorId); }}
-                           className={`p-2.5 rounded-[1rem] transition-all border ${expandedRow === visitor.visitorId ? 'bg-ngo-accent text-white border-ngo-accent' : 'bg-white text-slate-400 border-slate-100 hover:border-ngo-accent'}`}
+                           className={`p-2 sm:p-2.5 rounded-lg sm:rounded-[1rem] transition-all border ${expandedRow === visitor.visitorId ? 'bg-ngo-accent text-white border-ngo-accent' : 'bg-white text-slate-400 border-slate-100 hover:border-ngo-accent'}`}
                          >
-                           <History className="h-5 w-5" />
+                           <History className="h-4 w-4 sm:h-5 sm:w-5" />
                          </button>
                       </div>
                     </td>
-                  </motion.tr>
+                    </motion.tr>
                 <AnimatePresence mode="wait">
                   {expandedRow === visitor.visitorId && (userRole === 'ADMIN' || userRole === 'STAFF' || userRole === 'MASTER_ADMIN') && (
                     <motion.tr
