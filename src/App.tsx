@@ -24,6 +24,7 @@ import {
   FileText,
   CheckCircle2,
   CheckCircle,
+  MoreVertical,
   Database,
   TrendingUp,
   Clock,
@@ -75,8 +76,7 @@ import {
   VolumeX,
   Menu,
   AlignLeft,
-  Briefcase,
-  Download
+  Briefcase
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -618,6 +618,7 @@ export default function App() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   useEffect(() => {
@@ -5386,10 +5387,10 @@ export default function App() {
       <header 
         className={`bg-white border-b border-slate-100 fixed top-0 right-0 z-[100] transition-all duration-500 ease-in-out ${isSidebarExpanded ? 'lg:left-64' : 'lg:left-20'} left-0`}
       >
-        <div className="mx-auto px-4 sm:px-8">
-          <div className="flex justify-between items-center h-20 sm:h-24 gap-4">
+        <div className="mx-auto px-3 sm:px-8">
+          <div className="flex justify-between items-center h-16 sm:h-24 gap-2 sm:gap-4">
             {/* Branding Container - Only visible in top bar when sidebar is collapsed */}
-            <div className="flex items-center gap-4 shrink-0">
+            <div className="flex items-center gap-2 sm:gap-4 shrink-0">
               <motion.button 
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -5410,27 +5411,18 @@ export default function App() {
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
-                    className="flex lg:flex items-center gap-3 cursor-pointer" 
+                    className="flex lg:flex items-center gap-2 sm:gap-3 cursor-pointer" 
                     onClick={() => handleTabSelection('dashboard')}
                   >
-                    <div className="h-12 w-12 sm:h-24 sm:w-24 rounded-2xl sm:rounded-3xl bg-white flex items-center justify-center shadow-2xl shadow-blue-500/10 overflow-hidden p-1.5 sm:p-4 border border-slate-100 shrink-0">
+                    <div className="h-10 w-10 sm:h-24 sm:w-24 rounded-xl sm:rounded-3xl bg-white flex items-center justify-center shadow-lg sm:shadow-2xl shadow-blue-500/10 overflow-hidden p-1.5 sm:p-4 border border-slate-100 shrink-0">
                       <img src="/logo.png" alt="VMS Flow" className="w-full h-full object-contain scale-110 sm:scale-110" />
                     </div>
                     <div className="flex flex-col justify-center">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] leading-none">VMS Flow</span>
+                      <div className="flex items-center gap-1 sm:gap-1.5 mb-0.5 sm:mb-1">
+                        <span className="text-[8px] sm:text-[10px] font-black text-blue-600 uppercase tracking-widest sm:tracking-[0.2em] leading-none">VMS Flow</span>
                       </div>
-                      <div className="flex items-center gap-1.5 leading-none">
-                        <span className="text-2xl font-black text-slate-900 tracking-tighter">{organization?.name || 'VMS Flow'}</span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-1.5 leading-none">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.1em]">
-                          VMS 4.0
-                        </span>
-                        <span className="w-1 h-1 bg-slate-200 rounded-full" />
-                        <span className="text-[7.5px] font-bold text-slate-500 uppercase tracking-widest">
-                          Visitor Management System
-                        </span>
+                      <div className="flex items-center gap-1 sm:gap-1.5 leading-none">
+                        <span className="text-sm sm:text-2xl font-black text-slate-900 tracking-tighter truncate max-w-[100px] sm:max-w-none">{organization?.name || 'VMS Flow'}</span>
                       </div>
                     </div>
                   </motion.div>
@@ -5439,31 +5431,31 @@ export default function App() {
             </div>
 
             {/* Search Bar - SaaS Style */}
-            <div className="flex-1 max-w-2xl px-4">
+            <div className="flex-1 max-w-2xl px-2 sm:px-4">
               <div className="relative w-full">
-                <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-                  <Search className="h-4.5 w-4.5 text-slate-400" />
+                <div className="absolute inset-y-0 left-3 sm:left-4 flex items-center pointer-events-none">
+                  <Search className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-slate-400" />
                 </div>
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search visitors, records or intelligence..."
-                  className="w-full bg-[#F3F4F6] border-none rounded-2xl py-3 pl-12 pr-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/10 transition-all placeholder:text-slate-400"
+                  placeholder="Search..."
+                  className="w-full bg-[#F3F4F6] border-none rounded-xl sm:rounded-2xl py-2 sm:py-3 pl-10 sm:pl-12 pr-4 text-[13px] sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/10 transition-all placeholder:text-slate-400"
                 />
                 {searchQuery && (
                   <button 
                     onClick={() => setSearchQuery('')}
-                    className="absolute inset-y-0 right-3 flex items-center text-slate-300 hover:text-slate-500"
+                    className="absolute inset-y-0 right-2 sm:right-3 flex items-center text-slate-300 hover:text-slate-500"
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </button>
                 )}
               </div>
             </div>
 
-            {/* Profile & Notifications */}
-            <div className="flex items-center gap-3 sm:gap-6 shrink-0">
+            {/* Profile & Notifications Desktop */}
+            <div className="hidden sm:flex items-center gap-3 sm:gap-6 shrink-0">
               {/* Status Badge */}
               <div className="hidden sm:block">
                 <div className="flex items-center gap-2 px-4 py-2 bg-[#F0FDF4] text-[#10B981] rounded-full text-[10px] font-black uppercase tracking-widest border border-[#DCFCE7]">
@@ -5560,6 +5552,116 @@ export default function App() {
                   onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
                 />
               </div>
+            </div>
+
+            {/* Profile & Notifications Mobile - Consolidated */}
+            <div className="flex sm:hidden items-center shrink-0">
+               <div className="relative">
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                    className="h-10 w-10 flex items-center justify-center bg-slate-50 border border-slate-200 rounded-xl relative"
+                  >
+                    <MoreVertical className="h-5 w-5 text-slate-600" />
+                    {(notifications.filter(n => !n.read).length > 0) && (
+                      <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full ring-2 ring-white" />
+                    )}
+                  </motion.button>
+
+                  <AnimatePresence>
+                    {isMobileMenuOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        className="absolute right-0 mt-3 w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 overflow-hidden"
+                      >
+                        {/* Mobile User Header */}
+                        <div className="px-4 py-3 bg-slate-50/50 border-b border-slate-100 mb-2">
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center overflow-hidden">
+                              {user.photoURL ? (
+                                <img src={user.photoURL} alt="Avatar" className="w-full h-full object-cover" />
+                              ) : (
+                                <span className="text-white text-[10px] font-bold">{(user.name || 'S').charAt(0).toUpperCase()}</span>
+                              )}
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                               <span className="text-xs font-bold text-slate-900 truncate">{user.name || 'Sam Joe'}</span>
+                               <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{user.role || 'ADMIN'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <button 
+                          onClick={() => {
+                            setActiveTab('profile');
+                            setIsMobileMenuOpen(false);
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] font-bold text-slate-700 hover:bg-slate-50"
+                        >
+                          <UserIcon className="h-4 w-4 text-slate-400" />
+                          View Profile
+                        </button>
+
+                        <button 
+                          onClick={() => {
+                            setIsNotificationsOpen(true);
+                            setIsMobileMenuOpen(false);
+                          }}
+                          className="w-full flex items-center justify-between px-4 py-2.5 text-[13px] font-bold text-slate-700 hover:bg-slate-50"
+                        >
+                          <div className="flex items-center gap-3">
+                            <Bell className="h-4 w-4 text-slate-400" />
+                            Notifications
+                          </div>
+                          {notifications.filter(n => !n.read).length > 0 && (
+                            <span className="bg-red-500 text-white text-[8px] py-0.5 px-1.5 rounded-full font-black">
+                              {notifications.filter(n => !n.read).length}
+                            </span>
+                          )}
+                        </button>
+
+                        {/* Mobile PWA Install */}
+                        {deferredPrompt && (
+                          <div className="px-2 py-2">
+                            <button 
+                              onClick={() => {
+                                handleInstallClick();
+                                setIsMobileMenuOpen(false);
+                              }}
+                              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-[12px] font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                              Install App
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="border-t border-slate-100 mt-2 pt-2">
+                           {/* Mobile Live Status Indicator */}
+                           <div className="px-4 py-1.5 mb-1.5">
+                              <div className="flex items-center gap-2 text-[8px] font-black text-emerald-600 uppercase tracking-widest">
+                                 <div className="h-1 w-1 bg-emerald-500 rounded-full animate-pulse" />
+                                 Live Status Active
+                              </div>
+                           </div>
+
+                           <button 
+                             onClick={() => {
+                               handleLogout();
+                               setIsMobileMenuOpen(false);
+                             }}
+                             className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] font-bold text-red-600 hover:bg-red-50"
+                           >
+                             <LogOut className="h-4 w-4" />
+                             Sign Out
+                           </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+               </div>
             </div>
           </div>
         </div>
