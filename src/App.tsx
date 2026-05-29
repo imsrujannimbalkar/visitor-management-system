@@ -75,7 +75,8 @@ import {
   VolumeX,
   Menu,
   AlignLeft,
-  Briefcase
+  Briefcase,
+  Download
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -617,6 +618,25 @@ export default function App() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+    }
+  };
   const [showEmergencyForm, setShowEmergencyForm] = useState(false);
   const [activeOrgId, setActiveOrgId] = useState<string | null>(() => localStorage.getItem('activeOrgId'));
 
@@ -5393,8 +5413,8 @@ export default function App() {
                     className="flex lg:flex items-center gap-3 cursor-pointer" 
                     onClick={() => handleTabSelection('dashboard')}
                   >
-                    <div className="h-24 w-24 rounded-3xl bg-white flex items-center justify-center shadow-2xl shadow-blue-500/10 overflow-hidden p-4 border border-slate-100">
-                      <img src="/logo.png" alt="VMS Flow" className="w-full h-full object-contain scale-110" />
+                    <div className="h-16 w-16 sm:h-24 sm:w-24 rounded-2xl sm:rounded-3xl bg-white flex items-center justify-center shadow-2xl shadow-blue-500/10 overflow-hidden p-2 sm:p-4 border border-slate-100 shrink-0">
+                      <img src="/logo.png" alt="VMS Flow" className="w-full h-full object-contain scale-125 sm:scale-110" />
                     </div>
                     <div className="flex flex-col justify-center">
                       <div className="flex items-center gap-1.5 mb-1">
@@ -5476,7 +5496,7 @@ export default function App() {
                   <motion.div 
                     whileHover={{ scale: 1.05 }}
                     onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                    className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-[#2563EB] flex items-center justify-center overflow-hidden cursor-pointer shadow-md border-2 border-slate-300 ring-2 ring-blue-500/30 transition-all active:scale-95"
+                    className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-[#2563EB] flex items-center justify-center overflow-hidden cursor-pointer shadow-md border-2 border-white ring-4 ring-blue-600/20 transition-all active:scale-95"
                   >
                     {user.photoURL ? (
                       <img src={user.photoURL} alt="Avatar" className="w-full h-full object-cover" />
@@ -5503,6 +5523,20 @@ export default function App() {
                           <UserIcon className="h-4 w-4" />
                           View Profile
                         </button>
+
+                        {deferredPrompt && (
+                          <button 
+                            onClick={() => {
+                              handleInstallClick();
+                              setIsProfileMenuOpen(false);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-2 text-sm font-bold text-blue-600 hover:bg-blue-50 transition-colors animate-pulse"
+                          >
+                            <Download className="h-4 w-4" />
+                            Install App
+                          </button>
+                        )}
+
                         <button 
                           onClick={() => {
                             handleLogout();
