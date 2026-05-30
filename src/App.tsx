@@ -776,6 +776,7 @@ export default function App() {
       setIsKioskMode(false);
       setIsKioskFormOpen(false);
       setKioskSessionEntries([]);
+      kioskSpeak('EXIT_KIOSK', kioskLang, voiceEnabled);
       addToast('Kiosk exit approved by staff', 'success');
       // Mark notification as deleted so it doesn't trigger again
       const ref = doc(db, 'organizations', user?.organizationId || '', 'notifications', exitApproved.id);
@@ -1704,17 +1705,34 @@ export default function App() {
   const [kioskLang, setKioskLang] = useState<'EN' | 'HI'>('EN');
   const [kioskTappings, setKioskTappings] = useState<'ACTIONS' | 'HISTORY'>('ACTIONS');
 
+  const prevKioskMode = useRef(isKioskMode);
+  const prevFormOpen = useRef(isKioskFormOpen);
+  const prevPreRegOpen = useRef(isKioskPreRegLookupOpen);
+  const prevLang = useRef(kioskLang);
+
   // Kiosk Voice Navigation Effect
   useEffect(() => {
     if (!isKioskMode || !voiceEnabled || pageLoading || showSplash || showLoader) return;
 
-    if (isKioskPreRegLookupOpen) {
+    const formClosed = prevFormOpen.current && !isKioskFormOpen;
+    const preRegClosed = prevPreRegOpen.current && !isKioskPreRegLookupOpen;
+    const langChanged = prevLang.current !== kioskLang;
+    const justEnteredKiosk = !prevKioskMode.current && isKioskMode;
+
+    if (isKioskPreRegLookupOpen && (!prevPreRegOpen.current || langChanged)) {
       kioskSpeak('PREREG_START', kioskLang);
-    } else if (isKioskFormOpen) {
+    } else if (isKioskFormOpen && (!prevFormOpen.current || langChanged)) {
       kioskSpeak('CHECK_IN_START', kioskLang);
-    } else {
-      kioskSpeak('WELCOME', kioskLang);
+    } else if (!isKioskFormOpen && !isKioskPreRegLookupOpen) {
+      if (justEnteredKiosk || langChanged) {
+        kioskSpeak('WELCOME', kioskLang);
+      }
     }
+
+    prevKioskMode.current = isKioskMode;
+    prevFormOpen.current = isKioskFormOpen;
+    prevPreRegOpen.current = isKioskPreRegLookupOpen;
+    prevLang.current = kioskLang;
   }, [isKioskMode, isKioskFormOpen, isKioskPreRegLookupOpen, kioskLang, voiceEnabled, pageLoading, showSplash, showLoader]);
 
   const [isSyncingOffline, setIsSyncingOffline] = useState(false);
@@ -4082,6 +4100,7 @@ export default function App() {
     if (activeVisit) {
       const success = await checkOutVisitor(activeVisit.visitorId, false);
       if (success) {
+        kioskSpeak('CHECK_OUT_SUCCESS', kioskLang, voiceEnabled);
         addKioskScanEvent({ visitorName: activeVisit.visitorName, type: 'CHECK_OUT' });
         Swal.fire({
           title: kioskLang === 'HI' ? 'सफल!' : 'Success!',
@@ -4106,6 +4125,7 @@ export default function App() {
              const preRegData = { id: preRegSnap.id, ...preRegSnap.data() } as PreRegistration;
              if (preRegData.status === 'APPROVED' || preRegData.status === 'PENDING') {
                // Let's check them in immediately! Using empty/placeholder signature as digital QR scan is highly authenticated
+               kioskSpeak('CHECK_IN_SUCCESS', kioskLang, voiceEnabled);
                await handleKioskPreRegCheckIn(preRegData, "");
                addKioskScanEvent({ visitorName: preRegData.name, type: 'CHECK_IN' });
                Swal.fire({
@@ -4127,6 +4147,7 @@ export default function App() {
                if (correlatedVisit) {
                  const success = await checkOutVisitor(correlatedVisit.visitorId, false);
                  if (success) {
+                   kioskSpeak('CHECK_OUT_SUCCESS', kioskLang, voiceEnabled);
                    addKioskScanEvent({ visitorName: correlatedVisit.visitorName, type: 'CHECK_OUT' });
                    Swal.fire({
                      title: kioskLang === 'HI' ? 'सफल!' : 'Success!',
@@ -4150,6 +4171,7 @@ export default function App() {
              if (visitSnap.exists() && visitSnap.data().status === 'INSIDE') {
                  const success = await checkOutVisitor(passId, false);
                  if (success) {
+                   kioskSpeak('CHECK_OUT_SUCCESS', kioskLang, voiceEnabled);
                    addKioskScanEvent({ visitorName: visitSnap.data().visitorName, type: 'CHECK_OUT' });
                    Swal.fire({
                      title: kioskLang === 'HI' ? 'सफल!' : 'Success!',
@@ -4170,6 +4192,7 @@ export default function App() {
          console.error('Error securely verifying pass status:', err);
        }
 
+       kioskSpeak('INVALID_QR', kioskLang, voiceEnabled);
        Swal.fire({
           title: kioskLang === 'HI' ? 'नहीं मिला' : 'Not Found',
           text: kioskLang === 'HI' ? 'इस QR कोड के लिए कोई सक्रिय विज़िट नहीं मिली।' : 'No active visit found for this QR code.',
@@ -4682,6 +4705,7 @@ export default function App() {
       setIsKioskMode(false);
       setIsKioskFormOpen(false);
       setKioskSessionEntries([]);
+      kioskSpeak('EXIT_KIOSK', kioskLang, voiceEnabled);
       addToast('Exited Kiosk Mode', 'success');
     } else if (activePinDialog === 'SETUP') {
       if (!organization?.id) return;
@@ -4837,6 +4861,7 @@ export default function App() {
         setReviewVisitor(activeVisit);
       }
     } else {
+      kioskSpeak('NOT_FOUND', kioskLang, voiceEnabled);
       Swal.fire({
         title: kioskLang === 'EN' ? 'Not Found' : 'नहीं मिला',
         text: kioskLang === 'EN' ? 'No active check-in found for this number.' : 'इस नंबर के लिए कोई सक्रिय चेक-इन नहीं मिला।',
@@ -4920,6 +4945,7 @@ export default function App() {
 
       setKioskSessionEntries(prev => [visitData as any, ...prev]);
       setIsKioskPreRegLookupOpen(false);
+      kioskSpeak('CHECK_IN_SUCCESS', kioskLang, voiceEnabled);
       
       Swal.fire({
         title: kioskLang === 'EN' ? 'Welcome!' : 'स्वागत है!',
@@ -5116,7 +5142,7 @@ export default function App() {
                 >
                   <KioskPreRegLookup 
                     organizationId={organization?.id || ''}
-                    onBack={() => setIsKioskPreRegLookupOpen(false)}
+                    onBack={() => { setIsKioskPreRegLookupOpen(false); kioskSpeak('FORM_CLOSED', kioskLang, voiceEnabled); }}
                     onCheckIn={handleKioskPreRegCheckIn}
                     lang={kioskLang}
                   />
@@ -5159,7 +5185,6 @@ export default function App() {
 
                       <QRCheckOutScanner
                       onScan={(data) => {
-                        kioskSpeak('CHECK_OUT_SUCCESS', kioskLang, voiceEnabled);
                         handleScanCheckOut(data);
                       }}
                       onOpen={() => kioskSpeak('SCAN_OUT_START', kioskLang, voiceEnabled)}
@@ -5355,7 +5380,7 @@ export default function App() {
                   className="flex-1 bg-white relative z-[100] flex flex-col"
                 >
                   <div className="h-16 sm:h-20 bg-white border-b border-gray-50 flex items-center justify-between px-4 sm:px-12 shrink-0">
-                    <button onClick={() => setIsKioskFormOpen(false)} className="flex items-center gap-2 sm:gap-3 text-slate-400 group">
+                    <button onClick={() => { setIsKioskFormOpen(false); kioskSpeak('FORM_CLOSED', kioskLang, voiceEnabled); }} className="flex items-center gap-2 sm:gap-3 text-slate-400 group">
                       <div className="p-2 sm:p-3 bg-slate-50 rounded-xl sm:rounded-2xl group-hover:bg-brand-blue group-hover:text-white transition-all duration-500 shadow-sm">
                         <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6 transition-transform group-hover:-translate-x-1" />
                       </div>
@@ -5369,7 +5394,7 @@ export default function App() {
                             saveVisitor(data);
                             setIsKioskFormOpen(false);
                           }} 
-                          onClose={() => setIsKioskFormOpen(false)}
+                          onClose={() => { setIsKioskFormOpen(false); kioskSpeak('FORM_CLOSED', kioskLang, voiceEnabled); }}
                           isKiosk={true}
                           lang={kioskLang}
                           existingVisitors={visitors}
@@ -8201,7 +8226,7 @@ export default function App() {
       <KioskPhoneDialog
         isOpen={isKioskPhoneOpen}
         onConfirm={onKioskPhoneConfirm}
-        onCancel={() => setIsKioskPhoneOpen(false)}
+        onCancel={() => { setIsKioskPhoneOpen(false); kioskSpeak('FORM_CLOSED', kioskLang, voiceEnabled); }}
         lang={kioskLang}
       />
 
