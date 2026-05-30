@@ -68,7 +68,6 @@ export default function PreRegistrationForm({ organizationId, onComplete }: PreR
           setError('Organization not found');
         }
       } catch (err) {
-        console.error('Error fetching org:', err);
         setError('Failed to load organization details');
       } finally {
         setLoading(false);
@@ -123,7 +122,6 @@ export default function PreRegistrationForm({ organizationId, onComplete }: PreR
       });
 
       // Add Notification for the organization
-      console.log('Creating pre-registration notification...');
       await addDoc(collection(db, 'organizations', organizationId, 'notifications'), {
         organizationId,
         title: 'New Pre-Registration',
@@ -132,12 +130,11 @@ export default function PreRegistrationForm({ organizationId, onComplete }: PreR
         read: false,
         timestamp: new Date().toISOString(),
         relatedId: preRegRef.id
-      }).then(() => console.log('Pre-reg notification created')).catch(err => console.error('Error creating pre-reg notification:', err));
+      }).then(() => {})
 
       setSubmitted(true);
       if (onComplete) onComplete();
     } catch (err) {
-      console.error('Error submitting pre-registration:', err);
       setError('Failed to submit registration. Please try again.');
     } finally {
       setSubmitting(false);

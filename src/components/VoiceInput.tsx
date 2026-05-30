@@ -38,7 +38,6 @@ export default function VoiceInput({ onValueChange, value, className, list, icon
       };
 
       recognition.onerror = (event: any) => {
-        console.error('Speech recognition error', event.error);
         if (event.error === 'not-allowed') {
           setPermissionError('denied');
         }
@@ -71,18 +70,15 @@ export default function VoiceInput({ onValueChange, value, className, list, icon
     } else {
       setPermissionError(null);
       try {
-        console.log('Requesting microphone permission...');
         
         // In an iframe, getUserMedia is the most reliable way to trigger the prompt
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         
-        console.log('Microphone permission granted.');
         stream.getTracks().forEach(track => track.stop());
         
         recognitionRef.current.start();
         setIsListening(true);
       } catch (e: any) {
-        console.error('Microphone permission error:', e);
         
         if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError' || e.message?.includes('denied')) {
           setPermissionError('denied');

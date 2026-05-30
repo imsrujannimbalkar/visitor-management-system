@@ -55,7 +55,6 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({
           scannerRef.current.clear();
         }
       } catch (e) {
-        console.error("Stop failed gracefully:", e);
       } finally {
         scannerRef.current = null;
         isScanningRef.current = false;
@@ -137,7 +136,6 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({
              await stopScanner();
            }
          } catch (err: any) {
-           console.error("Failed to start QR scanner:", err);
            if (!unmounted) {
              const errMsg = err?.message || String(err);
              setCameraError(errMsg);
@@ -178,7 +176,6 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({
           scanSuccessRef.current = false;
         }, 1000);
       } catch (err) {
-        console.error("File scan failed:", err);
         setScanMessage(lang === 'HI' ? 'कोई QR नहीं मिला' : 'No QR Found');
         setTimeout(() => setScanMessage(null), 2000);
       }
@@ -193,7 +190,6 @@ export const QRCheckOutScanner: React.FC<QRCheckOutScannerProps> = ({
         });
         setFlashEnabled(!flashEnabled);
       } catch (err) {
-        console.error("Torch toggle failed:", err);
       }
     }
   };

@@ -57,7 +57,6 @@ export const geminiService = {
       const text = result.text || "{}";
       return JSON.parse(text);
     } catch (error) {
-      console.error("AI Analysis error:", error);
       throw error;
     }
   }

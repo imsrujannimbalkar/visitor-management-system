@@ -326,7 +326,6 @@ export default function EmergencyForm({
         onClose();
       }, 3500);
     } catch (error) {
-      console.error("Error saving emergency visitor:", error);
     } finally {
       setIsSubmitting(false);
     }

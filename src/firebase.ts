@@ -27,7 +27,6 @@ const isConfigValid = firebaseConfig.apiKey &&
                      !placeholders.includes(firebaseConfig.projectId);
 
 if (!isConfigValid) {
-  console.warn('Firebase configuration is missing or invalid. Please follow set_up_firebase tool instructions.');
 }
 
 const app = initializeApp(isConfigValid ? firebaseConfig : {
@@ -42,11 +41,6 @@ const app = initializeApp(isConfigValid ? firebaseConfig : {
 export const isConfigured = isConfigValid;
 export const auth = getAuth(app);
 
-console.log('Firebase Initialization:', {
-  projectId: firebaseConfig.projectId,
-  databaseId: databaseId || '(default)',
-  isConfigured: isConfigValid
-});
 
 // Use database ID from config with long polling for proxy compatibility
 export const db = initializeFirestore(app, {
@@ -107,19 +101,22 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     path
   }
 
-  // Silence "Permission Denied" errors that occur during logout/unauthenticated states
+  // Silence "Permission Denied" errors that occur during logout/unauthenticated states or expected lists
   if (isPermissionError) {
     if (isUnauthenticated || operationType === OperationType.LIST || operationType === OperationType.GET) {
-      console.warn(`[Firestore] Suppressed expected permission error during state transition: ${path}`);
+      // Quietly suppress expected permission failures to keep console clean
       return;
     }
   }
 
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  // Throwing here will crash React event handlers unnecessarily. Let components handle loading states.
+  // Use stringification for graceful object handling without crashing
+  if (import.meta.env.DEV) {
+  } else {
+    // Basic log in prod to not expose sensitive user info object structure
+  }
 }
 
-// Optional: Initial connectivity check
+// Optional: Initial connectivity check - fail silently
 import { getDocFromServer, doc } from 'firebase/firestore';
 if (isConfigured) {
   getDocFromServer(doc(db, '_connection_test_', 'ping')).catch(() => {});

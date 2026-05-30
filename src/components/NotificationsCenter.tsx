@@ -98,14 +98,12 @@ export default function NotificationsCenter({
       addToast(action === 'read' ? `Marked ${selectedIds.size} as read` : `Deleted ${selectedIds.size} notifications`, 'success');
       setSelectedIds(new Set());
     } catch (err) {
-      console.error(`Failed to ${action} batch:`, err);
       addToast(`Failed to ${action} notifications`, 'error');
     }
   };
 
   const markAllAsRead = async () => {
     if (!organizationId) {
-        console.error('Cannot mark all as read: no organizationId');
         addToast('Error: Organization ID missing', 'error');
         return;
     }
@@ -121,14 +119,12 @@ export default function NotificationsCenter({
       await batch.commit();
       addToast('Marked all as read', 'success');
     } catch (err) {
-      console.error('Failed to mark all as read:', err);
       addToast('Failed to mark all as read', 'error');
     }
   };
 
   const clearAllNotifications = async () => {
     if (!organizationId) {
-        console.error('Cannot clear all: no organizationId');
         addToast('Error: Organization ID missing', 'error');
         return;
     }
@@ -144,15 +140,12 @@ export default function NotificationsCenter({
       await batch.commit();
       addToast('All notifications cleared', 'success');
     } catch (err) {
-      console.error('Failed to clear notifications:', err);
       addToast('Failed to clear notifications', 'error');
     }
   };
 
   const markAsRead = async (id: string) => {
-    console.log('markAsRead called with orgId:', organizationId, 'and notificationId:', id);
     if (!organizationId) {
-        console.error('Cannot mark as read: no organizationId');
         addToast('Error: Organization ID missing', 'error');
         return;
     }
@@ -161,7 +154,6 @@ export default function NotificationsCenter({
       await updateDoc(ref, { read: true });
       addToast('Marked as read', 'success');
     } catch (err) {
-      console.error('Failed to mark as read:', err);
       addToast('Failed to mark as read', 'error');
     }
   };
@@ -175,7 +167,6 @@ export default function NotificationsCenter({
       });
       addToast('Notification deleted', 'success');
     } catch (err) {
-      console.error('Failed to delete notification:', err);
       addToast('Failed to delete notification', 'error');
     }
   };
@@ -207,7 +198,6 @@ export default function NotificationsCenter({
       });
       addToast('Kiosk exit approved', 'success');
     } catch (err) {
-      console.error('Failed to approve kiosk exit:', err);
       addToast('Failed to approve kiosk exit', 'error');
     }
   };

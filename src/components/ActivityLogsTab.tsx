@@ -33,7 +33,6 @@ export default function ActivityLogsTab({ organizationId, users }: ActivityLogsT
       setLogs(logsData);
       setLoading(false);
     }, (error) => {
-      console.error("Error fetching logs:", error);
       setLoading(false);
     });
 

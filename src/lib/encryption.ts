@@ -55,7 +55,6 @@ export async function encryptData(text: string, orgId: string): Promise<string> 
     
     return btoa(String.fromCharCode(...combined));
   } catch (error) {
-    console.error('Encryption failed:', error);
     return text; // Fallback to plain text if crypto fails (not ideal, but prevents crash)
   }
 }

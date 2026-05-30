@@ -32,7 +32,6 @@ export async function createBackup(organizationId: string, data: any, userId: st
   try {
     await setDoc(doc(db, 'organizations', organizationId, 'system_backups', backupId), backupRecord);
   } catch (firestoreErr: any) {
-    console.warn('Firestore backup failed (likely size limit):', firestoreErr);
     // If it fails, save metadata with a flag indicating it's too large for Firestore
     await setDoc(doc(db, 'organizations', organizationId, 'system_backups', backupId), {
       ...backupRecord,

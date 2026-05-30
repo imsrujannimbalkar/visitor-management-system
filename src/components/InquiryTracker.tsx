@@ -128,7 +128,6 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
       setShowAddModal(false);
       resetForm();
     } catch (error) {
-      console.error('Error saving inquiry:', error);
       Swal.fire('Error', 'Failed to save inquiry.', 'error');
     }
   };
@@ -166,7 +165,6 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
         });
         Swal.fire('Deleted!', 'Inquiry has been removed.', 'success');
       } catch (error) {
-        console.error('Error deleting inquiry:', error);
       }
     }
   };
@@ -195,7 +193,6 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
         timer: 2000
       });
     } catch (error) {
-      console.error('Error updating status:', error);
       Swal.fire({
         title: 'Update Failed',
         text: 'Failed to update inquiry status.',
@@ -224,7 +221,6 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
         whatsappSentAt: new Date().toISOString()
       });
     } catch (error) {
-      console.error('Error sending WhatsApp follow-up:', error);
       showToast('Failed to send WhatsApp follow-up', 'error');
     }
   };
@@ -292,7 +288,6 @@ export default function InquiryTracker({ organization, user }: InquiryTrackerPro
           position: 'center'
         });
       } catch (error) {
-        console.error('Error during manual check-in:', error);
         Swal.fire({
           title: 'Check-In Failed',
           text: 'An error occurred during the process.',

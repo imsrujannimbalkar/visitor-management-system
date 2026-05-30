@@ -110,7 +110,6 @@ export default function PreRegistrationTab({
           }
         }
       } catch (err) {
-        console.error('Error loading pre-reg settings:', err);
       }
     };
     loadSettings();
@@ -160,7 +159,6 @@ export default function PreRegistrationTab({
       const digitsOnly = req.phone?.replace(/\D/g, '') || '';
       
       if (!digitsOnly || digitsOnly.length < 10) {
-        console.warn('Invalid phone number for WhatsApp:', req.phone);
         showToast('Invalid phone number for WhatsApp notification', 'error');
         return;
       }
@@ -185,7 +183,6 @@ export default function PreRegistrationTab({
         whatsappSentAt: new Date().toISOString()
       });
     } catch (error) {
-      console.error('Error sending WhatsApp:', error);
       showToast('Failed to update WhatsApp status', 'error');
     }
   };
@@ -225,7 +222,6 @@ export default function PreRegistrationTab({
 
       if (newStatus === 'APPROVED') {
         // Add Notification for approval
-        console.log('Creating approval notification for:', requestId);
         await addDoc(collection(db, 'organizations', organizationId, 'notifications'), {
           organizationId,
           title: 'Reg. Approved',
@@ -234,7 +230,7 @@ export default function PreRegistrationTab({
           read: false,
           timestamp: new Date().toISOString(),
           relatedId: requestId
-        }).then(() => console.log('Approval notification created')).catch(err => console.error('Error creating approval notification:', err));
+        }).then(() => {})
 
         Swal.fire({
           title: 'Approved!',
@@ -264,7 +260,6 @@ export default function PreRegistrationTab({
         });
       }
     } catch (error) {
-      console.error('Error updating status:', error);
       Swal.fire('Error', 'Failed to update request status', 'error');
     }
   };
@@ -332,7 +327,6 @@ export default function PreRegistrationTab({
 
       Swal.fire('Success', 'Visitor has been checked in successfully!', 'success');
     } catch (error) {
-      console.error('Check-in error:', error);
       Swal.fire('Error', 'Failed to complete check-in', 'error');
     } finally {
       setLoading(false);
@@ -361,7 +355,6 @@ export default function PreRegistrationTab({
         });
         Swal.fire('Deleted!', 'Request has been removed from view.', 'success');
       } catch (error) {
-        console.error('Error deleting request:', error);
         Swal.fire('Error', 'Failed to delete request', 'error');
       }
     }
@@ -401,7 +394,6 @@ export default function PreRegistrationTab({
         position: 'center'
       });
     } catch (err) {
-      console.error('Error saving settings:', err);
       Swal.fire('Error', 'Failed to save settings', 'error');
     } finally {
       setIsSavingSettings(false);

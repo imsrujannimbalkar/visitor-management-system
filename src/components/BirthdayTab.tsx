@@ -65,7 +65,6 @@ export default function BirthdayTab({ organizationId, visitors, donations, loadi
       const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PreRegistration));
       setPreRegistrations(list);
     }, (err) => {
-      console.error("Error loading pre-registrations in BirthdayTab:", err);
     });
     return () => unsubscribe();
   }, [organizationId]);
@@ -259,7 +258,6 @@ export default function BirthdayTab({ organizationId, visitors, donations, loadi
         whatsappSentAt: new Date().toISOString()
       });
     } catch (error) {
-      console.error('Error tracking wish status:', error);
       showToast('Failed to update status', 'error');
     } finally {
       setSendingId(null);

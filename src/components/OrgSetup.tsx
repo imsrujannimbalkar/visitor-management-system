@@ -176,7 +176,6 @@ export default function OrgSetup({ onComplete }: OrgSetupProps) {
         onComplete(orgId);
       }, 1000);
     } catch (error: any) {
-      console.error('Org Setup Error:', error);
       Toast.fire({ icon: 'error', title: error.message });
     } finally {
       setLoading(false);

@@ -92,7 +92,7 @@ export default function VisitorPass({
             setOrganization({ id: orgSnap.id, ...orgSnap.data() } as Organization);
           }
         } catch (err) {
-          console.error('Error fetching org:', err);
+
         }
       }
 
@@ -112,7 +112,7 @@ export default function VisitorPass({
             setLoading(false);
           }
         }, (err) => {
-          console.error('Real-time pass error (visit doc):', err);
+
         }));
 
         // Listener 2: Query by preRegistrationId
@@ -129,7 +129,7 @@ export default function VisitorPass({
             setVisitRecord(null);
           }
         }, (err) => {
-          console.error('Real-time pass error (visit query):', err);
+
         }));
 
         // Listener 3: Fallback PreRegistration document
@@ -159,7 +159,7 @@ export default function VisitorPass({
             }
           }
         }, (err) => {
-          console.error('Real-time pass error (preReg):', err);
+
         }));
         
         // Timeout to stop loading if no records found at all
@@ -273,7 +273,7 @@ export default function VisitorPass({
               updatedAt: new Date().toISOString()
             });
           } catch (preRegErr) {
-            console.error('Failed to update pre-registration on checkout:', preRegErr);
+
           }
         }
 
@@ -288,7 +288,7 @@ export default function VisitorPass({
         }, 1000);
 
       } catch (apiErr) {
-        console.warn('API Check-out failed or returned error, triggering direct client Firestore fallback:', apiErr);
+
         
         // Find correct visit document ID if vid is preRegistrationId
         let targetVisitId = vid;
@@ -317,7 +317,7 @@ export default function VisitorPass({
               updatedAt: new Date().toISOString()
             });
           } catch (preRegErr) {
-            console.error('Failed to update pre-registration on checkout (fallback):', preRegErr);
+
           }
         }
 
@@ -332,7 +332,7 @@ export default function VisitorPass({
         }, 1000);
       }
     } catch (err) {
-      console.error('Check-out failed overall:', err);
+
       showToast('Check-out process encountered an issue.', 'error');
     } finally {
       setCheckingOut(false);
@@ -406,7 +406,7 @@ export default function VisitorPass({
           whatsappSentAt: new Date().toISOString()
         });
       } catch (err) {
-        console.warn('Could not update WhatsApp status for visit:', err);
+
       }
     }
   };
@@ -722,7 +722,7 @@ export default function VisitorPass({
                 setShowReviewModal(false);
                 showToast('Thank you for your feedback!', 'success');
               } catch (err) {
-                console.error('Failed to save review:', err);
+
                 showToast('Failed to save review. Please try again.', 'error');
               }
             }}

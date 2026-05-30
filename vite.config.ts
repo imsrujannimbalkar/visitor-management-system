@@ -7,6 +7,10 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   return {
+    esbuild: {
+      drop: mode === 'production' ? ['debugger'] : [],
+      pure: mode === 'production' ? ['console.log', 'console.debug', 'console.info'] : [],
+    },
     plugins: [
       react(), 
       tailwindcss(),

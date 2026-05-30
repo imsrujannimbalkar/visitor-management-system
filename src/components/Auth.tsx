@@ -60,14 +60,11 @@ export default function Auth({ onAuthComplete }: AuthProps) {
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
-    console.log('Initiating Google Sign-In...');
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
-      console.log('Google Sign-In successful for user:', user.uid, user.email);
       
       const userRegistryRef = doc(db, 'users', user.uid);
-      console.log('Checking user registry:', userRegistryRef.path);
       const userRegistrySnap = await getDoc(userRegistryRef);
       
       let organizationId = null;
@@ -208,7 +205,7 @@ export default function Auth({ onAuthComplete }: AuthProps) {
             const { deleteDoc } = await import('firebase/firestore');
             await deleteDoc(inviteRef);
             await deleteDoc(doc(db, 'organizations', organizationId, 'invitations', normalizedEmail));
-          } catch (e) { console.warn('Invitation cleanup failed:', e); }
+          } catch (e) {}
         }
       }
       
@@ -219,7 +216,6 @@ export default function Auth({ onAuthComplete }: AuthProps) {
       Toast.fire({ icon: 'success', title: 'Signed in successfully' });
       onAuthComplete();
     } catch (error: any) {
-      console.error('Google Auth Error:', error);
       let errorTitle = 'Authentication Failed';
       let errorMessage = error.message || 'An unexpected error occurred during Google sign in. Please try again.';
       
@@ -324,7 +320,6 @@ export default function Auth({ onAuthComplete }: AuthProps) {
             }
           }
         } catch (checkErr) {
-          console.warn("Could not pre-verify email for reset, proceeding with standard reset:", checkErr);
         }
 
         // Proceed with standard reset
@@ -347,7 +342,6 @@ export default function Auth({ onAuthComplete }: AuthProps) {
           }
         });
       } catch (error: any) {
-        console.error("Password reset failure:", error);
         
         // Handle potentially masked errors
         let errorTitle = 'Reset Failed';
@@ -428,7 +422,7 @@ export default function Auth({ onAuthComplete }: AuthProps) {
                     if (orgId) {
                       await deleteDoc(doc(db, 'organizations', orgId, 'invitations', normalizedEmail));
                     }
-                  } catch (e) { console.warn('Invite cleanup failed', e); }
+                  } catch (e) {}
                 }
               }
             } else {
@@ -456,7 +450,7 @@ export default function Auth({ onAuthComplete }: AuthProps) {
                   if (orgId) {
                     await deleteDoc(doc(db, 'organizations', orgId, 'invitations', normalizedEmail));
                   }
-                } catch (e) { console.warn('Invite cleanup failed', e); }
+                } catch (e) {}
               }
             }
 
@@ -513,7 +507,6 @@ export default function Auth({ onAuthComplete }: AuthProps) {
           Toast.fire({ icon: 'success', title: 'Signed in successfully' });
           onAuthComplete();
         } catch (error: any) {
-          console.error("Login attempt failed:", error);
           let errorTitle = 'Authentication Failed';
           let errorMessage = 'An unexpected error occurred. Please try again.';
           let showRegisterButton = false;
@@ -703,7 +696,6 @@ export default function Auth({ onAuthComplete }: AuthProps) {
               await deleteDoc(inviteRef);
               await deleteDoc(doc(db, 'organizations', organizationId, 'invitations', normalizedEmail));
             } catch (e) {
-              console.warn('Invitation cleanup failed:', e);
             }
           }
         }
@@ -716,7 +708,6 @@ export default function Auth({ onAuthComplete }: AuthProps) {
         onAuthComplete();
       }
     } catch (error: any) {
-      console.error('Registration/Signup Auth Error:', error);
       let errorTitle = 'Registration Failed';
       let errorMessage = error.message || 'An unexpected error occurred during account creation. Please try again.';
       

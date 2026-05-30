@@ -55,14 +55,14 @@ export default function BugReportModal({ onClose, userId, organizationId }: BugR
       };
 
       if (file) {
-        console.log('File attached:', file.name);
+
       }
 
       await addDoc(collection(db, 'bugReports'), reportData);
       showToast('Intelligence report submitted successfully', 'success');
       setIsSuccess(true);
     } catch (error) {
-      console.error('Error submitting bug report:', error);
+
       showToast('Failed to transmit report. Data corruption detected.', 'error');
     } finally {
       setIsSubmitting(false);

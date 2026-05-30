@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LogOut, Edit2, Search, Trash2, FileText, Phone, MessageCircle, History, ChevronDown, ChevronUp, User, MapPin, PenTool, CheckSquare, Square, Trash, CheckCircle, X, Calendar, Star, Heart, Shield, Clock, TrendingUp, Share2, ShieldCheck, Ticket, Gift, AlertTriangle, RotateCcw, Printer } from 'lucide-react';
+import { LogOut, Edit2, Search, Trash2, FileText, Phone, MessageCircle, History, ChevronDown, ChevronUp, User, MapPin, PenTool, CheckSquare, Square, Trash, CheckCircle, X, Calendar, Star, Heart, Shield, Clock, TrendingUp, Share2, ShieldCheck, Ticket, Gift, AlertTriangle, RotateCcw, Printer, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Visitor, UserRole, Donation } from '../types';
 import { DEFAULT_WHATSAPP_TEMPLATES } from '../constants';
 import Swal from 'sweetalert2';
@@ -51,6 +51,38 @@ export default function VisitorTable({
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'yesterday'>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
+  
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [showLeftScroll, setShowLeftScroll] = useState(false);
+  const [showRightScroll, setShowRightScroll] = useState(true);
+
+  const checkScroll = () => {
+    if (scrollContainerRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current;
+      setShowLeftScroll(scrollLeft > 0);
+      setShowRightScroll(scrollLeft < scrollWidth - clientWidth - 1);
+    }
+  };
+
+  useEffect(() => {
+    checkScroll();
+    window.addEventListener('resize', checkScroll);
+    return () => window.removeEventListener('resize', checkScroll);
+  }, []);
+
+  const scrollRight = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollBy({ left: 300, behavior: 'smooth' });
+    }
+  };
+
+  const scrollLeft = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollBy({ left: -300, behavior: 'smooth' });
+    }
+  };
 
   const isExtendedVisit = React.useCallback((visitor: Visitor): boolean => {
     if (visitor.status !== 'INSIDE') return false;
@@ -123,6 +155,13 @@ export default function VisitorTable({
     });
   }, [visitors, dateFilter]);
 
+  const totalPages = Math.ceil(filteredVisitors.length / itemsPerPage);
+
+  const paginatedVisitors = React.useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredVisitors.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredVisitors, currentPage, itemsPerPage]);
+
   const toggleRow = (visitorId: string) => {
     if (expandedRow === visitorId) {
       setExpandedRow(null);
@@ -169,10 +208,14 @@ export default function VisitorTable({
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === filteredVisitors.length) {
-      setSelectedIds([]);
+    const paginatedIds = paginatedVisitors.map(v => v.visitorId);
+    const allSelected = paginatedIds.length > 0 && paginatedIds.every(id => selectedIds.includes(id));
+    
+    if (allSelected) {
+      setSelectedIds(selectedIds.filter(id => !paginatedIds.includes(id)));
     } else {
-      setSelectedIds(filteredVisitors.map(v => v.visitorId));
+      const newIds = new Set([...selectedIds, ...paginatedIds]);
+      setSelectedIds(Array.from(newIds));
     }
   };
 
@@ -352,6 +395,7 @@ export default function VisitorTable({
               onChange={(e) => {
                 setDateFilter(e.target.value as 'all' | 'today' | 'yesterday');
                 setSelectedIds([]);
+                setCurrentPage(1);
               }}
               className="appearance-none pl-4 pr-10 py-2 bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl focus:border-brand-blue focus:ring-1 focus:ring-brand-blue outline-none cursor-pointer transition-all shadow-sm"
             >
@@ -364,8 +408,51 @@ export default function VisitorTable({
         </div>
       </div>
 
-      <div className="overflow-x-auto sm:overflow-x-visible no-scrollbar pb-4 -mx-4 px-4 sm:mx-0 sm:px-0">
-        <table className="w-full text-left border-collapse min-w-full sm:min-w-[700px] lg:min-w-[1100px]">
+      <div className="relative group/table">
+        <AnimatePresence>
+          {showLeftScroll && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-16 sm:w-24 h-[calc(100%-4rem)] flex items-center justify-start pointer-events-none md:opacity-0 md:group-hover/table:opacity-100 transition-opacity duration-300"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-white via-white/80 to-transparent blur-sm -z-10" />
+              <button 
+                onClick={scrollLeft}
+                className="ml-0 sm:ml-2 h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-white flex items-center justify-center shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-100 text-slate-600 hover:text-brand-blue hover:scale-110 active:scale-95 transition-all pointer-events-auto"
+              >
+                <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showRightScroll && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-16 sm:w-24 h-[calc(100%-4rem)] flex items-center justify-end pointer-events-none md:opacity-0 md:group-hover/table:opacity-100 transition-opacity duration-300"
+            >
+              <div className="absolute inset-0 bg-gradient-to-l from-white via-white/80 to-transparent blur-sm -z-10" />
+              <button 
+                onClick={scrollRight}
+                className="mr-0 sm:mr-2 h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-white flex items-center justify-center shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-100 text-slate-600 hover:text-brand-blue hover:scale-110 active:scale-95 transition-all pointer-events-auto"
+              >
+                <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div 
+          ref={scrollContainerRef}
+          onScroll={checkScroll}
+          className="overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 custom-scrollbar"
+        >
+          <table className="w-full text-left border-collapse min-w-full sm:min-w-[700px] lg:min-w-[1100px]">
           <thead>
             <tr className="bg-slate-50/50 border-b border-slate-100/50">
               <th className="px-3 sm:px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
@@ -373,7 +460,7 @@ export default function VisitorTable({
                   onClick={toggleSelectAll}
                   className="text-slate-300 hover:text-brand-blue transition-colors"
                 >
-                  {selectedIds.length === filteredVisitors.length && filteredVisitors.length > 0 ? (
+                  {paginatedVisitors.length > 0 && paginatedVisitors.every(v => selectedIds.includes(v.visitorId)) ? (
                     <CheckSquare className="h-5 w-5 text-brand-blue" />
                   ) : (
                     <Square className="h-5 w-5" />
@@ -393,7 +480,7 @@ export default function VisitorTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {filteredVisitors.length === 0 ? (
+            {paginatedVisitors.length === 0 ? (
               <tr>
                 <td colSpan={14} className="px-6 py-20 text-center">
                   <div className="flex flex-col items-center justify-center gap-4">
@@ -410,7 +497,7 @@ export default function VisitorTable({
                 </td>
               </tr>
             ) : (
-              filteredVisitors.map((visitor, idx) => {
+              paginatedVisitors.map((visitor, idx) => {
                 const isExtended = isExtendedVisit(visitor);
                 return (
                   <React.Fragment key={visitor.visitorId}>
@@ -920,6 +1007,71 @@ export default function VisitorTable({
             )}
           </tbody>
         </table>
+      </div>
+      
+      {/* Pagination */}
+      <div className="flex flex-col sm:flex-row items-center justify-end gap-x-8 gap-y-4 px-6 py-4 border-t border-slate-100 bg-white/40">
+        <div className="flex items-center gap-3">
+          <label className="text-sm font-medium text-slate-700">Items per page:</label>
+          <div className="relative">
+            <select
+              value={itemsPerPage}
+              onChange={(e) => {
+                setItemsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="appearance-none pl-4 pr-9 py-1.5 bg-white border border-slate-200 text-slate-700 text-sm font-medium rounded-2xl hover:bg-slate-50 focus:border-brand-blue focus:ring-1 focus:ring-brand-blue outline-none cursor-pointer transition-all shadow-sm"
+            >
+              {[10, 25, 50, 100].map(size => (
+                <option key={size} value={size}>{size}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-6">
+          <span className="text-sm font-medium text-slate-600">
+            {filteredVisitors.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, filteredVisitors.length)} of {filteredVisitors.length}
+          </span>
+          
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              className="p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:hover:text-slate-400 transition-colors"
+              title="First page"
+            >
+              <ChevronsLeft className="w-5 h-5" strokeWidth={2.5} />
+            </button>
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:hover:text-slate-400 transition-colors"
+              title="Previous page"
+            >
+              <ChevronLeft className="w-5 h-5" strokeWidth={2.5} />
+            </button>
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:hover:text-slate-400 transition-colors"
+              title="Next page"
+            >
+              <ChevronRight className="w-5 h-5" strokeWidth={2.5} />
+            </button>
+            <button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:hover:text-slate-400 transition-colors"
+              title="Last page"
+            >
+              <ChevronsRight className="w-5 h-5" strokeWidth={2.5} />
+            </button>
+          </div>
+        </div>
+      </div>
+      
       </div>
     </div>
   );

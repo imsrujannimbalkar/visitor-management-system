@@ -62,7 +62,7 @@ export default function AppFeedbackModal({ onClose, userId, organizationId }: Ap
       setIsSuccess(true);
       // We removed the automatic onClose to allow user to see success state
     } catch (error) {
-      console.error('Error submitting feedback:', error);
+
       showToast('Transmission error. Feedback not captured.', 'error');
     } finally {
       setIsSubmitting(false);

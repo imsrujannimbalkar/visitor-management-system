@@ -189,7 +189,6 @@ export default function VisitorForm({
             }
           }
         } catch (err) {
-          console.error('Error loading org settings in form:', err);
         }
       };
       loadOrgSettings();
@@ -406,7 +405,6 @@ export default function VisitorForm({
       };
       await onSave(submissionData);
     } catch (error) {
-      console.error("Error saving visitor:", error);
       showToast(isKiosk && lang === 'HI' ? lt.saveError.HI : lt.saveError.EN, 'error');
     } finally {
       setIsSubmitting(false);

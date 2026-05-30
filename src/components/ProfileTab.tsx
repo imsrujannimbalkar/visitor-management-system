@@ -140,7 +140,6 @@ export default function ProfileTab({
       const data = await onFetchBackups();
       setBackups(data);
     } catch (err) {
-      console.error('Failed to fetch backups:', err);
     } finally {
       setIsFetchingBackups(false);
     }
@@ -190,7 +189,6 @@ export default function ProfileTab({
           onUpdateUser({ ...user, preferences: prefsObj });
         }
       } catch (err) {
-        console.error('Failed to update preference:', err);
       }
     }
   };
@@ -230,7 +228,6 @@ export default function ProfileTab({
         timer: 3000
       });
     } catch (error) {
-      console.error('Failed to update profile:', error);
       Swal.fire('Error', 'Failed to update profile details', 'error');
     } finally {
       setLoading(false);

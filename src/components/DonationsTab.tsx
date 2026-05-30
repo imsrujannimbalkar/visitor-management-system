@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { ChartContainer } from './ChartContainer';
 import { 
   ResponsiveContainer, 
   BarChart, 
@@ -367,7 +368,6 @@ export default function DonationsTab({
         notes: notes
       });
     } catch (err) {
-      console.error('Failed to update visit donation:', err);
     }
   };
 
@@ -1557,8 +1557,8 @@ export default function DonationsTab({
                               <TrendingUp className="h-4 w-4 text-emerald-500" />
                               Contribution Velocity
                             </h5>
-                            <div className="h-40 bg-white rounded-2xl p-4 shadow-sm border border-slate-200/50">
-                               <ResponsiveContainer width="100%" height="100%">
+                            <ChartContainer className="h-40 bg-white rounded-2xl p-4 shadow-sm border border-slate-200/50">
+                               <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                                   <BarChart data={donorCharts.pulse}>
                                      <Bar 
                                         dataKey="amount" 
@@ -1582,7 +1582,7 @@ export default function DonationsTab({
                                      />
                                   </BarChart>
                                </ResponsiveContainer>
-                            </div>
+                            </ChartContainer>
                          </div>
 
                          <div>
@@ -1593,8 +1593,8 @@ export default function DonationsTab({
                             <div className="h-48 bg-white rounded-2xl p-2 shadow-sm border border-slate-200/50 flex flex-col items-center justify-center">
                                {donorCharts.types.length > 0 ? (
                                  <>
-                                   <div className="h-32 w-full">
-                                     <ResponsiveContainer width="100%" height="100%">
+                                   <ChartContainer className="h-32 w-full">
+                                     <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                                         <PieChart>
                                            <Pie
                                               data={donorCharts.types}
@@ -1611,7 +1611,7 @@ export default function DonationsTab({
                                            </Pie>
                                         </PieChart>
                                      </ResponsiveContainer>
-                                   </div>
+                                   </ChartContainer>
                                    <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-2">
                                       {donorCharts.types.map((t, i) => (
                                          <div key={i} className="flex items-center gap-1.5">

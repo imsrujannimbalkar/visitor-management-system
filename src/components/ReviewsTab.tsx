@@ -34,7 +34,6 @@ export default function ReviewsTab({ organizationId, userRole, visitors }: Revie
       setDbReviews(list);
       setLoadingReviews(false);
     }, (err) => {
-      console.error("Error loading reviews from db in ReviewsTab:", err);
       setLoadingReviews(false);
     });
     return () => unsubscribe();
@@ -97,7 +96,6 @@ export default function ReviewsTab({ organizationId, userRole, visitors }: Revie
             'review.deletedAt': new Date().toISOString()
           });
         } catch (e) {
-          console.log('No corresponding visit document with this ID to delete review from', e);
         }
 
         // Attempt to mark as deleted in the standalone reviews collection
@@ -107,12 +105,10 @@ export default function ReviewsTab({ organizationId, userRole, visitors }: Revie
             deletedAt: new Date().toISOString()
           });
         } catch (e) {
-          console.log('No standalone review document with this ID to delete', e);
         }
 
         Swal.fire('Deleted!', 'Review has been removed from view.', 'success');
       } catch (error) {
-        console.error('Error deleting review:', error);
         Swal.fire('Error', 'Failed to delete review.', 'error');
       }
     }

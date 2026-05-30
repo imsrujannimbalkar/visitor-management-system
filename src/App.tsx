@@ -123,6 +123,7 @@ import { geminiService } from './services/geminiService';
 import { KioskPinDialog, PinNotSetNotification } from './components/KioskPinDialog';
 import { KioskPhoneDialog } from './components/KioskPhoneDialog';
 import { kioskSpeak } from './lib/speech';
+import { ChartContainer } from './components/ChartContainer';
 import { Visitor, User, VisitorStatus, UserRole, Organization, Notification, Profile, Visit, Donation, DonationAuditEntry, PreRegistration, Inquiry, ScanEvent } from './types';
 import { useToast } from './components/Toast';
 import { savePendingProfile, savePendingVisit, getPendingProfiles, getPendingVisits, clearPendingProfile, clearPendingVisit } from './lib/offline';
@@ -570,7 +571,6 @@ export default function App() {
       const insights = await geminiService.getVisitorInsights(visitors, donations);
       setAiInsights({ ...insights, loading: false });
     } catch (error) {
-      console.error('Failed to fetch AI insights:', error);
       setAiInsights(prev => ({ ...prev, loading: false }));
       Swal.fire({
         title: 'AI Analysis Failed',
@@ -960,7 +960,6 @@ export default function App() {
         timestamp: new Date().toISOString()
       }), { merge: true });
     } catch (error) {
-      console.error('Failed to create notification:', error);
     }
   }, [user?.organizationId]);
 
@@ -1022,7 +1021,6 @@ export default function App() {
         });
       }
     } catch (error) {
-      console.error('Failed to log activity:', error);
     }
   }, [user, createNotification]);
 
@@ -1096,7 +1094,6 @@ export default function App() {
           const hasLocalHint = localStorage.getItem(`vms_google_connected_${effectiveOrgId}`) === 'true';
           
           if ((prev.connected || hasLocalHint) && !data.connected && isRecentlyConnected) {
-             console.log('Skipping Google disconnect - within grace period (60s)');
              return prev;
           }
 
@@ -1119,7 +1116,6 @@ export default function App() {
         setGoogleConfig(prev => ({ ...prev, loading: false }));
       }
     } catch (error) {
-      console.error('Failed to fetch Google config:', error);
       setGoogleConfig(prev => ({ ...prev, loading: false }));
     }
   }, [effectiveOrgId]);
@@ -1128,20 +1124,16 @@ export default function App() {
     if (!effectiveOrgId || !googleConfig.connected) return;
     setIsFetchingSheets(true);
     try {
-      console.log('Fetching available Google Sheets...');
       const response = await fetch(`/api/google/sheets?organizationId=${effectiveOrgId}`);
       if (response.ok) {
         const data = await response.json();
-        console.log('Available sheets fetched:', data.length);
         setAvailableSheets(data);
       } else {
         const errData = await response.json().catch(() => ({}));
-        console.error('Failed to fetch sheets:', response.status, errData);
         if (response.status === 401) {
         // Silently retry first
         const isRecentlyConnected = Date.now() - lastConnectionRef.current < 45000;
         if (isRecentlyConnected) {
-          console.log('Suppressed early 401 for Sheets - within grace period');
           return;
         }
         await new Promise(r => setTimeout(r, 2000));
@@ -1149,13 +1141,11 @@ export default function App() {
         if (retryRes.ok) {
           setAvailableSheets(await retryRes.json());
         } else if (retryRes.status === 401) {
-          console.warn('Final 401 for Google Sheets. Refreshing config...');
           fetchGoogleConfig();
         }
       }
     }
   } catch (error) {
-      console.error('Failed to fetch available sheets:', error);
     } finally {
       setIsFetchingSheets(false);
     }
@@ -1165,17 +1155,14 @@ export default function App() {
     if (!effectiveOrgId || !googleConfig.connected) return;
     setIsFetchingCalendars(true);
     try {
-      console.log('Fetching available Google Calendars...');
       const response = await fetch(`/api/google/calendars?organizationId=${effectiveOrgId}`);
       if (response.ok) {
         const data = await response.json();
-        console.log('Available calendars fetched:', data.length);
         setAvailableCalendars(data);
       } else if (response.status === 401) {
         // Silently retry first
         const isRecentlyConnected = Date.now() - lastConnectionRef.current < 45000;
         if (isRecentlyConnected) {
-          console.log('Suppressed early 401 for Calendar - within grace period');
           return;
         }
         await new Promise(r => setTimeout(r, 2000));
@@ -1183,12 +1170,10 @@ export default function App() {
         if (retryRes.ok) {
           setAvailableCalendars(await retryRes.json());
         } else if (retryRes.status === 401) {
-          console.warn('Final 401 for Google Calendar. Refreshing config...');
           fetchGoogleConfig();
         }
       }
     } catch (error) {
-      console.error('Failed to fetch available calendars:', error);
     } finally {
       setIsFetchingCalendars(false);
     }
@@ -1212,7 +1197,6 @@ export default function App() {
   useEffect(() => {
     const handleGoogleAuthMessage = (event: MessageEvent) => {
       if (event.data?.type === 'GOOGLE_AUTH_SUCCESS') {
-        console.log('Google Auth Success detected via message');
         // Optimistically set connected to true to show the dropdowns immediately
         setGoogleConfig(prev => ({ ...prev, connected: true, loading: false }));
         
@@ -1233,7 +1217,6 @@ export default function App() {
             if (response.ok) {
               const data = await response.json();
               if (data.connected) {
-                console.log('Google Auth Confirmed by backend during polling');
                 setGoogleConfig({ ...data, loading: false });
                 
                 // Fetch datasets immediately after confirmation
@@ -1243,14 +1226,12 @@ export default function App() {
               }
             }
           } catch (e) {
-            console.error('Polling for Google config failed:', e);
           }
           
           attempts++;
           if (attempts < 25) { // Increase attempts for slow Firestore propagation
             setTimeout(pollConfig, 2000);
           } else {
-            console.log('Polling finished, doing final config fetch');
             fetchGoogleConfig();
           }
         };
@@ -1267,7 +1248,6 @@ export default function App() {
     try {
         return await getBackups(effectiveOrgId);
     } catch (e) {
-        console.error(e);
         return [];
     }
   };
@@ -1326,7 +1306,6 @@ export default function App() {
       // Refresh local state by just reloading or re-triggering snapshots if not automatic
       window.location.reload(); 
     } catch (e: any) {
-      console.error(e);
       addToast('Restoration complex failure: ' + e.message, 'error');
     } finally {
       setAuthLoading(false);
@@ -1357,7 +1336,6 @@ export default function App() {
         await createBackup(effectiveOrgId, fullBackup, user?.uid || 'UNKNOWN', user?.name || 'System');
         addToast('Full secure backup synchronized!', 'success');
     } catch (e) {
-        console.error(e);
         addToast('Backup extraction failed', 'error');
     }
   };
@@ -1388,12 +1366,11 @@ export default function App() {
           try {
             await updateDoc(doc(db, 'organizations', effectiveOrgId), { autoSyncEnabled: true });
             setOrganization(prev => prev ? { ...prev, autoSyncEnabled: true } : null);
-          } catch (e) { console.error('Failed to auto-enable sync:', e); }
+          } catch (e) {}
         }
         addToast('New spreadsheet created and linked!', 'success');
       }
     } catch (error) {
-      console.error('Failed to create sheet:', error);
       addToast('Failed to create spreadsheet', 'error');
     }
   };
@@ -1413,12 +1390,11 @@ export default function App() {
           try {
             await updateDoc(doc(db, 'organizations', effectiveOrgId), { autoSyncEnabled: true });
             setOrganization(prev => prev ? { ...prev, autoSyncEnabled: true } : null);
-          } catch (e) { console.error('Failed to auto-enable sync:', e); }
+          } catch (e) {}
         }
         addToast('Spreadsheet linked successfully!', 'success');
       }
     } catch (error) {
-      console.error('Failed to select sheet:', error);
       addToast('Failed to link spreadsheet', 'error');
     }
   };
@@ -1439,12 +1415,11 @@ export default function App() {
           try {
             await updateDoc(doc(db, 'organizations', effectiveOrgId), { autoSyncEnabled: true });
             setOrganization(prev => prev ? { ...prev, autoSyncEnabled: true } : null);
-          } catch (e) { console.error('Failed to auto-enable sync:', e); }
+          } catch (e) {}
         }
         addToast(type === 'birthday' ? 'Birthday calendar created!' : 'New calendar created and linked!', 'success');
       }
     } catch (error) {
-      console.error('Failed to create calendar:', error);
       addToast('Failed to create calendar', 'error');
     }
   };
@@ -1465,12 +1440,11 @@ export default function App() {
           try {
             await updateDoc(doc(db, 'organizations', effectiveOrgId), { autoSyncEnabled: true });
             setOrganization(prev => prev ? { ...prev, autoSyncEnabled: true } : null);
-          } catch (e) { console.error('Failed to auto-enable sync:', e); }
+          } catch (e) {}
         }
         addToast('Calendar linked successfully!', 'success');
       }
     } catch (error) {
-      console.error('Failed to select calendar:', error);
       addToast('Failed to link calendar', 'error');
     }
   };
@@ -1507,7 +1481,6 @@ export default function App() {
         addToast('Failed to disconnect Google services', 'error');
       }
     } catch (error) {
-      console.error('Failed to disconnect:', error);
       addToast('Failed to disconnect Google services', 'error');
     }
   };
@@ -1534,7 +1507,6 @@ export default function App() {
         addToast('Synchronization failed', 'error');
       }
     } catch (error) {
-      console.error('Manual sync failed:', error);
       addToast('Synchronization failed', 'error');
     } finally {
       setIsSyncingGoogle(false);
@@ -1674,7 +1646,6 @@ export default function App() {
               }
             }
           } catch (error) {
-            console.error('Auto-action encountered an issue:', error);
             Swal.close();
           }
         }
@@ -1724,7 +1695,7 @@ export default function App() {
     } else if (isKioskFormOpen && (!prevFormOpen.current || langChanged)) {
       kioskSpeak('CHECK_IN_START', kioskLang);
     } else if (!isKioskFormOpen && !isKioskPreRegLookupOpen) {
-      if (justEnteredKiosk || langChanged) {
+      if (langChanged) {
         kioskSpeak('WELCOME', kioskLang);
       }
     }
@@ -1782,10 +1753,9 @@ export default function App() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...visit, visitorId: visit.visitId })
           });
-        } catch (e) { console.error('API Sync failed for visit', visit.visitId); }
+        } catch (e) {}
       }
     } catch (error) {
-      console.error('Offline sync failed:', error);
       addToast('Some offline data failed to sync. Will retry.', 'error');
     } finally {
       setIsSyncingOffline(false);
@@ -1809,7 +1779,6 @@ export default function App() {
         await getDocFromServer(doc(db, 'test', 'connection'));
       } catch (error) {
         // Log all errors during dev to catch config issues
-        console.warn("Firestore connectivity check:", error);
       }
     };
     testConnection();
@@ -1823,19 +1792,15 @@ export default function App() {
     let currentListeningOrgId: string | null = null;
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-      console.log('Auth State Changed:', firebaseUser?.uid, firebaseUser?.email);
       setPageLoading(true);
       if (firebaseUser) {
         setAuthLoading(true);
-        console.log('Subscribing to user registry:', firebaseUser.uid);
         unsubscribeUser = onSnapshot(doc(db, 'users', firebaseUser.uid), async (registrySnap) => {
-          console.log('User registry snapshot received:', registrySnap.exists());
           if (registrySnap.exists()) {
             const registryData = registrySnap.data() as User;
             
             // Step 0: Handle fresh login behavior - clear last selected workspace to force selector for multi-org users
             if (sessionStorage.getItem('vms_fresh_login') === 'true') {
-              console.log('Detected fresh login. Auto-resetting workspace selection for multi-org awareness.');
               sessionStorage.removeItem('vms_selected_org_id');
               sessionStorage.removeItem('vms_fresh_login');
               setSelectedOrgId(null);
@@ -1870,7 +1835,6 @@ export default function App() {
                   }
                 }
               } catch (inviteErr) {
-                console.warn('Failed to fetch user global invitation:', inviteErr);
               }
 
               try {
@@ -1886,7 +1850,6 @@ export default function App() {
                   }
                 });
               } catch (cgInvErr) {
-                console.warn('CollectionGroup invitations query restricted or failed:', cgInvErr);
               }
             }
 
@@ -1903,7 +1866,6 @@ export default function App() {
                 }
               });
             } catch (cgError) {
-              console.warn('CollectionGroup users query restricted or failed:', cgError);
             }
 
             // Step 2: Fetch and verify details for each organization to ensure accessibility & membership
@@ -1946,7 +1908,6 @@ export default function App() {
                   });
                 }
               } catch (err) {
-                console.warn(`Could not access/verify organization ${orgId}:`, err);
               }
             }
 
@@ -2025,7 +1986,7 @@ export default function App() {
               
               if (Object.keys(syncFields).length > 0) {
                 setDoc(doc(db, 'users', firebaseUser.uid), syncFields, { merge: true })
-                  .catch(err => console.warn("Quietly skipped initial workspace context sync:", err));
+                  .catch(err => {})
               }
 
               const lastLoginTime = registryData.lastLogin ? new Date(registryData.lastLogin).getTime() : 0;
@@ -2051,7 +2012,6 @@ export default function App() {
 
               // Handler to automatically clear session/states, notify user, and redirect
               const handleRevokedAccess = async (type: 'revoked' | 'deleted' | 'unauthorized' = 'revoked') => {
-                console.log(`Access event (${type}) detected for organization:`, activeOrgId);
                 
                 // 1. Clear session storage
                 sessionStorage.removeItem('vms_selected_org_id');
@@ -2071,7 +2031,6 @@ export default function App() {
                     role: nextRole
                   }, { merge: true });
                 } catch (err) {
-                  console.warn("Failed to update user doc after revocation:", err);
                 }
 
                 // 3. Unsubscribe listeners
@@ -2088,7 +2047,6 @@ export default function App() {
                 const totalCandidateOrgs = Math.max(orgsList.length, availableOrgs.length, candidateOrgIds.size);
                 const hasSubstantialOrgs = totalCandidateOrgs > 1 || remainingOrgs.length > 0;
                 if (hasSubstantialOrgs) {
-                  console.log("Multi-org user, bypassing organization alert in favor of quiet selection screen.");
                   setSelectedOrgId(null);
                   setUser((prev) => prev ? { ...prev, organizationId: null } : null);
                   setPageLoading(false);
@@ -2100,7 +2058,6 @@ export default function App() {
                 // If user still has valid membership but got transient permission/selection conflict error
                 const isCurrentOrgValid = orgsList.some(o => o.id === activeOrgId);
                 if (isCurrentOrgValid && type === 'unauthorized') {
-                  console.warn("Transient session mismatch / conflict warning in active user workspace, returning to selector.");
                   setSelectedOrgId(null);
                   setUser((prev) => prev ? { ...prev, organizationId: null } : null);
                   setPageLoading(false);
@@ -2294,12 +2251,10 @@ export default function App() {
                               deleteDoc(globalInviteRef)
                             ]);
                           } catch (cleanErr) {
-                            console.warn('Asynchronous invitation cleanup omitted or failed:', cleanErr);
                           }
                         }
                       }
                     } catch (provErr) {
-                      console.error('Failed to provision nested user document:', provErr);
                     }
 
                     setUser({ 
@@ -2413,7 +2368,6 @@ export default function App() {
                   eventOccasions: orgData.eventOccasions || DEFAULT_EVENT_OCCASIONS
                 });
               } catch (err) {
-                console.error('Failed to initialize org defaults:', err);
               }
             }
 
@@ -2542,7 +2496,6 @@ export default function App() {
     const q = query(nRef, where('read', '==', false), orderBy('timestamp', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      console.log('App Notification Snapshot:', snapshot.size, 'unread notifications');
       const allData = snapshot.docs
         .map(doc => ({ ...doc.data(), id: doc.id } as Notification))
         .filter(n => !n.deleted);
@@ -2638,7 +2591,6 @@ export default function App() {
       if (!user?.organizationId || !organization || organization.migratedToHierarchy || (user.role !== 'ADMIN' && user.role !== 'MASTER_ADMIN')) return;
       
       const orgId = user.organizationId;
-      console.log(`Starting Data Migration for Org: ${orgId}`);
       
       try {
         // Step 1: Migrate Users to nested collection
@@ -2694,10 +2646,8 @@ export default function App() {
 
         // Final Step: Mark migration as complete
         await updateDoc(doc(db, 'organizations', orgId), { migratedToHierarchy: true });
-        console.log('Hierarchy Migration Complete.');
         addToast('Database upgraded to hierarchical structure', 'success');
       } catch (err) {
-        console.error('Migration Engine Failure:', err);
       }
     };
 
@@ -2715,17 +2665,15 @@ export default function App() {
         // If they still have other active available organizations, bypass lockout and quietly clear flags
         const hasOtherOrgs = ((user as any).associatedOrgs && (user as any).associatedOrgs.length > 0) || (availableOrgs && availableOrgs.length > 0);
         if (hasOtherOrgs) {
-          console.log("User was deactivated in one workspace but has other active workspaces. Quietly clearing revocation flags.");
           try {
             await updateDoc(doc(db, 'users', user.uid), {
               revokedFrom: deleteField(),
               revokedAt: deleteField()
             });
-          } catch (e) { console.error("Quietly clearing revocation failed:", e); }
+          } catch (e) {}
           return;
         }
 
-        console.log('Revocation detected for user:', user.uid);
         const hasShown = sessionStorage.getItem(`revoked_shown_${user.uid}`);
         if (!hasShown) {
           sessionStorage.setItem(`revoked_shown_${user.uid}`, 'true');
@@ -2764,13 +2712,12 @@ export default function App() {
               revokedFrom: deleteField(),
               revokedAt: deleteField()
             });
-          } catch (e) { console.error("Cleanup failed:", e); }
+          } catch (e) {}
         }
       }
 
       // 2. Background Invite Check for all users
       if (user && user.email) {
-        console.log('Performing background invite check for:', user.email);
         const normalizedEmail = user.email.toLowerCase().trim();
         const inviteRef = doc(db, 'invitations', normalizedEmail);
         const inviteSnap = await getDoc(inviteRef);
@@ -2788,11 +2735,10 @@ export default function App() {
             );
 
             if (isOrgIdMatch || isAlreadyLinked) {
-              console.log('User is already member of invited org. Cleaning up obsolete invitation.');
               try {
                 await deleteDoc(inviteRef);
                 await deleteDoc(doc(db, 'organizations', orgId, 'invitations', normalizedEmail));
-              } catch (e) { console.warn('Obsolete invite cleanup failed', e); }
+              } catch (e) {}
               return;
             }
 
@@ -2817,7 +2763,7 @@ export default function App() {
               try {
                 await deleteDoc(inviteRef);
                 await deleteDoc(doc(db, 'organizations', orgId, 'invitations', normalizedEmail));
-              } catch (e) { console.warn('Invite cleanup failed', e); }
+              } catch (e) {}
             } else {
               // User has a primary workspace - prompt to add as an additional workspace!
               const orgSnap = await getDoc(doc(db, 'organizations', orgId));
@@ -2876,7 +2822,7 @@ export default function App() {
                 try {
                   await deleteDoc(inviteRef);
                   await deleteDoc(doc(db, 'organizations', orgId, 'invitations', normalizedEmail));
-                } catch (e) { console.warn('Invite cleanup failed', e); }
+                } catch (e) {}
 
                 // 4. Alert success & redirect to selector
                 await Swal.fire({
@@ -2933,7 +2879,6 @@ export default function App() {
   // Fetch visitors from Firestore (already handled by real-time listener in useEffect)
   const fetchVisitors = async (silent = false) => {
     // This is now redundant but kept as a no-op to avoid breaking dependencies
-    console.log("fetchVisitors is handled by Firestore real-time listener.");
   };
 
   useEffect(() => {
@@ -2941,7 +2886,6 @@ export default function App() {
     const syncLocalEntries = async () => {
       const localEntries = JSON.parse(localStorage.getItem('vms_emergency_entries') || '[]');
       if (localEntries.length > 0) {
-        console.log(`Syncing ${localEntries.length} local emergency entries...`);
         for (const entry of localEntries) {
           try {
             await fetch('/api/visitors', {
@@ -2950,7 +2894,6 @@ export default function App() {
               body: JSON.stringify(entry),
             });
           } catch (e) {
-            console.error('Sync failed for entry:', entry.visitorId);
           }
         }
         localStorage.removeItem('vms_emergency_entries');
@@ -3078,7 +3021,6 @@ export default function App() {
             revokedAt: new Date().toISOString()
           });
         } catch (e) {
-          console.log('User root doc might not exist yet (invited but not logged in), skipping global update');
         }
 
         // 2. Clear org profile by marking as deleted
@@ -3185,7 +3127,6 @@ export default function App() {
       try {
         const orgId = user?.organizationId || targetUser.organizationId || organization?.id;
         if (!orgId) {
-          console.error('Role Update Failed: Org Context Missing', { userOrgId: user?.organizationId, targetUserOrgId: targetUser.organizationId, stateOrgId: organization?.id });
           throw new Error('Organization context not resolved. Please refresh and try again.');
         }
 
@@ -3206,13 +3147,11 @@ export default function App() {
             updatedAt: new Date().toISOString()
           });
         } catch (e) {
-          console.warn('Global registry update sync failed - subcollection remains source of truth');
         }
 
         await logActivity('ROLE_CHANGE', `Permissions updated for ${targetUser.name}: Now ${newRole}`);
         addToast(`Permissions updated: ${targetUser.name} is now a ${newRole}`, 'success');
       } catch (error: any) {
-        console.error('Role Update Execution Error:', error);
         const detailedError = error.code === 'permission-denied' 
           ? 'Security Policy Restriction: You do not have sufficient authority to modify this role.'
           : error.message;
@@ -3333,7 +3272,6 @@ export default function App() {
       await updateDoc(orgRef, updateData);
       addToast('Branding updated successfully', 'success');
     } catch (error: any) {
-      console.error('Branding Update Error:', error);
       addToast(error.message || 'Failed to update branding', 'error');
     }
   };
@@ -3347,7 +3285,6 @@ export default function App() {
         whatsappSentAt: new Date().toISOString()
       });
     } catch (err) {
-      console.error('Failed to update WhatsApp status', err);
     }
   };
 
@@ -3387,7 +3324,6 @@ export default function App() {
             body: JSON.stringify({ status: 'DELETED' })
           });
         } catch (apiErr) {
-          console.error('Failed to sync deletion to backend:', apiErr);
         }
 
         await logActivity('DELETE_VISITOR', `Deleted visitor record ID: ${visitorId}`);
@@ -3397,7 +3333,6 @@ export default function App() {
           'success'
         );
       } catch (error) {
-        console.error('Failed to delete visitor:', error);
         addToast('Failed to delete record', 'error');
       }
     }
@@ -3419,7 +3354,6 @@ export default function App() {
       await logActivity('BULK_CHECK_OUT', `Checked out ${visitorIds.length} visitors`);
       addToast(`Successfully checked out ${visitorIds.length} visitors`, 'success');
     } catch (error) {
-      console.error('Failed bulk check-out:', error);
       addToast('Failed to complete bulk check-out', 'error');
     }
   };
@@ -3449,13 +3383,12 @@ export default function App() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: 'DELETED' })
           });
-        } catch (e) { console.error('Bulk delete sync failed for', id); }
+        } catch (e) {}
       }
 
       await logActivity('BULK_DELETE', `Soft deleted ${visitorIds.length} visitor records`);
       addToast(`Successfully deleted ${visitorIds.length} records`, 'info');
     } catch (error) {
-      console.error('Failed bulk delete:', error);
       addToast('Failed to complete bulk delete', 'error');
     }
   };
@@ -3716,7 +3649,7 @@ export default function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newDonation)
-        }).catch(err => console.error('Donation sync failed:', err));
+        }).catch(err => {})
 
         await logActivity('ADD_DONATION', `Captured ${newDonation.status} contribution of ₹${formValues.amount} from ${formValues.visitorName}`);
         addToast('Professional contribution saved to audit trail!', 'success');
@@ -3763,7 +3696,6 @@ export default function App() {
         iconColor: '#10b981'
       });
     } catch (error) {
-      console.error('Emergency entry error:', error);
       addToast('Critical: Failed to save emergency record', 'error');
       setIsSaving(false);
     }
@@ -3776,7 +3708,6 @@ export default function App() {
     // Robust validation for phone number used in document references
     // Relaxed for emergency entries as per user request
     if (!data.isEmergency && (!data.phone || typeof data.phone !== 'string' || data.phone.trim() === '')) {
-      console.error('Missing phone number in saveVisitor data:', data);
       addToast('A valid phone number is required to save the record.', 'error');
       return;
     }
@@ -3842,7 +3773,6 @@ export default function App() {
             body: JSON.stringify(syncData)
           });
         } catch (apiErr) {
-          console.error('Failed to sync update to backend:', apiErr);
         }
 
         await logActivity('UPDATE_VISITOR', `Updated visitor: ${data.name} (Visit: ${editingVisitor.visitId})`);
@@ -3912,7 +3842,7 @@ export default function App() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...profileData, ...visitData, visitorId: visitId })
-          }).catch(err => console.error('Background sync failed:', err));
+          }).catch(err => {})
 
           if (isKioskMode) {
             kioskSpeak('CHECK_IN_SUCCESS', kioskLang, voiceEnabled);
@@ -3955,7 +3885,6 @@ export default function App() {
       setEditingVisitor(null);
       setShowForm(false);
     } catch (error: any) {
-      console.error('Failed to save visitor:', error);
       addToast(error.message || 'Failed to save record', 'error');
     } finally {
       setIsSaving(false);
@@ -4007,7 +3936,6 @@ export default function App() {
         await logActivity('DEACTIVATE_ORG', `Organization ${organization.name} has been deactivated.`);
         addToast('Organization deactivated successfully', 'success');
       } catch (err) {
-        console.error('Failed to deactivate organization:', err);
         addToast('Failed to deactivate organization', 'error');
       } finally {
         setIsSaving(false);
@@ -4061,7 +3989,6 @@ export default function App() {
       });
       addToast('Pass marked as printed', 'success');
     } catch (err) {
-      console.error('Failed to mark pass as printed:', err);
     }
   };
 
@@ -4077,7 +4004,6 @@ export default function App() {
       await batch.commit();
       addToast(`Batch of ${visitorIds.length} passes recorded as printed`, 'success');
     } catch (err) {
-      console.error('Bulk print recording failed:', err);
     }
   };
 
@@ -4189,7 +4115,6 @@ export default function App() {
              }
          }
        } catch (err) {
-         console.error('Error securely verifying pass status:', err);
        }
 
        kioskSpeak('INVALID_QR', kioskLang, voiceEnabled);
@@ -4250,7 +4175,6 @@ export default function App() {
             updatedAt: new Date().toISOString()
           });
         } catch (preRegErr) {
-          console.error('Failed to update pre-registration on checkout:', preRegErr);
         }
       }
 
@@ -4263,7 +4187,6 @@ export default function App() {
           body: JSON.stringify({ checkOutTime, visitor: fullVisitor, organizationId: orgId })
         });
       } catch (apiErr) {
-        console.error('Failed to sync checkout to backend:', apiErr);
       }
       
       // Show success animation and pop-up toast notification
@@ -4280,7 +4203,6 @@ export default function App() {
       }
       return true;
     } catch (error) {
-      console.error('Failed to check out visitor:', error);
       addToast('Failed to check out visitor', 'error');
       return false;
     } finally {
@@ -4316,10 +4238,8 @@ export default function App() {
           apiSuccess = true;
         } else {
           const errData = await response.json();
-          console.warn('Backend review API returned error:', errData);
         }
       } catch (apiErr) {
-        console.error('Failed to sync review via API:', apiErr);
       }
 
       // 3. Update Firestore (Redundant but keeps UI reactive if rules allow)
@@ -4346,7 +4266,6 @@ export default function App() {
           }
         });
       } catch (dbErr: any) {
-        console.warn('Firestore direct update failed (expected if permissions limited):', dbErr.message);
         // If API also failed and Firestore failed, then we show error
         if (!apiSuccess) {
           throw dbErr;
@@ -4364,13 +4283,11 @@ export default function App() {
           relatedId: vid
         });
       } catch (nErr) {
-        console.warn('Notification creation failed:', nErr);
       }
 
       addToast('Thank you for your review!', 'success');
       setReviewVisitor(null);
     } catch (error: any) {
-      console.error('Error saving review:', error);
       // More descriptive error for "Missing or insufficient permissions"
       if (error.message?.includes('permissions')) {
         addToast('Permission denied by security policy. Please contact admin.', 'error');
@@ -4665,6 +4582,7 @@ export default function App() {
 
   const handleExitKiosk = async () => {
     setActivePinDialog('EXIT');
+    kioskSpeak('EXIT_PIN_REQUIRED', kioskLang, voiceEnabled);
   };
 
   const handleCallStaff = async () => {
@@ -4680,7 +4598,6 @@ export default function App() {
       });
       addToast(kioskLang === 'EN' ? 'Staff has been notified. Please wait.' : 'कर्मचारियों को सूचित कर दिया गया है। कृपया प्रतीक्षा करें।', 'success');
     } catch (err) {
-      console.error('Failed to call staff:', err);
       addToast(kioskLang === 'EN' ? 'Failed to call staff' : 'कर्मचारियों को बुलाने में विफल', 'error');
     }
   };
@@ -4692,6 +4609,7 @@ export default function App() {
       return;
     }
     setActivePinDialog('ENTER');
+    kioskSpeak('ENTER_PIN_REQUIRED', kioskLang, voiceEnabled);
   };
 
   const onKioskPinConfirm = async (enteredPin: string) => {
@@ -4700,6 +4618,7 @@ export default function App() {
       setIsKioskMode(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
       addToast('Kiosk Mode Activated', 'success');
+      kioskSpeak('WELCOME', kioskLang, voiceEnabled);
     } else if (activePinDialog === 'EXIT') {
       localStorage.setItem('vms_kiosk_mode', 'false');
       setIsKioskMode(false);
@@ -4720,7 +4639,6 @@ export default function App() {
         setIsKioskMode(true);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } catch (err) {
-        console.error('Failed to set PIN:', err);
         addToast('Failed to save PIN', 'error');
       }
     }
@@ -4961,7 +4879,6 @@ export default function App() {
         }
       });
     } catch (error) {
-      console.error('Kiosk check-in error:', error);
       Swal.fire({
         title: kioskLang === 'EN' ? 'Check-in Failed' : 'चेक-इन विफल रहा',
         text: kioskLang === 'EN' ? 'An unexpected error occurred. Please try standard entry.' : 'एक अप्रत्याशित त्रुटि हुई। कृपया सामान्य चेक-इन का प्रयास करें।',
@@ -6860,8 +6777,8 @@ export default function App() {
                       <BarChart3 className="h-5 w-5 text-slate-400" />
                     </div>
                   </div>
-                  <div className="h-80 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
+                  <ChartContainer className="h-80 w-full">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                       <BarChart
                         data={[
                           { name: 'Donor', count: stats.allTime.donors },
@@ -6894,7 +6811,7 @@ export default function App() {
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
-                  </div>
+                  </ChartContainer>
                 </div>
 
                 <div className="bg-white/60 backdrop-blur-xl p-10 rounded-[2.5rem] shadow-2xl shadow-slate-100/50 border border-slate-100">
@@ -6907,8 +6824,8 @@ export default function App() {
                       <PieChart className="h-5 w-5 text-slate-400" />
                     </div>
                   </div>
-                  <div className="h-80 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
+                  <ChartContainer className="h-80 w-full">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                       <RePieChart>
                         <Pie
                           data={[
@@ -6933,7 +6850,7 @@ export default function App() {
                         />
                       </RePieChart>
                     </ResponsiveContainer>
-                  </div>
+                  </ChartContainer>
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
                     {[
                       { label: 'Donors', color: 'bg-blue-600' },
@@ -6955,8 +6872,8 @@ export default function App() {
                     <BarChart3 className="h-5 w-5 text-brand-blue" />
                     Daily Trend (Last 7 Days)
                   </h3>
-                  <div className="h-80 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
+                  <ChartContainer className="h-80 w-full">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                       <BarChart
                         data={stats.dailyTrend}
                         margin={{ top: 20, right: 30, left: 0, bottom: 0 }}
@@ -6980,7 +6897,7 @@ export default function App() {
                         <Bar dataKey="count" fill="#2563eb" radius={[8, 8, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
-                  </div>
+                  </ChartContainer>
                 </div>
 
                 {/* Frequent Visitors & Peak Time */}
@@ -7186,7 +7103,7 @@ export default function App() {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(newDonation)
-                      }).catch(err => console.error('Donation sync failed:', err));
+                      }).catch(err => {})
 
                       await logActivity('ADD_DONATION', `Added donation of ₹${donationData.amount} for ${donationData.visitorName}`);
                       addToast('Donation added and synced!', 'success');
@@ -7210,7 +7127,7 @@ export default function App() {
                       // Delete from backend
                       fetch(`/api/donations/${donationId}`, {
                         method: 'DELETE'
-                      }).catch(err => console.error('Donation deletion sync failed:', err));
+                      }).catch(err => {})
                       
                       addToast('Donation record deleted and synced', 'info');
                     } catch (error: any) {
@@ -7250,7 +7167,7 @@ export default function App() {
                           method: 'PUT',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify(updatedDonationSnap.data())
-                        }).catch(err => console.error('Donation update sync failed:', err));
+                        }).catch(err => {})
                       }
                       
                       addToast('Donation updated and audit record saved!', 'success');
@@ -8143,7 +8060,6 @@ export default function App() {
                     await updateDoc(doc(db, 'organizations', organization.id, 'users', user.uid), acceptanceFields);
                   }
                 } catch (userErr) {
-                  console.warn('Profile documentation update failed:', userErr);
                 }
               }
 
@@ -8154,7 +8070,6 @@ export default function App() {
                     legalAccepted: true
                   });
                 } catch (err) {
-                  console.error('Failed to accept legal terms:', err);
                 }
               }
               setShowTermsAcceptance(false);
@@ -8326,8 +8241,8 @@ function StatCard({ title, value, icon, trend, color = 'blue', delay = 0, chartD
         </div>
         
         {/* Subtle Mini Chart */}
-        <div className="h-12 w-24">
-          <ResponsiveContainer width="100%" height="100%">
+        <ChartContainer className="h-12 w-24">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
             <AreaChart data={data}>
               <defs>
                 <linearGradient id={`grad-${color}`} x1="0" y1="0" x2="0" y2="1">
@@ -8346,7 +8261,7 @@ function StatCard({ title, value, icon, trend, color = 'blue', delay = 0, chartD
               />
             </AreaChart>
           </ResponsiveContainer>
-        </div>
+        </ChartContainer>
       </div>
       
       <div className="space-y-4">
