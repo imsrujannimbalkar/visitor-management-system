@@ -642,6 +642,21 @@ export default function App() {
   };
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+    if (isProfileMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isProfileMenuOpen]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -5535,7 +5550,7 @@ export default function App() {
                 </div>
               </motion.button>
 
-              <div className="flex items-center gap-4 pl-4 border-l border-slate-100">
+              <div ref={profileMenuRef} className="flex items-center gap-4 pl-4 border-l border-slate-100">
                 <div className="hidden lg:flex flex-col items-end min-w-0">
                   <span className="text-sm font-bold text-slate-900 leading-none truncate max-w-[150px]">{user.name || 'Sam Joe'}</span>
                   <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 truncate max-w-[150px]">{user.role || 'MASTER_ADMIN'}</span>
@@ -5843,9 +5858,9 @@ export default function App() {
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100"
+            className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 flex flex-col max-h-[90vh] sm:max-h-[85vh]"
           >
-            <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+            <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
                   <Command className="h-5 w-5 text-white" />
@@ -5863,7 +5878,7 @@ export default function App() {
               </button>
             </div>
             
-            <div className="p-6 grid grid-cols-1 gap-4">
+            <div className="p-6 grid grid-cols-1 gap-4 overflow-y-auto custom-scrollbar flex-1">
               {[
                 { key: 'Ctrl + K', desc: 'Focus Search Bar', alt: '/' },
                 { key: 'Ctrl + B', desc: 'Toggle Sidebar' },
@@ -5872,7 +5887,7 @@ export default function App() {
                 { key: 'Ctrl + H', desc: 'Show this Help Modal' },
                 { key: 'ESC', desc: 'Close Modal or Menus' },
               ].map((shortcut) => (
-                <div key={shortcut.key} className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                <div key={shortcut.key} className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-100 shrink-0">
                   <span className="text-sm font-bold text-slate-600">{shortcut.desc}</span>
                   <div className="flex items-center gap-2">
                     <kbd className="px-2 py-1 rounded-lg bg-white border-b-2 border-slate-200 text-xs font-black text-slate-900 shadow-sm min-w-[30px] text-center uppercase">
@@ -5891,7 +5906,7 @@ export default function App() {
               ))}
             </div>
 
-            <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex justify-center">
+            <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex justify-center shrink-0">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Designed for High Productivity</span>
             </div>
           </motion.div>
