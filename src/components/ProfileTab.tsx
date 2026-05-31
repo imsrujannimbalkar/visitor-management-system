@@ -25,7 +25,6 @@ import {
   RefreshCw
 } from 'lucide-react';
 import Swal from 'sweetalert2';
-import GoogleIntegration from './GoogleIntegration';
 import { User as UserType, Organization } from '../types';
 import { db } from '../firebase';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
@@ -37,32 +36,9 @@ interface ProfileTabProps {
   onLogout?: () => void;
   hasMultiOrg?: boolean;
   onSwitchWorkspace?: () => void;
-  // Google Integration Props
-  googleStatus: { 
-    connected: boolean; 
-    spreadsheetId?: string | null; 
-    calendarId?: string | null;
-    birthdayCalendarId?: string | null;
-    lastSyncTime?: string | null;
-    totalRecordsSynced?: number | null;
-    totalEventsSynced?: number | null;
-  };
-  availableSheets: { id: string; name: string }[];
-  availableCalendars: { id: string; summary: string }[];
-  isFetchingSheets: boolean;
-  isFetchingCalendars: boolean;
-  isSyncingGoogle: boolean;
-  onConnectGoogle: () => void;
-  onDisconnectGoogle: () => void;
-  onSelectSheet: (id: string) => void;
-  onCreateSheet: () => void;
-  onSelectCalendar: (id: string, type?: 'primary' | 'birthday') => void;
-  onCreateCalendar: (type?: 'primary' | 'birthday') => void;
-  onSyncNow: () => void;
-  onRefreshLists: () => void;
-  onCreateBackup: () => void;
   onRestoreBackup?: (data: any) => Promise<void>;
   onFetchBackups: () => Promise<any[]>;
+  onCreateBackup: () => void;
 }
 
 export default function ProfileTab({ 
@@ -72,20 +48,6 @@ export default function ProfileTab({
   onLogout,
   hasMultiOrg,
   onSwitchWorkspace,
-  googleStatus,
-  availableSheets,
-  availableCalendars,
-  isFetchingSheets,
-  isFetchingCalendars,
-  isSyncingGoogle,
-  onConnectGoogle,
-  onDisconnectGoogle,
-  onSelectSheet,
-  onCreateSheet,
-  onSelectCalendar,
-  onCreateCalendar,
-  onSyncNow,
-  onRefreshLists,
   onCreateBackup,
   onRestoreBackup,
   onFetchBackups
@@ -457,31 +419,7 @@ export default function ProfileTab({
              </div>
            </div>
 
-           {/* Premium Google Integrations Section */}
-           {(user.role === 'ADMIN' || user.role === 'MASTER_ADMIN') && (
-             <GoogleIntegration 
-                userEmail={user?.email}
-                googleStatus={googleStatus}
-                availableSheets={availableSheets}
-                availableCalendars={availableCalendars}
-                isFetchingSheets={isFetchingSheets}
-                isFetchingCalendars={isFetchingCalendars}
-                isSyncingGoogle={isSyncingGoogle}
-                onConnectGoogle={onConnectGoogle}
-                onDisconnectGoogle={onDisconnectGoogle}
-                onSelectSheet={onSelectSheet}
-                onCreateSheet={onCreateSheet}
-                onSelectCalendar={onSelectCalendar}
-                onCreateCalendar={onCreateCalendar}
-                onSyncNow={onSyncNow}
-                onRefreshLists={onRefreshLists}
-                autoSyncEnabled={organization?.autoSyncEnabled !== false}
-              />
-           )}
-          </div>
-
-          <div className="space-y-8">
-            {/* Organization Metadata Card - Fixed for All Levels */}
+           {/* Preferences Card */}
             <div className="bg-white rounded-[2rem] sm:rounded-[3rem] p-6 sm:p-12 border border-slate-100 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.05)]">
               <div className="flex items-center gap-4 mb-10">
                  <div className="h-10 w-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600">

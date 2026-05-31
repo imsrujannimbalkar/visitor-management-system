@@ -9,16 +9,95 @@ import { fileURLToPath } from 'url';
 import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import cron from 'node-cron';
+import * as xlsx from 'xlsx';
 import { safely, getFallback, setFallback, getAdminDb } from './lib/firestoreSafe.js';
-import { google } from 'googleapis';
-
-// Determine the current directory correctly for ES Modules
+// Automated Daily Tasks: Backups and Reminders
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Firebase Admin Initialization
 const adminDb = getAdminDb();
 const projectId = admin.app().options.projectId || process.env.FIREBASE_PROJECT_ID || '(default)';
+
+// Automated Monthly Tasks: Visitor Reports
+function generateExcelBuffer(visits: any[]) {
+  const worksheet = xlsx.utils.json_to_sheet(visits.map(v => ({
+    'Date': v.date,
+    'Name': v.visitorName,
+    'Phone': v.visitorPhone,
+    'Email': v.visitorEmail || '',
+    'Purpose': v.purpose,
+    'Check-in': v.checkInTime,
+    'Check-out': v.checkOutTime || '',
+    'Status': v.status,
+    'Notes': v.notes || ''
+  })));
+  const workbook = xlsx.utils.book_new();
+  xlsx.utils.book_append_sheet(workbook, worksheet, 'Visitors');
+  return xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+}
+
+async function generateMonthlyReports() {
+  if (!adminDb) return;
+  const lastMonthDate = new Date();
+  lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+  const year = lastMonthDate.getFullYear();
+  const month = (lastMonthDate.getMonth() + 1).toString().padStart(2, '0');
+  const monthStr = `${year}-${month}`;
+  
+  const firstDay = `${year}-${month}-01`;
+  const lastDay = new Date(year, lastMonthDate.getMonth() + 1, 0).toISOString().split('T')[0];
+
+  console.log(`[System] Generating monthly reports for ${monthStr}...`);
+
+  try {
+    const orgsSnap = await safely(adminDb.collection('organizations').get(), getFallback);
+    for (const orgDoc of orgsSnap.docs) {
+      const orgId = orgDoc.id;
+      const orgData = orgDoc.data();
+      
+      // Find Master Admin email
+      const usersSnap = await safely(orgDoc.ref.collection('users').where('role', '==', 'MASTER_ADMIN').get(), getFallback);
+      const masterAdmin = usersSnap.docs[0]?.data();
+      if (!masterAdmin?.email) continue;
+
+      try {
+        const visitsSnap = await safely(orgDoc.ref.collection('visits')
+          .where('date', '>=', firstDay)
+          .where('date', '<=', lastDay)
+          .get(), getFallback);
+        
+        const visits = visitsSnap.docs.map(d => d.data());
+        const buffer = generateExcelBuffer(visits);
+        
+        const reportId = `REPORT-${orgId}-${monthStr}`;
+        await safely(orgDoc.ref.collection('reports').doc(reportId).set({
+          id: reportId,
+          organizationId: orgId,
+          month: monthStr,
+          status: 'COMPLETED',
+          generatedAt: new Date().toISOString(),
+          stats: {
+            totalVisitors: visits.length,
+            fileSize: buffer.length
+          },
+          type: 'MONTHLY_EXCEL_BACKUP'
+        }), undefined);
+
+        console.log(`[Reports] Monthly report generated for ${orgId} - ${monthStr}`);
+      } catch (error) {
+        console.error(`[Reports] Failed for ${orgId}:`, error);
+      }
+    }
+  } catch (err) {
+    console.error('[Reports] Global failure:', err);
+  }
+}
+
+// Monthly at midnight on the 1st
+cron.schedule('0 0 1 * *', () => {
+  generateMonthlyReports();
+});
 
 // Automated Daily Tasks: Backups and Reminders
 async function runDailyTasks() {
@@ -358,11 +437,6 @@ app.get('/api/visitors', asyncHandler(async (req, res) => {
   res.json([]);
 }));
 
-const syncToGoogle = async (organizationId: string, visitor: any, isUpdate: boolean = false) => {
-  // Logic removed as per request. Keeping UI as is.
-  console.log(`[Mock Sync] ${isUpdate ? 'Update' : 'New'} visitor sync triggered for ${organizationId}`);
-};
-
 app.post('/api/visitors', asyncHandler(async (req, res) => {
   const visitorData = req.body;
   const { organizationId } = visitorData;
@@ -389,9 +463,6 @@ app.post('/api/visitors', asyncHandler(async (req, res) => {
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
   };
-
-  // Trigger sync
-  syncToGoogle(organizationId, result, false);
 
   res.status(201).json(result);
 }));
@@ -456,9 +527,6 @@ app.post('/api/visitors/:id/checkin', asyncHandler(async (req, res) => {
     processedBy: 'AUTO_SCAN'
   }), undefined);
 
-  // Sync to Google
-  syncToGoogle(organizationId, visitData as any, false);
-
   res.status(200).json(visitData);
 }));
 
@@ -511,9 +579,6 @@ app.put('/api/visitors/:id/checkout', asyncHandler(async (req, res) => {
   await safely(visitRef.update(updates), undefined);
 
   const updatedData = { ...visitSnap.data(), ...updates, visitorId: id };
-
-  // Trigger sync for checkout
-  syncToGoogle(organizationId, updatedData, true);
 
   res.json({ success: true, message: 'Checked out successfully', visitor: updatedData });
 }));
@@ -685,63 +750,39 @@ app.delete('/api/donations/:id', asyncHandler(async (req, res) => {
   res.json({ success: true, message: `Donation ${id} deletion acknowledged.` });
 }));
 
-// Google OAuth Routes (Mocked)
-app.get('/api/auth/google/url', (req, res) => {
-  res.json({ url: '#' });
-});
-
-app.get('/api/auth/google/callback', asyncHandler(async (req, res) => {
-  res.redirect('/');
+// Report Endpoints
+app.get('/api/reports', asyncHandler(async (req, res) => {
+  const { organizationId } = req.query;
+  if (!organizationId) return res.status(400).json({ error: 'Org ID required' });
+  const snap = await safely(adminDb.collection('organizations').doc(organizationId.toString()).collection('reports').orderBy('month', 'desc').get(), getFallback);
+  const reports = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  res.json(reports);
 }));
 
-app.get('/api/google/config', asyncHandler(async (req, res) => {
-  res.json({ connected: false });
-}));
-
-app.get('/api/google/sheets', asyncHandler(async (req, res) => {
-  res.json([]);
-}));
-
-app.post('/api/google/sheets/select', asyncHandler(async (req, res) => {
-  res.json({ success: true });
-}));
-
-app.post('/api/google/sheets/create', asyncHandler(async (req, res) => {
-  res.json({ success: true, spreadsheetId: 'mock-sheet-id' });
-}));
-
-app.get('/api/google/calendars', asyncHandler(async (req, res) => {
-  res.json([]);
-}));
-
-app.post('/api/google/calendar/select', asyncHandler(async (req, res) => {
-  res.json({ success: true });
-}));
-
-app.post('/api/google/calendar/birthday/select', asyncHandler(async (req, res) => {
-  res.json({ success: true });
-}));
-
-app.post('/api/google/calendar/create', asyncHandler(async (req, res) => {
-  res.json({ success: true, id: 'mock-calendar-id' });
-}));
-
-app.post('/api/google/calendar/birthday/create', asyncHandler(async (req, res) => {
-  res.json({ success: true, id: 'mock-birthday-calendar-id' });
-}));
-
-app.post('/api/google/sync', asyncHandler(async (req, res) => {
-  res.json({ 
-    success: true, 
-    message: 'Manual sync mock completed.',
-    lastSyncTime: new Date().toLocaleString(),
-    totalRecordsSynced: 0,
-    totalEventsSynced: 0
-  });
-}));
-
-app.post('/api/google/disconnect', asyncHandler(async (req, res) => {
-  res.json({ success: true });
+app.get('/api/reports/:id/download', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { organizationId } = req.query;
+  if (!organizationId) return res.status(400).json({ error: 'Org ID required' });
+  
+  const reportDoc = await safely(adminDb.collection('organizations').doc(organizationId.toString()).collection('reports').doc(id).get(), getFallback);
+  if (!reportDoc.exists) return res.status(404).json({ error: 'Report not found' });
+  
+  const reportData = reportDoc.data();
+  const [year, month] = reportData.month.split('-');
+  const firstDay = `${year}-${month}-01`;
+  const lastDay = new Date(parseInt(year), parseInt(month), 0).toISOString().split('T')[0];
+  
+  const visitsSnap = await safely(adminDb.collection('organizations').doc(organizationId.toString()).collection('visits')
+    .where('date', '>=', firstDay)
+    .where('date', '<=', lastDay)
+    .get(), getFallback);
+    
+  const visits = visitsSnap.docs.map(d => d.data());
+  const buffer = generateExcelBuffer(visits);
+  
+  res.setHeader('Content-Disposition', `attachment; filename=Visitor_Report_${reportData.month}.xlsx`);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.status(200).send(buffer);
 }));
 
 // Vite middleware for development

@@ -5,7 +5,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import GoogleIntegration from './components/GoogleIntegration';
 import {
   User as UserIcon,
   Users,
@@ -101,6 +100,7 @@ import ReviewsTab from './components/ReviewsTab';
 import ReviewModal from './components/ReviewModal';
 import ActivityLogsTab from './components/ActivityLogsTab';
 import DonationsTab from './components/DonationsTab';
+import ReportsTab from './components/ReportsTab';
 import AppFeedbackModal from './components/AppFeedbackModal';
 import BugReportModal from './components/BugReportModal';
 import VisitorPass from './components/VisitorPass';
@@ -193,13 +193,6 @@ const AppSwal = Swal.mixin({
     cancelButton: 'rounded-xl font-bold px-8 py-3'
   }
 });
-
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-const GOOGLE_REDIRECT_URI = import.meta.env.VITE_GOOGLE_REDIRECT_URI;
-const GOOGLE_SCOPES = [
-  'https://www.googleapis.com/auth/spreadsheets',
-  'https://www.googleapis.com/auth/calendar'
-].join(' ');
 
 const Skeleton = ({ className }: { className?: string }) => (
   <div className={`animate-pulse bg-slate-200 dark:bg-slate-800 rounded-lg ${className}`} />
@@ -592,7 +585,7 @@ export default function App() {
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [adaptiveMobileTabs, setAdaptiveMobileTabs] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'visitors' | 'records' | 'analysis' | 'profile' | 'settings' | 'birthdays' | 'reviews' | 'users' | 'logs' | 'donations' | 'organizations' | 'legal' | 'pre-registrations' | 'inquiries'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'visitors' | 'records' | 'analysis' | 'profile' | 'settings' | 'birthdays' | 'reviews' | 'users' | 'logs' | 'donations' | 'organizations' | 'legal' | 'pre-registrations' | 'inquiries' | 'reports'>('dashboard');
   const [settingsSubTab, setSettingsSubTab] = useState<'Identity' | 'Visibility' | 'Forms' | 'Security'>('Identity');
   const [preRegFilter, setPreRegFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CHECKED_IN'>('PENDING');
   const [legalSubView, setLegalSubView] = useState<'privacy' | 'terms' | 'support'>('support');
@@ -858,6 +851,7 @@ export default function App() {
       'logs': 'Logs',
       'profile': 'Profile',
       'donations': 'Donations',
+      'reports': 'Reports',
       'legal': 'Support',
       'pre-registrations': 'Pre-Reg'
     };
@@ -877,6 +871,7 @@ export default function App() {
       { id: 'records', label: 'Records', icon: <ClipboardList /> },
       { id: 'analysis', label: 'Analytics', icon: <BarChart3 />, adminOnly: true },
       { id: 'donations', label: 'Donations', icon: <Heart />, adminOnly: true },
+      { id: 'reports', label: 'Reports', icon: <FileText />, adminOnly: true },
     ]},
     { section: 'COMMUNITY', tabs: [
       { id: 'birthdays', label: 'Birthdays', icon: <Gift /> },
@@ -1028,221 +1023,6 @@ export default function App() {
     showToast(message, type === 'info' ? 'info' : type);
   }, [showToast]);
 
-  const [googleConfig, setGoogleConfig] = useState<{ 
-    connected: boolean; 
-    spreadsheetId: string | null; 
-    calendarId: string | null; 
-    birthdayCalendarId: string | null;
-    lastSyncTime: string | null;
-    totalRecordsSynced: number | null;
-    totalEventsSynced: number | null;
-    loading: boolean 
-  }>({ 
-    connected: false, 
-    spreadsheetId: null, 
-    calendarId: null, 
-    birthdayCalendarId: null,
-    lastSyncTime: null,
-    totalRecordsSynced: null,
-    totalEventsSynced: null,
-    loading: true 
-  });
-
-  // Re-initialize from localStorage when org becomes available
-  useEffect(() => {
-    if (effectiveOrgId) {
-      const saved = localStorage.getItem(`vms_google_connected_${effectiveOrgId}`);
-      const sheet = localStorage.getItem(`vms_google_sheet_${effectiveOrgId}`);
-      const cal = localStorage.getItem(`vms_google_calendar_${effectiveOrgId}`);
-      const bday = localStorage.getItem(`vms_google_birthday_calendar_${effectiveOrgId}`);
-      
-      if (saved === 'true') {
-        setGoogleConfig(prev => ({
-          ...prev,
-          connected: true,
-          spreadsheetId: sheet,
-          calendarId: cal,
-          birthdayCalendarId: bday,
-          loading: false
-        }));
-      } else {
-        // If not explicitly saved as connected, we keep the loading state until fetch confirms
-        setGoogleConfig(prev => ({ ...prev, loading: true }));
-      }
-    }
-  }, [effectiveOrgId]);
-
-  const [availableSheets, setAvailableSheets] = useState<{ id: string; name: string }[]>([]);
-  const [availableCalendars, setAvailableCalendars] = useState<{ id: string; summary: string }[]>([]);
-  const [isFetchingSheets, setIsFetchingSheets] = useState(false);
-  const [isFetchingCalendars, setIsFetchingCalendars] = useState(false);
-
-  const lastConnectionRef = React.useRef<number>(0);
-
-  const fetchGoogleConfig = useCallback(async () => {
-    if (!effectiveOrgId) return;
-    try {
-      // Use shorter timeout for status checks
-      const response = await fetch(`/api/google/config?organizationId=${effectiveOrgId}`);
-      if (response.ok) {
-        const data = await response.json();
-        
-        setGoogleConfig(prev => {
-          // PROTECTION: If we just established a connection or have a localStorage hint,
-          // be extremely conservative about flipping to false.
-          const isRecentlyConnected = Date.now() - lastConnectionRef.current < 60000;
-          const hasLocalHint = localStorage.getItem(`vms_google_connected_${effectiveOrgId}`) === 'true';
-          
-          if ((prev.connected || hasLocalHint) && !data.connected && isRecentlyConnected) {
-             return prev;
-          }
-
-          // If we have data, persist it immediately
-          if (data.connected) {
-            localStorage.setItem(`vms_google_connected_${effectiveOrgId}`, 'true');
-            if (data.spreadsheetId) localStorage.setItem(`vms_google_sheet_${effectiveOrgId}`, data.spreadsheetId);
-            if (data.calendarId) localStorage.setItem(`vms_google_calendar_${effectiveOrgId}`, data.calendarId);
-            if (data.birthdayCalendarId) localStorage.setItem(`vms_google_birthday_calendar_${effectiveOrgId}`, data.birthdayCalendarId);
-          } else {
-            // Only remove local hint if NOT in grace period
-            if (!isRecentlyConnected) {
-              localStorage.removeItem(`vms_google_connected_${effectiveOrgId}`);
-            }
-          }
-
-          return { ...data, loading: false };
-        });
-      } else {
-        setGoogleConfig(prev => ({ ...prev, loading: false }));
-      }
-    } catch (error) {
-      setGoogleConfig(prev => ({ ...prev, loading: false }));
-    }
-  }, [effectiveOrgId]);
-
-  const fetchAvailableSheets = useCallback(async () => {
-    if (!effectiveOrgId || !googleConfig.connected) return;
-    setIsFetchingSheets(true);
-    try {
-      const response = await fetch(`/api/google/sheets?organizationId=${effectiveOrgId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setAvailableSheets(data);
-      } else {
-        const errData = await response.json().catch(() => ({}));
-        if (response.status === 401) {
-        // Silently retry first
-        const isRecentlyConnected = Date.now() - lastConnectionRef.current < 45000;
-        if (isRecentlyConnected) {
-          return;
-        }
-        await new Promise(r => setTimeout(r, 2000));
-        const retryRes = await fetch(`/api/google/sheets?organizationId=${effectiveOrgId}`);
-        if (retryRes.ok) {
-          setAvailableSheets(await retryRes.json());
-        } else if (retryRes.status === 401) {
-          fetchGoogleConfig();
-        }
-      }
-    }
-  } catch (error) {
-    } finally {
-      setIsFetchingSheets(false);
-    }
-  }, [effectiveOrgId, googleConfig.connected, fetchGoogleConfig]);
-
-  const fetchAvailableCalendars = useCallback(async () => {
-    if (!effectiveOrgId || !googleConfig.connected) return;
-    setIsFetchingCalendars(true);
-    try {
-      const response = await fetch(`/api/google/calendars?organizationId=${effectiveOrgId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setAvailableCalendars(data);
-      } else if (response.status === 401) {
-        // Silently retry first
-        const isRecentlyConnected = Date.now() - lastConnectionRef.current < 45000;
-        if (isRecentlyConnected) {
-          return;
-        }
-        await new Promise(r => setTimeout(r, 2000));
-        const retryRes = await fetch(`/api/google/calendars?organizationId=${effectiveOrgId}`);
-        if (retryRes.ok) {
-          setAvailableCalendars(await retryRes.json());
-        } else if (retryRes.status === 401) {
-          fetchGoogleConfig();
-        }
-      }
-    } catch (error) {
-    } finally {
-      setIsFetchingCalendars(false);
-    }
-  }, [effectiveOrgId, googleConfig.connected, fetchGoogleConfig]);
-
-  useEffect(() => {
-    if (googleConfig.connected) {
-      // Delay fetching available items to let backend sync and verify connection
-      const timer = setTimeout(() => {
-        fetchAvailableSheets();
-        fetchAvailableCalendars();
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [googleConfig.connected, fetchAvailableSheets, fetchAvailableCalendars]);
-
-  useEffect(() => {
-    fetchGoogleConfig();
-  }, [fetchGoogleConfig]);
-
-  useEffect(() => {
-    const handleGoogleAuthMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'GOOGLE_AUTH_SUCCESS') {
-        // Optimistically set connected to true to show the dropdowns immediately
-        setGoogleConfig(prev => ({ ...prev, connected: true, loading: false }));
-        
-        if (effectiveOrgId) {
-          localStorage.setItem(`vms_google_connected_${effectiveOrgId}`, 'true');
-        }
-        
-        addToast('Google account linked successfully!', 'success');
-        
-        lastConnectionRef.current = Date.now();
-        
-        // Poll for backend confirmation to ensure UI stays connected
-        let attempts = 0;
-        const pollConfig = async () => {
-          if (!effectiveOrgId) return;
-          try {
-            const response = await fetch(`/api/google/config?organizationId=${effectiveOrgId}`);
-            if (response.ok) {
-              const data = await response.json();
-              if (data.connected) {
-                setGoogleConfig({ ...data, loading: false });
-                
-                // Fetch datasets immediately after confirmation
-                fetchAvailableSheets();
-                fetchAvailableCalendars();
-                return; // Backend confirmed connection
-              }
-            }
-          } catch (e) {
-          }
-          
-          attempts++;
-          if (attempts < 25) { // Increase attempts for slow Firestore propagation
-            setTimeout(pollConfig, 2000);
-          } else {
-            fetchGoogleConfig();
-          }
-        };
-        
-        setTimeout(pollConfig, 1500);
-      }
-    };
-    window.addEventListener('message', handleGoogleAuthMessage);
-    return () => window.removeEventListener('message', handleGoogleAuthMessage);
-  }, [effectiveOrgId, fetchGoogleConfig, fetchAvailableSheets, fetchAvailableCalendars, addToast]);
-
   const onFetchBackups = async () => {
     if (!effectiveOrgId) return [];
     try {
@@ -1252,7 +1032,7 @@ export default function App() {
     }
   };
 
-      const onRestoreBackup = async (data: any) => {
+  const onRestoreBackup = async (data: any) => {
     if (!effectiveOrgId) return;
     
     // Performance improvement: sanity check for data structure
@@ -1346,172 +1126,6 @@ export default function App() {
     const interval = setInterval(onCreateBackup, 24 * 60 * 60 * 1000);
     return () => clearInterval(interval);
   }, [effectiveOrgId]);
-
-  const connectGoogle = async () => {
-    addToast('Google Integration is currently Coming Soon!', 'info');
-  };
-
-  const createNewSheet = async () => {
-    if (!effectiveOrgId) return;
-    try {
-      const response = await fetch('/api/google/sheets/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationId: effectiveOrgId, name: `${organization?.name || 'VMS'} Visitor Logs` })
-      });
-      if (response.ok) {
-        fetchGoogleConfig();
-        // Auto-enable sync
-        if (organization && effectiveOrgId) {
-          try {
-            await updateDoc(doc(db, 'organizations', effectiveOrgId), { autoSyncEnabled: true });
-            setOrganization(prev => prev ? { ...prev, autoSyncEnabled: true } : null);
-          } catch (e) {}
-        }
-        addToast('New spreadsheet created and linked!', 'success');
-      }
-    } catch (error) {
-      addToast('Failed to create spreadsheet', 'error');
-    }
-  };
-
-  const selectExistingSheet = async (spreadsheetId: string) => {
-    if (!effectiveOrgId) return;
-    try {
-      const response = await fetch('/api/google/sheets/select', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationId: effectiveOrgId, spreadsheetId })
-      });
-      if (response.ok) {
-        fetchGoogleConfig();
-        // Auto-enable sync
-        if (organization && effectiveOrgId) {
-          try {
-            await updateDoc(doc(db, 'organizations', effectiveOrgId), { autoSyncEnabled: true });
-            setOrganization(prev => prev ? { ...prev, autoSyncEnabled: true } : null);
-          } catch (e) {}
-        }
-        addToast('Spreadsheet linked successfully!', 'success');
-      }
-    } catch (error) {
-      addToast('Failed to link spreadsheet', 'error');
-    }
-  };
-
-  const createNewCalendar = async (type: 'primary' | 'birthday' = 'primary') => {
-    if (!effectiveOrgId) return;
-    try {
-      const endpoint = type === 'birthday' ? '/api/google/calendar/birthday/create' : '/api/google/calendar/create';
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationId: effectiveOrgId, name: type === 'birthday' ? 'Visitor Birthdays' : `${organization?.name || 'VMS'} Appointments` })
-      });
-      if (response.ok) {
-        fetchGoogleConfig();
-        // Auto-enable sync
-        if (organization && effectiveOrgId) {
-          try {
-            await updateDoc(doc(db, 'organizations', effectiveOrgId), { autoSyncEnabled: true });
-            setOrganization(prev => prev ? { ...prev, autoSyncEnabled: true } : null);
-          } catch (e) {}
-        }
-        addToast(type === 'birthday' ? 'Birthday calendar created!' : 'New calendar created and linked!', 'success');
-      }
-    } catch (error) {
-      addToast('Failed to create calendar', 'error');
-    }
-  };
-
-  const selectExistingCalendar = async (calendarId: string, type: 'primary' | 'birthday' = 'primary') => {
-    if (!effectiveOrgId) return;
-    try {
-      const endpoint = type === 'birthday' ? '/api/google/calendar/birthday/select' : '/api/google/calendar/select';
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationId: effectiveOrgId, calendarId })
-      });
-      if (response.ok) {
-        fetchGoogleConfig();
-        // Auto-enable sync
-        if (organization && effectiveOrgId) {
-          try {
-            await updateDoc(doc(db, 'organizations', effectiveOrgId), { autoSyncEnabled: true });
-            setOrganization(prev => prev ? { ...prev, autoSyncEnabled: true } : null);
-          } catch (e) {}
-        }
-        addToast('Calendar linked successfully!', 'success');
-      }
-    } catch (error) {
-      addToast('Failed to link calendar', 'error');
-    }
-  };
-
-  const [isSyncingGoogle, setIsSyncingGoogle] = useState(false);
-
-  const disconnectGoogle = async () => {
-    if (!effectiveOrgId) return;
-    if (!window.confirm('Are you sure you want to disconnect Google services? This will stop all automated syncing.')) return;
-    
-    try {
-      const response = await fetch('/api/google/disconnect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationId: effectiveOrgId })
-      });
-      if (response.ok) {
-        setGoogleConfig({ 
-          connected: false, 
-          spreadsheetId: null, 
-          calendarId: null, 
-          birthdayCalendarId: null, 
-          lastSyncTime: null,
-          totalRecordsSynced: null,
-          totalEventsSynced: null,
-          loading: false 
-        });
-        localStorage.removeItem(`vms_google_connected_${effectiveOrgId}`);
-        localStorage.removeItem(`vms_google_sheet_${effectiveOrgId}`);
-        localStorage.removeItem(`vms_google_calendar_${effectiveOrgId}`);
-        localStorage.removeItem(`vms_google_birthday_calendar_${effectiveOrgId}`);
-        addToast('Google services disconnected', 'info');
-      } else {
-        addToast('Failed to disconnect Google services', 'error');
-      }
-    } catch (error) {
-      addToast('Failed to disconnect Google services', 'error');
-    }
-  };
-
-  const triggerGoogleSync = async () => {
-    if (!effectiveOrgId) return;
-    setIsSyncingGoogle(true);
-    try {
-      const response = await fetch('/api/google/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationId: effectiveOrgId })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setGoogleConfig(prev => ({ 
-          ...prev, 
-          lastSyncTime: data.lastSyncTime || prev.lastSyncTime,
-          totalRecordsSynced: data.totalRecordsSynced ?? prev.totalRecordsSynced,
-          totalEventsSynced: data.totalEventsSynced ?? prev.totalEventsSynced
-        }));
-        addToast('Manual synchronization complete', 'success');
-      } else {
-        addToast('Synchronization failed', 'error');
-      }
-    } catch (error) {
-      addToast('Synchronization failed', 'error');
-    } finally {
-      setIsSyncingGoogle(false);
-    }
-  };
 
   const [isOnline, setIsOnline] = useState(window.navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -6607,26 +6221,9 @@ export default function App() {
                 onLogout={handleLogout}
                 hasMultiOrg={availableOrgs.length > 1}
                 onSwitchWorkspace={handleSwitchWorkspace}
-                googleStatus={googleConfig}
-                availableSheets={availableSheets}
-                availableCalendars={availableCalendars}
-                isFetchingSheets={isFetchingSheets}
-                isFetchingCalendars={isFetchingCalendars}
-                isSyncingGoogle={isSyncingGoogle}
-                onConnectGoogle={connectGoogle}
-                onDisconnectGoogle={disconnectGoogle}
-                onSelectSheet={selectExistingSheet}
-                onCreateSheet={createNewSheet}
-                onSelectCalendar={selectExistingCalendar}
-                onCreateCalendar={createNewCalendar}
-                onSyncNow={triggerGoogleSync}
                 onCreateBackup={onCreateBackup}
                 onRestoreBackup={onRestoreBackup}
                 onFetchBackups={onFetchBackups}
-                onRefreshLists={() => {
-                  fetchAvailableSheets();
-                  fetchAvailableCalendars();
-                }}
               />
             </motion.div>
           )}
@@ -6990,6 +6587,17 @@ export default function App() {
                   </div>
                 </div>
               </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'reports' && (
+            <motion.div
+              key="reports"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+            >
+              <ReportsTab organizationId={organization?.id || ''} />
             </motion.div>
           )}
 
@@ -7701,7 +7309,7 @@ export default function App() {
                     </motion.button>
                   </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                          {['Home', 'Entry', 'Inquiries', 'Records', 'Analysis', 'Birthday', 'Reviews', 'Logs', 'Profile', 'Donations', 'Pre-Reg', 'Support'].map((tabName) => (
+                          {['Home', 'Entry', 'Inquiries', 'Records', 'Analysis', 'Birthday', 'Reviews', 'Logs', 'Profile', 'Donations', 'Pre-Reg', 'Support', 'Reports'].map((tabName) => (
                             <label key={tabName} className={`flex items-center gap-4 p-5 rounded-2xl border-2 transition-all cursor-pointer group ${organization?.navigationVisibility?.[tabName] !== false ? 'bg-white border-brand-blue shadow-sm shadow-brand-blue/5' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
                               <input 
                                 type="checkbox"
@@ -7804,27 +7412,6 @@ export default function App() {
 
                   {settingsSubTab === 'Security' && (
                     <div className="space-y-10">
-                      {/* Premium Cloud Sync & Integrations Section */}
-                      <GoogleIntegration 
-                        googleStatus={googleConfig}
-                        availableSheets={availableSheets}
-                        availableCalendars={availableCalendars}
-                        isFetchingSheets={isFetchingSheets}
-                        isFetchingCalendars={isFetchingCalendars}
-                        isSyncingGoogle={isSyncingGoogle}
-                        onConnectGoogle={connectGoogle}
-                        onDisconnectGoogle={disconnectGoogle}
-                        onSelectSheet={selectExistingSheet}
-                        onCreateSheet={createNewSheet}
-                        onSelectCalendar={selectExistingCalendar}
-                        onCreateCalendar={createNewCalendar}
-                        onSyncNow={triggerGoogleSync}
-                        onRefreshLists={() => {
-                          fetchAvailableSheets();
-                          fetchAvailableCalendars();
-                        }}
-                      />
-
                       <div className="p-5 sm:p-8 bg-slate-50/50 rounded-3xl border border-slate-100 space-y-6 sm:space-y-8">
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-100/50">
                           <div className="flex items-center gap-4">

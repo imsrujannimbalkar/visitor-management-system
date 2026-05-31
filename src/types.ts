@@ -203,6 +203,7 @@ export interface Organization {
   paymentModes?: string[];
   birthdayTrackingEnabled?: boolean;
   autoSyncEnabled?: boolean;
+  reportsEnabled?: boolean;
   deactivated?: boolean;
   deactivatedAt?: string;
   legalAccepted?: boolean;
@@ -329,4 +330,17 @@ export interface ScanEvent {
   visitorName: string;
   type: 'CHECK_IN' | 'CHECK_OUT';
   timestamp: string;
+}
+
+export interface Report {
+  id: string;
+  organizationId: string;
+  month: string;
+  status: 'COMPLETED' | 'FAILED';
+  generatedAt: string;
+  stats: {
+    totalVisitors: number;
+    fileSize: number;
+  };
+  type: 'MONTHLY_EXCEL_BACKUP';
 }
